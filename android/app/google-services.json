@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "1070882091281",
+    "firebase_url": "https://odx-app-9835f-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "odx-app-9835f",
+    "storage_bucket": "odx-app-9835f.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1070882091281:android:4f068265b681befb43dcb0",
+        "android_client_info": {
+          "package_name": "com.example.odp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCa0Y9KBL-r2MCbkqibR_3l6evgtyJkPHA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
