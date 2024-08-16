@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'login.dart'; // Ensure this import is correct
-import 'profile.dart'; // Import the ProfilePage class
+import 'profile.dart'; // Ensure this import is correct
 
 class HomePage1 extends StatefulWidget {
   @override
@@ -44,21 +44,21 @@ class _HomePage1State extends State<HomePage1> {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => ProfilePage()),
-                  );
-                },
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundImage: AssetImage('assets/profile_picture.png'),
-                    ),
-                    SizedBox(width: 20),
-                    Text(
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundImage: AssetImage('assets/profile_picture.png'),
+                  ),
+                  SizedBox(width: 20),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => ProfilePage()),
+                      );
+                    },
+                    child: Text(
                       'John Doe',
                       style: TextStyle(
                         color: Colors.white,
@@ -66,8 +66,8 @@ class _HomePage1State extends State<HomePage1> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -78,14 +78,10 @@ class _HomePage1State extends State<HomePage1> {
                     icon: Icons.home,
                     text: 'Home',
                     onTap: () {
-                      Navigator.pop(context);
-                    },
-                  ),
-                  _createDrawerItem(
-                    icon: Icons.search,
-                    text: 'Search',
-                    onTap: () {
-                      Navigator.pop(context);
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => HomePage1()),
+                      );
                     },
                   ),
                   _createDrawerItem(
@@ -121,10 +117,11 @@ class _HomePage1State extends State<HomePage1> {
     );
   }
 
-  Widget _createDrawerItem(
-      {required IconData icon,
-      required String text,
-      required VoidCallback onTap}) {
+  Widget _createDrawerItem({
+    required IconData icon,
+    required String text,
+    required VoidCallback onTap,
+  }) {
     return ListTile(
       leading: Icon(icon, color: Colors.white),
       title: Text(
