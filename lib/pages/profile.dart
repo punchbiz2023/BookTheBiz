@@ -1,21 +1,16 @@
 import 'package:flutter/material.dart';
 
+import 'home_page.dart';
 import 'login.dart'; // Ensure this import is correct
-import 'profile.dart'; // Import the ProfilePage class
 
-class HomePage1 extends StatefulWidget {
-  @override
-  _HomePage1State createState() => _HomePage1State();
-}
-
-class _HomePage1State extends State<HomePage1> {
+class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: Text(
-          'Home',
+          'Profile',
           style: TextStyle(
             color: Colors.white,
             fontSize: 24,
@@ -44,30 +39,22 @@ class _HomePage1State extends State<HomePage1> {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => ProfilePage()),
-                  );
-                },
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundImage: AssetImage('assets/profile_picture.png'),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundImage: AssetImage('assets/profile_picture.png'),
+                  ),
+                  SizedBox(width: 20),
+                  Text(
+                    'John Doe',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
-                    SizedBox(width: 20),
-                    Text(
-                      'John Doe',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -78,7 +65,10 @@ class _HomePage1State extends State<HomePage1> {
                     icon: Icons.home,
                     text: 'Home',
                     onTap: () {
-                      Navigator.pop(context);
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => HomePage1()),
+                      );
                     },
                   ),
                   _createDrawerItem(
@@ -114,17 +104,18 @@ class _HomePage1State extends State<HomePage1> {
       backgroundColor: Color(0xff192028),
       body: Center(
         child: Text(
-          'Home Page',
+          'Profile Page',
           style: TextStyle(color: Colors.white, fontSize: 24),
         ),
       ),
     );
   }
 
-  Widget _createDrawerItem(
-      {required IconData icon,
-      required String text,
-      required VoidCallback onTap}) {
+  Widget _createDrawerItem({
+    required IconData icon,
+    required String text,
+    required VoidCallback onTap,
+  }) {
     return ListTile(
       leading: Icon(icon, color: Colors.white),
       title: Text(
