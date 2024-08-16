@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:icons_plus/icons_plus.dart'; // For Google icon
 
 import 'login.dart'; // Import the login page for navigation
 
@@ -231,6 +232,41 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                 },
                               ),
                             ],
+                          ),
+                          Text(
+                            'Sign up using:',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.8),
+                              fontSize: 16,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () {
+                              // Action for Google sign-up button
+                            },
+                            child: Container(
+                              width: size.width / 4,
+                              height: size.width / 9.4,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              child: Center(
+                                child: Row(
+                                  children: [
+                                    Brand(Brands.google),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      ' Google',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
