@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:icons_plus/icons_plus.dart';
-import 'package:odp/pages/sign_up_page.dart'; // Import the signup page
+import 'package:odp/pages/sign_up_page.dart';
+
+import 'home_page.dart'; // Import the signup page
 
 void main() {
   runApp(LoginApp());
@@ -199,6 +201,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                   HapticFeedback.lightImpact();
                                   Fluttertoast.showToast(
                                     msg: 'Login button pressed',
+                                  );
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (context) => HomePage1()),
                                   );
                                 },
                               ),
