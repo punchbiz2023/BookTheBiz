@@ -4,32 +4,32 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:icons_plus/icons_plus.dart';
-import 'package:odp/pages/sign_up_page.dart'; // Import the signup page
+
+import 'login.dart'; // Import the login page for navigation
 
 void main() {
-  runApp(LoginApp());
+  runApp(SignUpApp());
 }
 
-class LoginApp extends StatelessWidget {
+class SignUpApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Login App',
+      title: 'Sign Up App',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: HomePage(),
+      home: SignUpPage(),
     );
   }
 }
 
-class HomePage extends StatefulWidget {
+class SignUpPage extends StatefulWidget {
   @override
-  _HomePageState createState() => _HomePageState();
+  _SignUpPageState createState() => _SignUpPageState();
 }
 
-class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
+class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   late AnimationController controller1;
   late AnimationController controller2;
   late Animation<double> animation1;
@@ -61,6 +61,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           controller1.forward();
         }
       });
+
     animation2 = Tween<double>(begin: .02, end: .04).animate(
       CurvedAnimation(
         parent: controller1,
@@ -74,10 +75,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       vsync: this,
       duration: Duration(seconds: 5),
     );
-    animation3 = Tween<double>(begin: .41, end: .38).animate(CurvedAnimation(
-      parent: controller2,
-      curve: Curves.easeInOut,
-    ))
+    animation3 = Tween<double>(begin: .41, end: .38).animate(
+      CurvedAnimation(
+        parent: controller2,
+        curve: Curves.easeInOut,
+      ),
+    )
       ..addListener(() {
         setState(() {});
       })
@@ -88,6 +91,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           controller2.forward();
         }
       });
+
     animation4 = Tween<double>(begin: 170, end: 190).animate(
       CurvedAnimation(
         parent: controller2,
@@ -164,11 +168,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       flex: 5,
                       child: Padding(
                         padding: EdgeInsets.only(
-                            top: size.height * .1, left: size.width * 0.1),
+                          top: size.height * .1,
+                          left: size.width * 0.1,
+                        ),
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            'TURFEX',
+                            'SIGN UP',
                             style: TextStyle(
                               color: Colors.white.withOpacity(.7),
                               fontSize: 30,
@@ -189,61 +195,42 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                               Icons.email_outlined, 'Email...', false, true),
                           component1(
                               Icons.lock_outline, 'Password...', true, false),
+                          component1(Icons.person_outline, 'Username...', false,
+                              false),
+                          component1(Icons.phone_outlined, 'Phone Number...',
+                              false, false),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               component2(
-                                'LOGIN',
+                                'SIGN UP',
                                 2.58,
                                 () {
                                   HapticFeedback.lightImpact();
                                   Fluttertoast.showToast(
-                                    msg: 'Login button pressed',
+                                    msg: 'Sign Up button pressed',
                                   );
+                                  // Implement sign-up logic here
                                 },
                               ),
                               SizedBox(width: size.width / 20),
                               component2(
-                                'Forgotten password!',
+                                'Already have an account?',
                                 2.58,
                                 () {
                                   HapticFeedback.lightImpact();
                                   Fluttertoast.showToast(
-                                    msg: 'Forgotten password button pressed',
+                                    msg: 'Navigate to login page',
+                                  );
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => LoginApp(),
+                                    ),
                                   );
                                 },
                               ),
                             ],
-                          ),
-                          Text(
-                            'Login using:',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 16,
-                            ),
-                          ),
-                          InkWell(
-                            onTap: () {
-                              // Action for Google login button
-                            },
-                            child: Container(
-                              width: size.width / 4,
-                              height: size.width / 9.4,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: Center(
-                                  child: Row(children: [
-                                Brand(Brands.google),
-                                Text(
-                                  " Google",
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white),
-                                )
-                              ])),
-                            ),
                           ),
                         ],
                       ),
@@ -253,19 +240,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          component2(
-                            'Create a new Account',
-                            2,
-                            () {
-                              HapticFeedback.lightImpact();
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => SignUpPage(),
-                                ),
-                              );
-                            },
-                          ),
                           SizedBox(height: size.height * .05),
                         ],
                       ),
@@ -313,8 +287,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               border: InputBorder.none,
               hintMaxLines: 1,
               hintText: hintText,
-              hintStyle:
-                  TextStyle(fontSize: 14, color: Colors.white.withOpacity(.5)),
+              hintStyle: TextStyle(
+                fontSize: 14,
+                color: Colors.white.withOpacity(.5),
+              ),
             ),
           ),
         ),
