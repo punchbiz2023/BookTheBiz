@@ -1,9 +1,28 @@
+import 'dart:io'; // For working with File
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:odp/widgets/drawer_widgets.dart';
 
-import 'home_page.dart';
-import 'login.dart'; // Ensure this import is correct
+class ProfilePage extends StatefulWidget {
+  @override
+  _ProfilePageState createState() => _ProfilePageState();
+}
 
-class ProfilePage extends StatelessWidget {
+class _ProfilePageState extends State<ProfilePage> {
+  File? _profileImage;
+
+  Future<void> _pickImage() async {
+    final ImagePicker _picker = ImagePicker();
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      setState(() {
+        _profileImage = File(image.path);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -27,73 +46,77 @@ class ProfilePage extends StatelessWidget {
         ),
         automaticallyImplyLeading: false,
       ),
-      drawer: Drawer(
-        backgroundColor: Colors.black,
+      drawer: SecondaryDrawer(),
+      backgroundColor: Color(0xff192028),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.blueAccent, Colors.purpleAccent],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            SizedBox(height: 20),
+            Center(
+              child: GestureDetector(
+                onTap: _pickImage,
+                child: CircleAvatar(
+                  radius: 80,
+                  backgroundImage: _profileImage != null
+                      ? FileImage(_profileImage!)
+                      : AssetImage('assets/profile_picture.png')
+                          as ImageProvider,
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: CircleAvatar(
+                      radius: 25,
+                      backgroundColor: Colors.black54,
+                      child: Icon(Icons.camera_alt, color: Colors.white),
+                    ),
+                  ),
                 ),
               ),
-              child: Row(
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Username', // Placeholder text
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'email@example.com', // Placeholder text
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 18,
+              ),
+            ),
+            SizedBox(height: 30),
+            // Add a profile details section
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundImage: AssetImage('assets/profile_picture.png'),
-                  ),
-                  SizedBox(width: 20),
                   Text(
-                    'John Doe',
+                    'About Me',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 24,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  _createDrawerItem(
-                    icon: Icons.home,
-                    text: 'Home',
-                    onTap: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => HomePage1()),
-                      );
-                    },
-                  ),
-                  _createDrawerItem(
-                    icon: Icons.search,
-                    text: 'Search',
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
-                  ),
-                  _createDrawerItem(
-                    icon: Icons.settings,
-                    text: 'Settings',
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
-                  ),
-                  _createDrawerItem(
-                    icon: Icons.logout,
-                    text: 'Logout',
-                    onTap: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => LoginApp()),
-                      );
-                    },
+                  SizedBox(height: 10),
+                  Text(
+                    'This is a brief description about the user. You can add more details here.',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ),
@@ -101,32 +124,6 @@ class ProfilePage extends StatelessWidget {
           ],
         ),
       ),
-      backgroundColor: Color(0xff192028),
-      body: Center(
-        child: Text(
-          'Profile Page',
-          style: TextStyle(color: Colors.white, fontSize: 24),
-        ),
-      ),
-    );
-  }
-
-  Widget _createDrawerItem({
-    required IconData icon,
-    required String text,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(
-        text,
-        style: TextStyle(color: Colors.white, fontSize: 18),
-      ),
-      contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-      onTap: onTap,
     );
   }
 }
