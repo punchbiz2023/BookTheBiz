@@ -1,14 +1,20 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import 'package:odp/pages/home_page.dart'; // Import your pages
-import 'package:odp/pages/login.dart';
-import 'package:odp/pages/profile.dart'; // Import additional pages if needed
+import 'package:fluttertoast/fluttertoast.dart'; // animation
+import 'package:odp/pages/home_page.dart'; //home page
+import 'package:odp/pages/login.dart'; //login
+import 'package:odp/pages/profile.dart'; //profile
 import 'package:permission_handler/permission_handler.dart';
+
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _requestPermissions(); // Request permissions at app start
   runApp(MyApp());
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 }
 
 // Function to request permissions at the app startup

@@ -1,14 +1,13 @@
 {
   "project_info": {
-    "project_number": "1070882091281",
-    "firebase_url": "https://odx-app-9835f-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "project_id": "odx-app-9835f",
-    "storage_bucket": "odx-app-9835f.appspot.com"
+    "project_number": "318475418724",
+    "project_id": "turf-booking-0",
+    "storage_bucket": "turf-booking-0.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1070882091281:android:4f068265b681befb43dcb0",
+        "mobilesdk_app_id": "1:318475418724:android:039d0027a7b487e80df371",
         "android_client_info": {
           "package_name": "com.example.odp"
         }
@@ -16,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCa0Y9KBL-r2MCbkqibR_3l6evgtyJkPHA"
+          "current_key": "AIzaSyCuqbDzmM2hdCCHpGpZ6FXuw55I5WKpgDA"
         }
       ],
       "services": {
