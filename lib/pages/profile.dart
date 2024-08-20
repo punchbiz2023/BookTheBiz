@@ -2,7 +2,7 @@ import 'dart:io'; // For working with File
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:odp/widgets/drawer_widgets.dart';
+import 'package:odp/pages/home_page.dart';
 
 class ProfilePage extends StatefulWidget {
   @override
@@ -36,17 +36,16 @@ class _ProfilePageState extends State<ProfilePage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: Icon(Icons.menu, color: Colors.white),
-            onPressed: () {
-              Scaffold.of(context).openDrawer();
-            },
-          ),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => HomePage1()),
+            );
+          },
         ),
-        automaticallyImplyLeading: false,
       ),
-      drawer: SecondaryDrawer(),
       backgroundColor: Color(0xff192028),
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0),

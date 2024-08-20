@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:odp/pages/login.dart'; // Import your login page
+import 'package:odp/pages/profile.dart';
 
-import 'login.dart'; // Ensure this import is correct
-import 'profile.dart'; // Ensure this import is correct
+import '../widgets/firebase_services/firebase-storage.dart';
 
 class HomePage1 extends StatefulWidget {
   @override
@@ -15,7 +16,7 @@ class _HomePage1State extends State<HomePage1> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: Text(
-          'Home',
+          'Booking App',
           style: TextStyle(
             color: Colors.white,
             fontSize: 24,
@@ -108,12 +109,68 @@ class _HomePage1State extends State<HomePage1> {
         ),
       ),
       backgroundColor: Color(0xff192028),
-      body: Center(
-        child: Text(
-          'Home Page',
-          style: TextStyle(color: Colors.white, fontSize: 24),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Upcoming Events',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 10),
+            Container(
+              height: 120, // Adjust height as needed
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  FirebaseImageCard(imagePath: 'Turf images test/turf 1.jpeg'),
+                  FirebaseImageCard(imagePath: 'Turf images test/turf 2.jpeg'),
+                  FirebaseImageCard(imagePath: 'Turf images test/turf 3.jpeg'),
+                ],
+              ),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Quick Actions',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildActionButton(Icons.book_online, 'Book Now'),
+                _buildActionButton(Icons.history, 'History'),
+              ],
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildActionButton(IconData icon, String label) {
+    return Column(
+      children: [
+        CircleAvatar(
+          radius: 30,
+          backgroundColor: Colors.blueAccent,
+          child: Icon(icon, color: Colors.white, size: 30),
+        ),
+        SizedBox(height: 8),
+        Text(
+          label,
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+      ],
     );
   }
 
