@@ -1,10 +1,17 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:odp/pages/login.dart'; // Import your login page
 import 'package:odp/pages/profile.dart';
 
 import '../widgets/firebase_services/firebase-storage.dart';
+import 'bookingpage.dart';
+import 'login.dart'; // Import the booking page
 
 class HomePage1 extends StatefulWidget {
+  final User? user; // Add this line
+
+  const HomePage1({Key? key, this.user})
+      : super(key: key); // Modify constructor
+
   @override
   _HomePage1State createState() => _HomePage1State();
 }
@@ -56,11 +63,14 @@ class _HomePage1State extends State<HomePage1> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => ProfilePage()),
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                ProfilePage(user: widget.user)),
                       );
                     },
                     child: Text(
-                      'John Doe',
+                      widget.user?.displayName ??
+                          'John Doe', // Use user parameter here
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 24,
@@ -81,7 +91,8 @@ class _HomePage1State extends State<HomePage1> {
                     onTap: () {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => HomePage1()),
+                        MaterialPageRoute(
+                            builder: (context) => HomePage1(user: widget.user)),
                       );
                     },
                   ),
@@ -153,6 +164,16 @@ class _HomePage1State extends State<HomePage1> {
             ),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => BookingPage()),
+          );
+        },
+        backgroundColor: Colors.blueAccent,
+        child: Icon(Icons.add, color: Colors.white),
       ),
     );
   }

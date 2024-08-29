@@ -1,37 +1,26 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:icons_plus/icons_plus.dart';
 import 'package:odp/pages/sign_up_page.dart';
 
-import 'home_page.dart'; // Import the signup page
+import 'home_page.dart'; // Import the home page
 
-void main() {
-  runApp(LoginApp());
-}
-
-class LoginApp extends StatelessWidget {
+class LoginApp extends StatefulWidget {
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Login App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: HomePage(),
-    );
-  }
+  _LoginPageState createState() => _LoginPageState();
 }
 
-class HomePage extends StatefulWidget {
-  @override
-  _HomePageState createState() => _HomePageState();
-}
+class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
+  bool _loading = false;
+
   late AnimationController controller1;
   late AnimationController controller2;
   late Animation<double> animation1;
@@ -110,186 +99,155 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void dispose() {
     controller1.dispose();
     controller2.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _login() async {
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      final UserCredential userCredential =
+          await _auth.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      if (userCredential.user != null) {
+        // Successfully signed in
+        Fluttertoast.showToast(msg: 'Login Successful');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+              builder: (context) =>
+                  HomePage1()), // Navigate to home page after login
+        );
+      }
+    } catch (e) {
+      // Handle errors
+      Fluttertoast.showToast(msg: 'Login Failed: ${e.toString()}');
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     Size size = MediaQuery.of(context).size;
+
     return Scaffold(
       backgroundColor: Color(0xff192028),
-      body: ScrollConfiguration(
-        behavior: MyBehavior(),
-        child: SingleChildScrollView(
-          child: SizedBox(
-            height: size.height,
-            child: Stack(
+      body: Stack(
+        children: [
+          Positioned(
+            top: size.height * (animation2.value + .58),
+            left: size.width * .21,
+            child: CustomPaint(
+              painter: MyPainter(50),
+            ),
+          ),
+          Positioned(
+            top: size.height * .98,
+            left: size.width * .1,
+            child: CustomPaint(
+              painter: MyPainter(animation4.value - 30),
+            ),
+          ),
+          Positioned(
+            top: size.height * .5,
+            left: size.width * (animation2.value + .8),
+            child: CustomPaint(
+              painter: MyPainter(30),
+            ),
+          ),
+          Positioned(
+            top: size.height * animation3.value,
+            left: size.width * (animation1.value + .1),
+            child: CustomPaint(
+              painter: MyPainter(60),
+            ),
+          ),
+          Positioned(
+            top: size.height * .1,
+            left: size.width * .8,
+            child: CustomPaint(
+              painter: MyPainter(animation4.value),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.all(size.width * 0.1),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Positioned(
-                  top: size.height * (animation2.value + .58),
-                  left: size.width * .21,
-                  child: CustomPaint(
-                    painter: MyPainter(50),
+                Text(
+                  'Login',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(.7),
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                    wordSpacing: 4,
                   ),
                 ),
-                Positioned(
-                  top: size.height * .98,
-                  left: size.width * .1,
-                  child: CustomPaint(
-                    painter: MyPainter(animation4.value - 30),
-                  ),
-                ),
-                Positioned(
-                  top: size.height * .5,
-                  left: size.width * (animation2.value + .8),
-                  child: CustomPaint(
-                    painter: MyPainter(30),
-                  ),
-                ),
-                Positioned(
-                  top: size.height * animation3.value,
-                  left: size.width * (animation1.value + .1),
-                  child: CustomPaint(
-                    painter: MyPainter(60),
-                  ),
-                ),
-                Positioned(
-                  top: size.height * .1,
-                  left: size.width * .8,
-                  child: CustomPaint(
-                    painter: MyPainter(animation4.value),
-                  ),
-                ),
-                Column(
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                            top: size.height * .1, left: size.width * 0.1),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'TURFEX',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(.7),
-                              fontSize: 30,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
-                              wordSpacing: 4,
-                            ),
-                          ),
-                        ),
-                      ),
+                const SizedBox(height: 30),
+                component1(Icons.email_outlined, 'Email...', false, true,
+                    _emailController),
+                const SizedBox(height: 20),
+                component1(Icons.lock_outline, 'Password...', true, false,
+                    _passwordController),
+                const SizedBox(height: 30),
+                ElevatedButton(
+                  onPressed: _loading ? null : _login,
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.grey.withOpacity(0.3), // Text color
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
                     ),
-                    Expanded(
-                      flex: 7,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          component1(
-                              Icons.email_outlined, 'Email...', false, true),
-                          component1(
-                              Icons.lock_outline, 'Password...', true, false),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              component2(
-                                'LOGIN',
-                                2.58,
-                                () {
-                                  HapticFeedback.lightImpact();
-                                  Fluttertoast.showToast(
-                                    msg: 'Login button pressed',
-                                  );
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) => HomePage1()),
-                                  );
-                                },
-                              ),
-                              SizedBox(width: size.width / 20),
-                              component2(
-                                'Forgotten password!',
-                                2.58,
-                                () {
-                                  HapticFeedback.lightImpact();
-                                  Fluttertoast.showToast(
-                                    msg: 'Forgotten password button pressed',
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                          Text(
-                            'Login using:',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 16,
-                            ),
-                          ),
-                          InkWell(
-                            onTap: () {
-                              // Action for Google login button
-                            },
-                            child: Container(
-                              width: size.width / 4,
-                              height: size.width / 9.4,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: Center(
-                                  child: Row(children: [
-                                Brand(Brands.google),
-                                Text(
-                                  " Google",
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white),
-                                )
-                              ])),
-                            ),
-                          ),
-                        ],
+                    elevation: 0, // Remove shadow if desired
+                    padding: EdgeInsets.symmetric(
+                        vertical: 15), // Adjust padding as needed
+                  ),
+                  child: _loading
+                      ? const CircularProgressIndicator()
+                      : const Text('Login',
+                          style: TextStyle(color: Colors.white)),
+                ),
+                TextButton(
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SignupPage(),
                       ),
+                    );
+                  },
+                  child: Text(
+                    'Don\'t have an account? Sign Up',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(.8),
                     ),
-                    Expanded(
-                      flex: 6,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          component2(
-                            'Create a new Account',
-                            2,
-                            () {
-                              HapticFeedback.lightImpact();
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => SignUpPage(),
-                                ),
-                              );
-                            },
-                          ),
-                          SizedBox(height: size.height * .05),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget component1(
-      IconData icon, String hintText, bool isPassword, bool isEmail) {
+  Widget component1(IconData icon, String hintText, bool isPassword,
+      bool isEmail, TextEditingController controller) {
     Size size = MediaQuery.of(context).size;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(15),
       child: BackdropFilter(
@@ -307,6 +265,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             borderRadius: BorderRadius.circular(15),
           ),
           child: TextField(
+            controller: controller,
             style: TextStyle(color: Colors.white.withOpacity(.8)),
             cursorColor: Colors.white,
             obscureText: isPassword,
@@ -320,36 +279,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               border: InputBorder.none,
               hintMaxLines: 1,
               hintText: hintText,
-              hintStyle:
-                  TextStyle(fontSize: 14, color: Colors.white.withOpacity(.5)),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget component2(String string, double width, VoidCallback voidCallback) {
-    Size size = MediaQuery.of(context).size;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(15),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaY: 15, sigmaX: 15),
-        child: InkWell(
-          highlightColor: Colors.transparent,
-          splashColor: Colors.transparent,
-          onTap: voidCallback,
-          child: Container(
-            height: size.width / 8,
-            width: size.width / width,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(.05),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Text(
-              string,
-              style: TextStyle(color: Colors.white.withOpacity(.8)),
+              hintStyle: TextStyle(color: Colors.white.withOpacity(.5)),
             ),
           ),
         ),
@@ -390,4 +320,7 @@ class MyBehavior extends ScrollBehavior {
       BuildContext context, Widget child, AxisDirection axisDirection) {
     return child;
   }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }

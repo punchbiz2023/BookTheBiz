@@ -1,10 +1,15 @@
 import 'dart:io'; // For working with File
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:odp/pages/home_page.dart';
 
 class ProfilePage extends StatefulWidget {
+  final User? user; // Add this line to accept a User object
+
+  const ProfilePage({Key? key, this.user})
+      : super(key: key); // Update constructor
+
   @override
   _ProfilePageState createState() => _ProfilePageState();
 }
@@ -39,10 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => HomePage1()),
-            );
+            Navigator.pop(context); // Use pop to return to previous screen
           },
         ),
       ),
@@ -75,7 +77,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             SizedBox(height: 20),
             Text(
-              'Username', // Placeholder text
+              widget.user?.displayName ?? 'Username', // Display user name
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 28,
@@ -84,7 +86,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             SizedBox(height: 10),
             Text(
-              'email@example.com', // Placeholder text
+              widget.user?.email ?? 'email@example.com', // Display user email
               style: TextStyle(
                 color: Colors.grey[400],
                 fontSize: 18,

@@ -1,36 +1,29 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import 'package:icons_plus/icons_plus.dart'; // For Google icon
 
-import 'login.dart'; // Import the login page for navigation
+import 'home_page.dart'; // Import the home page
 
-void main() {
-  runApp(SignUpApp());
-}
-
-class SignUpApp extends StatelessWidget {
+class SignupPage extends StatefulWidget {
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Sign Up App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: SignUpPage(),
-    );
-  }
+  _SignupPageState createState() => _SignupPageState();
 }
 
-class SignUpPage extends StatefulWidget {
-  @override
-  _SignUpPageState createState() => _SignUpPageState();
-}
+class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _mobileController = TextEditingController();
+
+  bool _loading = false;
+
   late AnimationController controller1;
   late AnimationController controller2;
   late Animation<double> animation1;
@@ -62,7 +55,6 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
           controller1.forward();
         }
       });
-
     animation2 = Tween<double>(begin: .02, end: .04).animate(
       CurvedAnimation(
         parent: controller1,
@@ -76,12 +68,10 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       vsync: this,
       duration: Duration(seconds: 5),
     );
-    animation3 = Tween<double>(begin: .41, end: .38).animate(
-      CurvedAnimation(
-        parent: controller2,
-        curve: Curves.easeInOut,
-      ),
-    )
+    animation3 = Tween<double>(begin: .41, end: .38).animate(CurvedAnimation(
+      parent: controller2,
+      curve: Curves.easeInOut,
+    ))
       ..addListener(() {
         setState(() {});
       })
@@ -92,7 +82,6 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
           controller2.forward();
         }
       });
-
     animation4 = Tween<double>(begin: 170, end: 190).animate(
       CurvedAnimation(
         parent: controller2,
@@ -113,7 +102,45 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   void dispose() {
     controller1.dispose();
     controller2.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _mobileController.dispose();
     super.dispose();
+  }
+
+  Future<void> _signup() async {
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      UserCredential userCredential =
+          await _auth.createUserWithEmailAndPassword(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+
+      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+        'name': _nameController.text,
+        'email': _emailController.text,
+        'mobile': _mobileController.text,
+      });
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) => HomePage1(user: userCredential.user)),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Signup failed: $e')),
+      );
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -121,178 +148,113 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     Size size = MediaQuery.of(context).size;
     return Scaffold(
       backgroundColor: Color(0xff192028),
-      body: ScrollConfiguration(
-        behavior: MyBehavior(),
-        child: SingleChildScrollView(
-          child: SizedBox(
-            height: size.height,
-            child: Stack(
+      body: Stack(
+        children: [
+          Positioned(
+            top: size.height * (animation2.value + .58),
+            left: size.width * .21,
+            child: CustomPaint(
+              painter: MyPainter(50),
+            ),
+          ),
+          Positioned(
+            top: size.height * .98,
+            left: size.width * .1,
+            child: CustomPaint(
+              painter: MyPainter(animation4.value - 30),
+            ),
+          ),
+          Positioned(
+            top: size.height * .5,
+            left: size.width * (animation2.value + .8),
+            child: CustomPaint(
+              painter: MyPainter(30),
+            ),
+          ),
+          Positioned(
+            top: size.height * animation3.value,
+            left: size.width * (animation1.value + .1),
+            child: CustomPaint(
+              painter: MyPainter(60),
+            ),
+          ),
+          Positioned(
+            top: size.height * .1,
+            left: size.width * .8,
+            child: CustomPaint(
+              painter: MyPainter(animation4.value),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.all(size.width * 0.1),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Positioned(
-                  top: size.height * (animation2.value + .58),
-                  left: size.width * .21,
-                  child: CustomPaint(
-                    painter: MyPainter(50),
+                Text(
+                  'Create an Account',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(.7),
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                    wordSpacing: 4,
                   ),
                 ),
-                Positioned(
-                  top: size.height * .98,
-                  left: size.width * .1,
-                  child: CustomPaint(
-                    painter: MyPainter(animation4.value - 30),
-                  ),
-                ),
-                Positioned(
-                  top: size.height * .5,
-                  left: size.width * (animation2.value + .8),
-                  child: CustomPaint(
-                    painter: MyPainter(30),
-                  ),
-                ),
-                Positioned(
-                  top: size.height * animation3.value,
-                  left: size.width * (animation1.value + .1),
-                  child: CustomPaint(
-                    painter: MyPainter(60),
-                  ),
-                ),
-                Positioned(
-                  top: size.height * .1,
-                  left: size.width * .8,
-                  child: CustomPaint(
-                    painter: MyPainter(animation4.value),
-                  ),
-                ),
-                Column(
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          top: size.height * .1,
-                          left: size.width * 0.1,
-                        ),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'SIGN UP',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(.7),
-                              fontSize: 30,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
-                              wordSpacing: 4,
-                            ),
-                          ),
-                        ),
-                      ),
+                const SizedBox(height: 30),
+                component1(Icons.person_outline, 'Name...', false, false,
+                    _nameController),
+                const SizedBox(height: 20),
+                component1(Icons.email_outlined, 'Email...', false, true,
+                    _emailController),
+                const SizedBox(height: 20),
+                component1(Icons.lock_outline, 'Password...', true, false,
+                    _passwordController),
+                const SizedBox(height: 20),
+                component1(Icons.phone_outlined, 'Mobile Number...', false,
+                    false, _mobileController),
+                const SizedBox(height: 30),
+                ElevatedButton(
+                  onPressed: _loading ? null : _signup,
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.grey.withOpacity(0.3), // Text color
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
                     ),
-                    Expanded(
-                      flex: 7,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          component1(
-                              Icons.email_outlined, 'Email...', false, true),
-                          component1(
-                              Icons.lock_outline, 'Password...', true, false),
-                          component1(Icons.person_outline, 'Username...', false,
-                              false),
-                          component1(Icons.phone_outlined, 'Phone Number...',
-                              false, false),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              component2(
-                                'SIGN UP',
-                                2.58,
-                                () {
-                                  HapticFeedback.lightImpact();
-                                  Fluttertoast.showToast(
-                                    msg: 'Sign Up button pressed',
-                                  );
-                                  // Implement sign-up logic here
-                                },
-                              ),
-                              SizedBox(width: size.width / 20),
-                              component2(
-                                'Already have an account?',
-                                2.58,
-                                () {
-                                  HapticFeedback.lightImpact();
-                                  Fluttertoast.showToast(
-                                    msg: 'Navigate to login page',
-                                  );
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => LoginApp(),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                          Text(
-                            'Sign up using:',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 16,
-                            ),
-                          ),
-                          InkWell(
-                            onTap: () {
-                              // Action for Google sign-up button
-                            },
-                            child: Container(
-                              width: size.width / 4,
-                              height: size.width / 9.4,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: Center(
-                                child: Row(
-                                  children: [
-                                    Brand(Brands.google),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      ' Google',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                    elevation: 0, // Remove shadow if desired
+                    padding: EdgeInsets.symmetric(
+                        vertical: 15), // Adjust padding as needed
+                  ),
+                  child: _loading
+                      ? const CircularProgressIndicator()
+                      : const Text('Signup',
+                          style: TextStyle(color: Colors.white)),
+                ),
+                TextButton(
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.pop(context); // Go back to login page
+                  },
+                  child: Text(
+                    'Already have an account? Login',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(.8),
                     ),
-                    Expanded(
-                      flex: 6,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          SizedBox(height: size.height * .05),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget component1(
-      IconData icon, String hintText, bool isPassword, bool isEmail) {
+  Widget component1(IconData icon, String hintText, bool isPassword,
+      bool isEmail, TextEditingController controller) {
     Size size = MediaQuery.of(context).size;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(15),
       child: BackdropFilter(
@@ -310,6 +272,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
             borderRadius: BorderRadius.circular(15),
           ),
           child: TextField(
+            controller: controller,
             style: TextStyle(color: Colors.white.withOpacity(.8)),
             cursorColor: Colors.white,
             obscureText: isPassword,
@@ -323,38 +286,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
               border: InputBorder.none,
               hintMaxLines: 1,
               hintText: hintText,
-              hintStyle: TextStyle(
-                fontSize: 14,
-                color: Colors.white.withOpacity(.5),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget component2(String string, double width, VoidCallback voidCallback) {
-    Size size = MediaQuery.of(context).size;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(15),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaY: 15, sigmaX: 15),
-        child: InkWell(
-          highlightColor: Colors.transparent,
-          splashColor: Colors.transparent,
-          onTap: voidCallback,
-          child: Container(
-            height: size.width / 8,
-            width: size.width / width,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(.05),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Text(
-              string,
-              style: TextStyle(color: Colors.white.withOpacity(.8)),
+              hintStyle: TextStyle(color: Colors.white.withOpacity(.5)),
             ),
           ),
         ),
@@ -395,4 +327,7 @@ class MyBehavior extends ScrollBehavior {
       BuildContext context, Widget child, AxisDirection axisDirection) {
     return child;
   }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
