@@ -5,10 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfilePage extends StatefulWidget {
-  final User? user; // Add this line to accept a User object
+  final User? user; // User object to hold Firebase user information
 
-  const ProfilePage({Key? key, this.user})
-      : super(key: key); // Update constructor
+  const ProfilePage({Key? key, this.user}) : super(key: key);
 
   @override
   _ProfilePageState createState() => _ProfilePageState();
@@ -30,6 +29,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final user = widget.user ?? FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.black,
@@ -44,7 +45,7 @@ class _ProfilePageState extends State<ProfilePage> {
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
-            Navigator.pop(context); // Use pop to return to previous screen
+            Navigator.pop(context); // Return to the previous screen
           },
         ),
       ),
@@ -77,7 +78,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             SizedBox(height: 20),
             Text(
-              widget.user?.displayName ?? 'Username', // Display user name
+              user?.displayName ?? 'Username', // Display user's name
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 28,
@@ -86,7 +87,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             SizedBox(height: 10),
             Text(
-              widget.user?.email ?? 'email@example.com', // Display user email
+              user?.email ?? 'email@example.com', // Display user's email
               style: TextStyle(
                 color: Colors.grey[400],
                 fontSize: 18,
