@@ -1,22 +1,56 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:odp/pages/profile.dart';
 
 import '../widgets/firebase_services/firebase-storage.dart';
 import 'bookingpage.dart';
-import 'login.dart'; // Import the booking page
+import 'login.dart';
 
 class HomePage1 extends StatefulWidget {
-  final User? user; // Add this line
+  final User? user;
 
-  const HomePage1({Key? key, this.user})
-      : super(key: key); // Modify constructor
+  const HomePage1({Key? key, this.user}) : super(key: key);
 
   @override
   _HomePage1State createState() => _HomePage1State();
 }
 
 class _HomePage1State extends State<HomePage1> {
+  String userType = 'User'; // Default user type
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserType();
+  }
+
+  Future<void> _fetchUserType() async {
+    if (widget.user != null) {
+      try {
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.user!.uid)
+            .get();
+
+        print('Document data: ${userDoc.data()}');
+
+        // Print the entire document data to check its contents
+        print('Fetched user document: ${userDoc.data()}');
+
+        // Fetch and print the userType field
+        String fetchedUserType = userDoc.get('userType') ?? 'User';
+        print('Fetched userType: $fetchedUserType');
+
+        setState(() {
+          userType = fetchedUserType;
+        });
+      } catch (e) {
+        print('Error fetching user type: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -64,13 +98,12 @@ class _HomePage1State extends State<HomePage1> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (context) =>
-                                ProfilePage(user: widget.user)),
+                          builder: (context) => ProfilePage(user: widget.user),
+                        ),
                       );
                     },
                     child: Text(
-                      widget.user?.displayName ??
-                          'John Doe', // Use user parameter here
+                      widget.user?.displayName ?? 'John Doe',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 24,
@@ -92,7 +125,8 @@ class _HomePage1State extends State<HomePage1> {
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(
-                            builder: (context) => HomePage1(user: widget.user)),
+                          builder: (context) => HomePage1(user: widget.user),
+                        ),
                       );
                     },
                   ),
@@ -134,17 +168,38 @@ class _HomePage1State extends State<HomePage1> {
               ),
             ),
             SizedBox(height: 10),
-            Container(
-              height: 120, // Adjust height as needed
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  FirebaseImageCard(imagePath: 'Turf images test/turf 1.jpeg'),
-                  FirebaseImageCard(imagePath: 'Turf images test/turf 2.jpeg'),
-                  FirebaseImageCard(imagePath: 'Turf images test/turf 3.jpeg'),
-                ],
+            // Display content based on user type
+            if (userType == 'User')
+              Container(
+                height: 120,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    FirebaseImageCard(
+                        imagePath: 'Turf images test/turf 1.jpeg'),
+                    FirebaseImageCard(
+                        imagePath: 'Turf images test/turf 2.jpeg'),
+                    FirebaseImageCard(
+                        imagePath: 'Turf images test/turf 3.jpeg'),
+                  ],
+                ),
+              )
+            else if (userType == 'Turf Owner')
+              Container(
+                height: 120,
+                child: Card(
+                  color: Colors.grey[800],
+                  child: Center(
+                    child: Text(
+                      'No content available',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
             SizedBox(height: 20),
             Text(
               'Quick Actions',
@@ -158,6 +213,13 @@ class _HomePage1State extends State<HomePage1> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
+                if (userType == 'User') // Show button only for 'User'
+                  ElevatedButton(
+                    onPressed: () {
+                      // Action for the button
+                    },
+                    child: Text('Special Button'),
+                  ),
                 _buildActionButton(Icons.book_online, 'Book Now'),
                 _buildActionButton(Icons.history, 'History'),
               ],
