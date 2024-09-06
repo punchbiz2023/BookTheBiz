@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:odp/pages/login.dart';
 
 import 'home_page.dart'; // Import the home page
 
@@ -296,20 +297,25 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       : Text('Signup', style: TextStyle(color: Colors.white)),
                 ),
                 const SizedBox(height: 20),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    return Center(
-                      child: Text(
-                        'Already have an account? Login',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(.8),
-                          fontSize: constraints.maxWidth *
-                              0.04, // Responsive text size
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => LoginApp()),
                     );
                   },
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return Text(
+                        'Already have an account? Login',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(.7),
+                          fontSize: size.width * 0.045, // Responsive font size
+                        ),
+                        textAlign: TextAlign.center,
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -319,72 +325,24 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget component1(IconData icon, String hint, bool obscure, bool isEmail,
-      TextEditingController controller) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.5),
-          width: 2,
+  Widget component1(IconData icon, String hintText, bool obscureText,
+      bool isEmail, TextEditingController controller) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      cursorColor: Colors.white,
+      style: TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.8)),
+        hintText: hintText,
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
         ),
-      ),
-      child: TextFormField(
-        controller: controller,
-        obscureText: obscure,
-        cursorColor: Colors.white,
-        style: TextStyle(color: Colors.white),
-        decoration: InputDecoration(
-          prefixIcon: Icon(
-            icon,
-            color: Colors.white,
-          ),
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.white.withOpacity(.7)),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 20),
+        focusedBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.8)),
         ),
-        keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
       ),
     );
   }
-}
-
-class MyPainter extends CustomPainter {
-  final double radius;
-
-  MyPainter(this.radius);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..shader = LinearGradient(
-        colors: [Color(0xffFD5E3D), Color(0xffC43990)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ).createShader(Rect.fromCircle(
-        center: Offset(0, 0),
-        radius: radius,
-      ));
-
-    canvas.drawCircle(Offset.zero, radius, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
-  }
-}
-
-class MyBehavior extends ScrollBehavior {
-  @override
-  Widget buildViewportChrome(
-      BuildContext context, Widget child, AxisDirection axisDirection) {
-    return child;
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
