@@ -1,10 +1,9 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 import 'home_page.dart'; // Import the home page
 
@@ -23,6 +22,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   final TextEditingController _mobileController = TextEditingController();
 
   bool _loading = false;
+  String _userType = 'User'; // Default user type
 
   late AnimationController controller1;
   late AnimationController controller2;
@@ -125,6 +125,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         'name': _nameController.text,
         'email': _emailController.text,
         'mobile': _mobileController.text,
+        'userType': _userType, // Add userType to Firestore
       });
 
       Navigator.pushReplacement(
@@ -133,9 +134,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
             builder: (context) => HomePage1(user: userCredential.user)),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Signup failed: $e')),
-      );
+      Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
     } finally {
       setState(() {
         _loading = false;
@@ -172,10 +171,10 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
             ),
           ),
           Positioned(
-            top: size.height * animation3.value,
-            left: size.width * (animation1.value + .1),
+            top: size.height * .5,
+            left: size.width * (animation2.value + .8),
             child: CustomPaint(
-              painter: MyPainter(60),
+              painter: MyPainter(30),
             ),
           ),
           Positioned(
@@ -186,7 +185,8 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
             ),
           ),
           Padding(
-            padding: EdgeInsets.all(size.width * 0.1),
+            padding: EdgeInsets.symmetric(
+                horizontal: size.width * 0.05), // Adjust padding
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -195,12 +195,76 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                   'Create an Account',
                   style: TextStyle(
                     color: Colors.white.withOpacity(.7),
-                    fontSize: 30,
+                    fontSize: size.width * 0.08, // Responsive font size
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1,
                     wordSpacing: 4,
                   ),
                 ),
+                const SizedBox(height: 30),
+
+                // User Type Selection Container
+                Container(
+                  height: size.width / 8,
+                  width: size.width * 0.9, // Responsive width
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.5),
+                      width: 2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _userType = 'User';
+                            });
+                          },
+                          child: Container(
+                            color: _userType == 'User'
+                                ? Colors.white.withOpacity(0.1)
+                                : Colors.transparent,
+                            alignment: Alignment.center,
+                            child: Text(
+                              'User',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _userType = 'Turf Owner';
+                            });
+                          },
+                          child: Container(
+                            color: _userType == 'Turf Owner'
+                                ? Colors.white.withOpacity(0.1)
+                                : Colors.transparent,
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Turf Owner',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
                 const SizedBox(height: 30),
                 component1(Icons.person_outline, 'Name...', false, false,
                     _nameController),
@@ -217,6 +281,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                 ElevatedButton(
                   onPressed: _loading ? null : _signup,
                   style: ElevatedButton.styleFrom(
+                    minimumSize: Size(size.width * 0.8, 50), // Responsive width
                     foregroundColor: Colors.white,
                     backgroundColor: Colors.grey.withOpacity(0.3), // Text color
                     shape: RoundedRectangleBorder(
@@ -227,21 +292,24 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                         vertical: 15), // Adjust padding as needed
                   ),
                   child: _loading
-                      ? const CircularProgressIndicator()
-                      : const Text('Signup',
-                          style: TextStyle(color: Colors.white)),
+                      ? CircularProgressIndicator()
+                      : Text('Signup', style: TextStyle(color: Colors.white)),
                 ),
-                TextButton(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context); // Go back to login page
+                const SizedBox(height: 20),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Center(
+                      child: Text(
+                        'Already have an account? Login',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(.8),
+                          fontSize: constraints.maxWidth *
+                              0.04, // Responsive text size
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    );
                   },
-                  child: Text(
-                    'Already have an account? Login',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(.8),
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -251,45 +319,34 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget component1(IconData icon, String hintText, bool isPassword,
-      bool isEmail, TextEditingController controller) {
-    Size size = MediaQuery.of(context).size;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(15),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaY: 15,
-          sigmaX: 15,
+  Widget component1(IconData icon, String hint, bool obscure, bool isEmail,
+      TextEditingController controller) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.5),
+          width: 2,
         ),
-        child: Container(
-          height: size.width / 8,
-          width: size.width / 1.2,
-          alignment: Alignment.center,
-          padding: EdgeInsets.only(right: size.width / 30),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(.05),
-            borderRadius: BorderRadius.circular(15),
+      ),
+      child: TextFormField(
+        controller: controller,
+        obscureText: obscure,
+        cursorColor: Colors.white,
+        style: TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          prefixIcon: Icon(
+            icon,
+            color: Colors.white,
           ),
-          child: TextField(
-            controller: controller,
-            style: TextStyle(color: Colors.white.withOpacity(.8)),
-            cursorColor: Colors.white,
-            obscureText: isPassword,
-            keyboardType:
-                isEmail ? TextInputType.emailAddress : TextInputType.text,
-            decoration: InputDecoration(
-              prefixIcon: Icon(
-                icon,
-                color: Colors.white.withOpacity(.7),
-              ),
-              border: InputBorder.none,
-              hintMaxLines: 1,
-              hintText: hintText,
-              hintStyle: TextStyle(color: Colors.white.withOpacity(.5)),
-            ),
-          ),
+          hintText: hint,
+          hintStyle: TextStyle(color: Colors.white.withOpacity(.7)),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(vertical: 20),
         ),
+        keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
       ),
     );
   }
