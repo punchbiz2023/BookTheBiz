@@ -1,10 +1,12 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:odp/pages/home_page.dart'; // Home page
-import 'package:odp/pages/login.dart'; // Login page
-import 'package:odp/pages/profile.dart'; // Profile page
+import 'package:odp/pages/Turf%20owner/turfadd.dart';
+import 'package:odp/pages/home_page.dart';
+import 'package:odp/pages/login.dart';
+import 'package:odp/pages/profile.dart';
+import 'package:odp/pages/settings.dart';
 
-import 'firebase_options.dart'; // Firebase options
+import 'firebase_options.dart'; // Firebase options file
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +23,6 @@ void main() async {
   runApp(MyApp());
 }
 
-// MyApp class
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -33,10 +34,11 @@ class MyApp extends StatelessWidget {
       ),
       // Define routes for navigation
       routes: {
-        '/': (context) => LoginApp(), // Set your initial page
+        '/': (context) => LoginApp(),
         '/home': (context) => HomePage1(),
         '/profile': (context) => ProfilePage(),
-        // Add other routes here if needed
+        '/settings': (context) => SettingsPage(),
+        '/addTurf': (context) => AddTurfPage(),
       },
       initialRoute: '/',
     );
