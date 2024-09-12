@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart' as fs;
 import 'package:flutter/material.dart';
 import 'package:odp/pages/profile.dart';
 import 'package:odp/pages/settings.dart';
 
-import '../widgets/firebase_services/firebase-storage.dart';
 import 'bookingpage.dart';
 import 'login.dart';
 
@@ -204,30 +204,6 @@ class _HomePage1State extends State<HomePage1> {
                   ),
                 ),
               ),
-            SizedBox(height: 20),
-            Text(
-              'Quick Actions',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                if (userType == 'User') // Show button only for 'User'
-                  ElevatedButton(
-                    onPressed: () {
-                      // Action for the button
-                    },
-                    child: Text('Special Button'),
-                  ),
-                _buildActionButton(Icons.book_online, 'Book Now'),
-                _buildActionButton(Icons.history, 'History'),
-              ],
-            ),
           ],
         ),
       ),
@@ -241,23 +217,6 @@ class _HomePage1State extends State<HomePage1> {
         backgroundColor: Colors.blueAccent,
         child: Icon(Icons.add, color: Colors.white),
       ),
-    );
-  }
-
-  Widget _buildActionButton(IconData icon, String label) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 30,
-          backgroundColor: Colors.blueAccent,
-          child: Icon(icon, color: Colors.white, size: 30),
-        ),
-        SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(color: Colors.white, fontSize: 16),
-        ),
-      ],
     );
   }
 
@@ -277,6 +236,64 @@ class _HomePage1State extends State<HomePage1> {
         borderRadius: BorderRadius.circular(10),
       ),
       onTap: onTap,
+    );
+  }
+}
+
+class FirebaseImageCard extends StatefulWidget {
+  final String imagePath;
+
+  const FirebaseImageCard({Key? key, required this.imagePath})
+      : super(key: key);
+
+  @override
+  _FirebaseImageCardState createState() => _FirebaseImageCardState();
+}
+
+class _FirebaseImageCardState extends State<FirebaseImageCard> {
+  fs.FirebaseStorage storage = fs.FirebaseStorage.instance;
+  String? imageUrl;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  Future<void> _loadImage() async {
+    try {
+      // Fetch the download URL from Firebase Storage
+      String downloadURL = await storage.ref(widget.imagePath).getDownloadURL();
+
+      setState(() {
+        imageUrl = downloadURL;
+        isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading image: $e');
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: isLoading
+          ? Center(child: CircularProgressIndicator())
+          : imageUrl != null
+              ? Image.network(
+                  imageUrl!,
+                  fit: BoxFit.cover,
+                )
+              : Center(
+                  child: Text(
+                    'Failed to load image',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
     );
   }
 }
