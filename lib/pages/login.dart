@@ -128,6 +128,16 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
             .get()
             .then((DocumentSnapshot ds) => ds.data() as Map<String, dynamic>);
 
+        String emailPattern =
+            r"/^([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/";
+        RegExp regex = RegExp(emailPattern);
+        String email = _emailController.text.trim();
+
+        if (!regex.hasMatch(email)) {
+          Fluttertoast.showToast(msg: 'Invalid email format');
+          return;
+        }
+
         if (userData['userType'] == 'Turf Owner') {
           // Navigate to the custom page
           Navigator.pushReplacement(
@@ -144,8 +154,17 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
         Fluttertoast.showToast(msg: 'Login Successful');
       }
     } catch (e) {
-      // Handle errors
-      Fluttertoast.showToast(msg: 'Login Failed: ${e.toString()}');
+      if (e is FirebaseAuthException) {
+        if (e.code == 'user-not-found') {
+          Fluttertoast.showToast(msg: 'User not found');
+        } else if (e.code == 'invalid-email') {
+          Fluttertoast.showToast(msg: 'Invalid email format');
+        } else if (e.code == 'wrong-password') {
+          Fluttertoast.showToast(msg: 'Wrong password');
+        } else {
+          Fluttertoast.showToast(msg: 'Login error: ${e.message}');
+        }
+      }
     } finally {
       setState(() {
         _loading = false;
@@ -229,14 +248,15 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
                     ),
                     elevation: 0, // Remove shadow if desired
                     padding: EdgeInsets.symmetric(
-                        vertical: 15), // Adjust padding as needed
+                        vertical: 12,
+                        horizontal: 12), // Adjust padding as needed
                   ),
                   child: _loading
                       ? const CircularProgressIndicator()
                       : const Text('Login',
                           style: TextStyle(color: Colors.white)),
                 ),
-                TextButton(
+                ElevatedButton(
                   onPressed: () {
                     HapticFeedback.lightImpact();
                     Navigator.push(
@@ -246,12 +266,19 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
                       ),
                     );
                   },
-                  child: Text(
-                    'Don\'t have an account? Sign Up',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(.8),
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.grey.withOpacity(0.3), // Text color
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
                     ),
+                    elevation: 0, // Remove shadow if desired
+                    padding: EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 12), // Adjust padding as needed
                   ),
+                  child: const Text('Create New Account',
+                      style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
