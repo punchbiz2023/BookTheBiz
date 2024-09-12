@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:odp/pages/Turf%20owner/turfadd.dart';
+import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/sign_up_page.dart';
-
-import 'home_page.dart'; // Import the home page
 
 class LoginApp extends StatefulWidget {
   @override
@@ -112,19 +114,34 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
     try {
       final UserCredential userCredential =
           await _auth.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+              email: _emailController.text.trim(),
+              password: _passwordController.text.trim());
 
       if (userCredential.user != null) {
-        // Successfully signed in
+        // Get the user type
+        await Firebase.initializeApp(); // Initialize Firebase
+        final FirebaseFirestore firestore = FirebaseFirestore
+            .instance; // Get a reference to the Firestore database
+        final DocumentReference userRef = firestore.collection('users').doc(
+            userCredential.user!.uid); // Get a reference to the user's document
+        Map<String, dynamic> userData = await userRef
+            .get()
+            .then((DocumentSnapshot ds) => ds.data() as Map<String, dynamic>);
+
+        if (userData['userType'] == 'Turf Owner') {
+          // Navigate to the custom page
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => AddTurfPage()),
+          );
+        } else {
+          // Navigate to the other page
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => HomePage1()),
+          );
+        }
         Fluttertoast.showToast(msg: 'Login Successful');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  HomePage1()), // Navigate to home page after login
-        );
       }
     } catch (e) {
       // Handle errors

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:odp/pages/profile.dart';
+import 'package:odp/pages/settings.dart';
 
 import '../widgets/firebase_services/firebase-storage.dart';
 import 'bookingpage.dart';
@@ -134,7 +135,10 @@ class _HomePage1State extends State<HomePage1> {
                     icon: Icons.settings,
                     text: 'Settings',
                     onTap: () {
-                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => SettingsPage()),
+                      );
                     },
                   ),
                   _createDrawerItem(
