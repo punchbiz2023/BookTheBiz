@@ -128,27 +128,27 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
             .get()
             .then((DocumentSnapshot ds) => ds.data() as Map<String, dynamic>);
 
-        String emailPattern =
-            r"/^([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/";
-        RegExp regex = RegExp(emailPattern);
-        String email = _emailController.text.trim();
-
-        if (!regex.hasMatch(email)) {
-          Fluttertoast.showToast(msg: 'Invalid email format');
-          return;
-        }
+        // String emailPattern =
+        //     r"/^([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/";
+        // RegExp regex = RegExp(emailPattern);
+        // String email = _emailController.text.trim();
+        //
+        // if (!regex.hasMatch(email)) {
+        //   Fluttertoast.showToast(msg: 'Invalid email format');
+        //   return;
+        // }
 
         if (userData['userType'] == 'Turf Owner') {
           // Navigate to the custom page
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => AddTurfPage()),
+            MaterialPageRoute(builder: (context) => HomePage1()),
           );
         } else {
           // Navigate to the other page
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => HomePage1()),
+            MaterialPageRoute(builder: (context) => AddTurfPage()),
           );
         }
         Fluttertoast.showToast(msg: 'Login Successful');

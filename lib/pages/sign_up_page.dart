@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui'; // Import for ImageFilter
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -298,25 +299,30 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 20),
                 GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => LoginApp()),
-                    );
-                  },
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return Text(
-                        'Already have an account? Login',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(.7),
-                          fontSize: size.width * 0.045, // Responsive font size
-                        ),
-                        textAlign: TextAlign.center,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      minimumSize:
+                          Size(size.width * 0.8, 50), // Responsive width
+                      foregroundColor: Colors.white,
+                      backgroundColor:
+                          Colors.grey.withOpacity(0.3), // Text color
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      elevation: 0, // Remove shadow if desired
+                      padding: EdgeInsets.symmetric(
+                          vertical: 15), // Adjust padding as needed
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => LoginApp()),
                       );
                     },
+                    child: Text('Already have an account? Login',
+                        style: TextStyle(color: Colors.white)),
                   ),
-                ),
+                )
               ],
             ),
           ),
@@ -325,22 +331,44 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget component1(IconData icon, String hintText, bool obscureText,
+  Widget component1(IconData icon, String hintText, bool isPassword,
       bool isEmail, TextEditingController controller) {
-    return TextField(
-      controller: controller,
-      obscureText: obscureText,
-      cursorColor: Colors.white,
-      style: TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.8)),
-        hintText: hintText,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-        enabledBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
+    Size size = MediaQuery.of(context).size;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(15),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaY: 15,
+          sigmaX: 15,
         ),
-        focusedBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.8)),
+        child: Container(
+          height: size.width / 8,
+          width: size.width / 1.2,
+          alignment: Alignment.center,
+          padding: EdgeInsets.only(right: size.width / 30),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(.05),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: TextField(
+            controller: controller,
+            style: TextStyle(color: Colors.white.withOpacity(.8)),
+            cursorColor: Colors.white,
+            obscureText: isPassword,
+            keyboardType:
+                isEmail ? TextInputType.emailAddress : TextInputType.text,
+            decoration: InputDecoration(
+              prefixIcon: Icon(
+                icon,
+                color: Colors.white.withOpacity(.7),
+              ),
+              border: InputBorder.none,
+              hintMaxLines: 1,
+              hintText: hintText,
+              hintStyle: TextStyle(color: Colors.white.withOpacity(.5)),
+            ),
+          ),
         ),
       ),
     );
