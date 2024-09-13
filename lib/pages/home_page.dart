@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart' as fs;
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart'; // Import geolocator package
-import 'package:permission_handler/permission_handler.dart'; // Import permission_handler package
+import 'package:geolocator/geolocator.dart';
+import 'package:odp/widgets/firebaseimagecard.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'bookingpage.dart';
 import 'login.dart';
@@ -20,16 +20,17 @@ class HomePage1 extends StatefulWidget {
 }
 
 class _HomePage1State extends State<HomePage1> {
-  final GlobalKey<ScaffoldState> _scaffoldKey =
-      GlobalKey<ScaffoldState>(); // Added GlobalKey
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String userType = 'User'; // Default user type
   Position? _currentPosition;
+  List<DocumentSnapshot> _turfs = []; // List to store fetched turfs
 
   @override
   void initState() {
     super.initState();
     _fetchUserType();
-    _checkAndFetchLocation(); // Check permissions and fetch location
+    _checkAndFetchLocation();
+    _fetchTurfs();
   }
 
   Future<void> _fetchUserType() async {
@@ -54,7 +55,6 @@ class _HomePage1State extends State<HomePage1> {
     if (await Permission.location.request().isGranted) {
       _fetchCurrentLocation();
     } else {
-      // Handle the case where permission is not granted
       print('Location permission not granted');
     }
   }
@@ -68,6 +68,19 @@ class _HomePage1State extends State<HomePage1> {
       });
     } catch (e) {
       print('Error fetching location: $e');
+    }
+  }
+
+  Future<void> _fetchTurfs() async {
+    try {
+      QuerySnapshot querySnapshot =
+          await FirebaseFirestore.instance.collection('turfs').get();
+
+      setState(() {
+        _turfs = querySnapshot.docs;
+      });
+    } catch (e) {
+      print('Error fetching turfs: $e');
     }
   }
 
@@ -86,7 +99,7 @@ class _HomePage1State extends State<HomePage1> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey, // Use the GlobalKey
+      key: _scaffoldKey,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -97,8 +110,7 @@ class _HomePage1State extends State<HomePage1> {
               IconButton(
                 icon: Icon(Icons.menu, color: Colors.white),
                 onPressed: () {
-                  _scaffoldKey.currentState
-                      ?.openDrawer(); // Open drawer using the GlobalKey
+                  _scaffoldKey.currentState?.openDrawer();
                 },
               ),
               _buildLocationWidget(),
@@ -177,7 +189,7 @@ class _HomePage1State extends State<HomePage1> {
                     icon: Icons.logout,
                     text: 'Logout',
                     onTap: () {
-                      _logout(); // Implement logout functionality
+                      _logout();
                     },
                   ),
                 ],
@@ -201,26 +213,23 @@ class _HomePage1State extends State<HomePage1> {
               ),
             ),
             SizedBox(height: 10),
-            // Display content based on user type
             if (userType == 'User')
               Container(
                 height: 250, // Adjust height as needed
-                child: ListView(
+                child: ListView.builder(
                   scrollDirection: Axis.horizontal,
-                  children: [
-                    FirebaseImageCard(
-                        imagePath: 'Turf images test/turf 2.jpeg',
-                        title: 'Turf 1',
-                        description: 'Description for Turf 1'),
-                    FirebaseImageCard(
-                        imagePath: 'Turf images test/turf 3.jpeg',
-                        title: 'Turf 2',
-                        description: 'Description for Turf 2'),
-                    FirebaseImageCard(
-                        imagePath: 'Turf images test/turf 4.jpeg',
-                        title: 'Turf 3',
-                        description: 'Description for Turf 3'),
-                  ],
+                  itemCount: _turfs.length,
+                  itemBuilder: (context, index) {
+                    var turf = _turfs[index].data() as Map<String, dynamic>;
+                    return FirebaseImageCard(
+                      imageUrl: turf[
+                          'imageUrl'], // Ensure this matches your Firestore field name
+                      title: turf[
+                          'name'], // Ensure this matches your Firestore field name
+                      description: turf[
+                          'description'], // Ensure this matches your Firestore field name
+                    );
+                  },
                 ),
               )
             else if (userType == 'Turf Owner')
@@ -257,7 +266,7 @@ class _HomePage1State extends State<HomePage1> {
 
   Widget _buildLocationWidget() {
     if (_currentPosition == null) {
-      return CircularProgressIndicator(); // or any placeholder
+      return CircularProgressIndicator();
     }
     return Text(
       '${_currentPosition!.latitude.toStringAsFixed(2)}, ${_currentPosition!.longitude.toStringAsFixed(2)}',
@@ -281,135 +290,6 @@ class _HomePage1State extends State<HomePage1> {
         borderRadius: BorderRadius.circular(10),
       ),
       onTap: onTap,
-    );
-  }
-}
-
-class FirebaseImageCard extends StatefulWidget {
-  final String imagePath;
-  final String title;
-  final String description;
-
-  const FirebaseImageCard({
-    Key? key,
-    required this.imagePath,
-    required this.title,
-    required this.description,
-  }) : super(key: key);
-
-  @override
-  _FirebaseImageCardState createState() => _FirebaseImageCardState();
-}
-
-class _FirebaseImageCardState extends State<FirebaseImageCard> {
-  fs.FirebaseStorage storage = fs.FirebaseStorage.instance;
-  String? imageUrl;
-  bool isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadImage();
-  }
-
-  Future<void> _loadImage() async {
-    try {
-      // Fetch the download URL from Firebase Storage
-      String downloadURL = await storage.ref(widget.imagePath).getDownloadURL();
-
-      setState(() {
-        imageUrl = downloadURL;
-        isLoading = false;
-      });
-    } catch (e) {
-      print('Error loading image: $e');
-      setState(() {
-        isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: MediaQuery.of(context).size.width * 0.6, // Adjust width as needed
-      height: MediaQuery.of(context).size.height * 0.75, // 75% of screen height
-      margin: EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
-      child: Card(
-        elevation: 0, // Set elevation to 0 to avoid shadow
-        color: Colors.transparent, // Transparent background
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Stack(
-          children: [
-            // Background image
-            ClipRRect(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
-              child: isLoading
-                  ? Center(child: CircularProgressIndicator())
-                  : imageUrl != null
-                      ? Image.network(
-                          imageUrl!,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                        )
-                      : Center(
-                          child: Text(
-                            'Failed to load image',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ),
-            ),
-            // Overlay for text readability
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                color: Colors.black54, // Semi-transparent overlay
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white, // Ensure title is visible
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      widget.description,
-                      style: TextStyle(
-                        color:
-                            Colors.white, // Set description text color to white
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        // Add your action here
-                      },
-                      child: Text('Book Now'),
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor:
-                            Colors.blueAccent, // Text color on button
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
