@@ -7,7 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:odp/pages/Turf%20owner/turfadd.dart';
+import 'package:odp/pages/Turf%20owner/owner_home.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/sign_up_page.dart';
 
@@ -142,13 +142,13 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
           // Navigate to the custom page
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => HomePage1()),
+            MaterialPageRoute(builder: (context) => HomePage2()),
           );
         } else {
           // Navigate to the other page
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => AddTurfPage()),
+            MaterialPageRoute(builder: (context) => HomePage1()),
           );
         }
         Fluttertoast.showToast(msg: 'Login Successful');

@@ -3,9 +3,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:location/location.dart';
 
 class AddTurfPage extends StatefulWidget {
   @override
@@ -15,7 +13,6 @@ class AddTurfPage extends StatefulWidget {
 class _AddTurfPageState extends State<AddTurfPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  LatLng? _pickedLocation;
   File? _imageFile;
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
@@ -32,42 +29,24 @@ class _AddTurfPageState extends State<AddTurfPage> {
     }
   }
 
-  // Function to open Google Maps and select location
-  Future<void> _pickLocation() async {
-    Location location = Location();
-    var currentLocation = await location.getLocation();
-    LatLng initialPosition =
-        LatLng(currentLocation.latitude!, currentLocation.longitude!);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SelectLocationPage(
-          initialPosition: initialPosition,
-          onSelectLocation: (selectedLocation) {
-            setState(() {
-              _pickedLocation = selectedLocation;
-            });
-          },
-        ),
-      ),
-    );
-  }
-
   // Function to upload image to Firebase Storage
   Future<String> _uploadImage(File image) async {
-    Reference storageRef = _firebaseStorage
-        .ref()
-        .child('turf_images/${DateTime.now().millisecondsSinceEpoch}.jpg');
-    UploadTask uploadTask = storageRef.putFile(image);
-    TaskSnapshot snapshot = await uploadTask;
-    return await snapshot.ref.getDownloadURL();
+    try {
+      Reference storageRef = _firebaseStorage
+          .ref()
+          .child('turf_images/${DateTime.now().millisecondsSinceEpoch}.jpg');
+      UploadTask uploadTask = storageRef.putFile(image);
+      TaskSnapshot snapshot = await uploadTask;
+      return await snapshot.ref.getDownloadURL();
+    } catch (e) {
+      throw Exception('Failed to upload image: $e');
+    }
   }
 
   // Function to submit the turf details
   Future<void> _submitTurf() async {
     if (_nameController.text.isEmpty ||
         _descriptionController.text.isEmpty ||
-        _pickedLocation == null ||
         _imageFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Please complete all fields')),
@@ -82,8 +61,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
       await _firestore.collection('turfs').add({
         'name': _nameController.text,
         'description': _descriptionController.text,
-        'location':
-            GeoPoint(_pickedLocation!.latitude, _pickedLocation!.longitude),
         'imageUrl': imageUrl,
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -123,8 +100,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
               maxLines: 1,
             ),
             SizedBox(height: 20),
-            _buildLocationPicker(),
-            SizedBox(height: 20),
             _buildTextField(
               controller: _descriptionController,
               label: 'Description',
@@ -156,27 +131,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
         labelStyle: TextStyle(color: Colors.white70),
         enabledBorder: UnderlineInputBorder(
           borderSide: BorderSide(color: Colors.white54),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLocationPicker() {
-    return GestureDetector(
-      onTap: _pickLocation,
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.white54),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Center(
-          child: Text(
-            _pickedLocation == null
-                ? 'Select Location (via Maps)'
-                : 'Location Selected',
-            style: TextStyle(color: Colors.white70),
-          ),
         ),
       ),
     );
@@ -223,60 +177,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
       child: Text(
         'Submit Turf',
         style: TextStyle(fontSize: 16, color: Colors.white),
-      ),
-    );
-  }
-}
-
-// Map Selection Page
-class SelectLocationPage extends StatefulWidget {
-  final LatLng initialPosition;
-  final Function(LatLng) onSelectLocation;
-  SelectLocationPage({
-    required this.initialPosition,
-    required this.onSelectLocation,
-  });
-  @override
-  _SelectLocationPageState createState() => _SelectLocationPageState();
-}
-
-class _SelectLocationPageState extends State<SelectLocationPage> {
-  LatLng? _pickedLocation;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Select Location'),
-        backgroundColor: Colors.blueAccent,
-      ),
-      body: GoogleMap(
-        initialCameraPosition: CameraPosition(
-          target: widget.initialPosition,
-          zoom: 16,
-        ),
-        onTap: (location) {
-          setState(() {
-            _pickedLocation = location;
-          });
-        },
-        markers: _pickedLocation == null
-            ? {}
-            : {
-                Marker(
-                  markerId: MarkerId('picked-location'),
-                  position: _pickedLocation!,
-                ),
-              },
-      ),
-      floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.check),
-        onPressed: () {
-          if (_pickedLocation != null) {
-            widget.onSelectLocation(_pickedLocation!);
-            Navigator.pop(context);
-          }
-        },
       ),
     );
   }
