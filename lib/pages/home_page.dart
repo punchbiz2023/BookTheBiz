@@ -221,13 +221,16 @@ class _HomePage1State extends State<HomePage1> {
                   itemCount: _turfs.length,
                   itemBuilder: (context, index) {
                     var turf = _turfs[index].data() as Map<String, dynamic>;
+                    print(_turfs[index]);
                     return FirebaseImageCard(
                       imageUrl: turf[
                           'imageUrl'], // Ensure this matches your Firestore field name
                       title: turf[
                           'name'], // Ensure this matches your Firestore field name
-                      description: turf[
-                          'description'], // Ensure this matches your Firestore field name
+                      description: turf['description'],
+                      documentId: _turfs[index].id,
+                      docname: turf[
+                          'name'], // Ensure this matches your Firestore field name
                     );
                   },
                 ),
