@@ -200,10 +200,10 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                     fontSize: size.width * 0.08, // Responsive font size
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1,
-                    wordSpacing: 4,
+                    wordSpacing: 0.9,
                   ),
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 10),
 
                 // User Type Selection Container
                 Container(
@@ -235,7 +235,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                               'User',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.8),
-                                fontSize: 16,
+                                fontSize: 14,
                               ),
                             ),
                           ),
@@ -257,7 +257,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                               'Turf Owner',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.8),
-                                fontSize: 16,
+                                fontSize: 14,
                               ),
                             ),
                           ),
@@ -267,19 +267,19 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 10),
                 component1(Icons.person_outline, 'Name...', false, false,
                     _nameController),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 component1(Icons.email_outlined, 'Email...', false, true,
                     _emailController),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 component1(Icons.lock_outline, 'Password...', true, false,
                     _passwordController),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 component1(Icons.phone_outlined, 'Mobile Number...', false,
                     false, _mobileController),
-                const SizedBox(height: 30),
+                const SizedBox(height: 10),
                 ElevatedButton(
                   onPressed: _loading ? null : _signup,
                   style: ElevatedButton.styleFrom(
