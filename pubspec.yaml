@@ -36,4 +36,4 @@ flutter:
 
   assets:
     - lib/assets/placeholder_image.jpeg
-    # Add any other asset paths here, if needed.
+    - lib/assets/badminton.png
