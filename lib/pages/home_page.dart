@@ -21,34 +21,14 @@ class HomePage1 extends StatefulWidget {
 
 class _HomePage1State extends State<HomePage1> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  String userType = 'User'; // Default user type
   Position? _currentPosition;
   List<DocumentSnapshot> _turfs = []; // List to store fetched turfs
 
   @override
   void initState() {
     super.initState();
-    _fetchUserType();
     _checkAndFetchLocation();
     _fetchTurfs();
-  }
-
-  Future<void> _fetchUserType() async {
-    if (widget.user != null) {
-      try {
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.user!.uid)
-            .get();
-
-        String fetchedUserType = userDoc.get('userType') ?? 'User';
-        setState(() {
-          userType = fetchedUserType;
-        });
-      } catch (e) {
-        print('Error fetching user type: $e');
-      }
-    }
   }
 
   Future<void> _checkAndFetchLocation() async {
@@ -213,44 +193,23 @@ class _HomePage1State extends State<HomePage1> {
               ),
             ),
             SizedBox(height: 10),
-            if (userType == 'User')
-              Container(
-                height: 250, // Adjust height as needed
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _turfs.length,
-                  itemBuilder: (context, index) {
-                    var turf = _turfs[index].data() as Map<String, dynamic>;
-                    print(_turfs[index]);
-                    return FirebaseImageCard(
-                      imageUrl: turf[
-                          'imageUrl'], // Ensure this matches your Firestore field name
-                      title: turf[
-                          'name'], // Ensure this matches your Firestore field name
-                      description: turf['description'],
-                      documentId: _turfs[index].id,
-                      docname: turf[
-                          'name'], // Ensure this matches your Firestore field name
-                    );
-                  },
-                ),
-              )
-            else if (userType == 'Turf Owner')
-              Container(
-                height: 120,
-                child: Card(
-                  color: Colors.grey[800],
-                  child: Center(
-                    child: Text(
-                      'No content available',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                ),
+            Container(
+              height: 250, // Adjust height as needed
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _turfs.length,
+                itemBuilder: (context, index) {
+                  var turf = _turfs[index].data() as Map<String, dynamic>;
+                  return FirebaseImageCard(
+                    imageUrl: turf['imageUrl'],
+                    title: turf['name'],
+                    description: turf['description'],
+                    documentId: _turfs[index].id,
+                    docname: turf['name'],
+                  );
+                },
               ),
+            ),
           ],
         ),
       ),
