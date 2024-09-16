@@ -24,13 +24,12 @@ class HomePage2 extends StatefulWidget {
 class _HomePage1State extends State<HomePage2> {
   final GlobalKey<ScaffoldState> _scaffoldKey =
       GlobalKey<ScaffoldState>(); // Added GlobalKey
-  String userType = 'User'; // Default user type
+
   Position? _currentPosition;
 
   @override
   void initState() {
     super.initState();
-    _fetchUserType();
     _checkAndFetchLocation(); // Check permissions and fetch location
   }
 
@@ -42,10 +41,7 @@ class _HomePage1State extends State<HomePage2> {
             .doc(widget.user!.uid)
             .get();
 
-        String fetchedUserType = userDoc.get('userType') ?? 'User';
-        setState(() {
-          userType = fetchedUserType;
-        });
+        setState(() {});
       } catch (e) {
         print('Error fetching user type: $e');
       }
@@ -204,43 +200,41 @@ class _HomePage1State extends State<HomePage2> {
             ),
             SizedBox(height: 10),
             // Display content based on user type
-            if (userType == 'User')
-              Container(
-                height: 250, // Adjust height as needed
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    FirebaseImageCard(
-                        imagePath: 'Turf images test/turf 2.jpeg',
-                        title: 'Turf 1',
-                        description: 'Description for Turf 1'),
-                    FirebaseImageCard(
-                        imagePath: 'Turf images test/turf 3.jpeg',
-                        title: 'Turf 2',
-                        description: 'Description for Turf 2'),
-                    FirebaseImageCard(
-                        imagePath: 'Turf images test/turf 4.jpeg',
-                        title: 'Turf 3',
-                        description: 'Description for Turf 3'),
-                  ],
-                ),
-              )
-            else if (userType == 'Turf Owner')
-              Container(
-                height: 120,
-                child: Card(
-                  color: Colors.grey[800],
-                  child: Center(
-                    child: Text(
-                      'No content available',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                      ),
+            Container(
+              height: 250, // Adjust height as needed
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  FirebaseImageCard(
+                      imagePath: 'Turf images test/turf 2.jpeg',
+                      title: 'Turf 1',
+                      description: 'Description for Turf 1'),
+                  FirebaseImageCard(
+                      imagePath: 'Turf images test/turf 3.jpeg',
+                      title: 'Turf 2',
+                      description: 'Description for Turf 2'),
+                  FirebaseImageCard(
+                      imagePath: 'Turf images test/turf 4.jpeg',
+                      title: 'Turf 3',
+                      description: 'Description for Turf 3'),
+                ],
+              ),
+            ),
+            Container(
+              height: 120,
+              child: Card(
+                color: Colors.grey[800],
+                child: Center(
+                  child: Text(
+                    'No content available',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
                     ),
                   ),
                 ),
               ),
+            ),
             SizedBox(height: 20), // Add some space before the button
             Center(
               child: ElevatedButton(
