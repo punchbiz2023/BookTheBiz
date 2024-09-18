@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:odp/pages/Turf%20owner/owner_home.dart';
 import 'package:odp/pages/login.dart';
 
 import 'home_page.dart'; // Import the home page
@@ -110,6 +111,39 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     _mobileController.dispose();
     super.dispose();
   }
+  //
+  // Future<void> _signup() async {
+  //   setState(() {
+  //     _loading = true;
+  //   });
+  //
+  //   try {
+  //     UserCredential userCredential =
+  //         await _auth.createUserWithEmailAndPassword(
+  //       email: _emailController.text,
+  //       password: _passwordController.text,
+  //     );
+  //
+  //     await _firestore.collection('users').doc(userCredential.user!.uid).set({
+  //       'name': _nameController.text,
+  //       'email': _emailController.text,
+  //       'mobile': _mobileController.text,
+  //       'userType': _userType, // Add userType to Firestore
+  //     });
+  //
+  //     Navigator.pushReplacement(
+  //       context,
+  //       MaterialPageRoute(
+  //           builder: (context) => HomePage1(user: userCredential.user)),
+  //     );
+  //   } catch (e) {
+  //     Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
+  //   } finally {
+  //     setState(() {
+  //       _loading = false;
+  //     });
+  //   }
+  // }
 
   Future<void> _signup() async {
     setState(() {
@@ -130,11 +164,22 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         'userType': _userType, // Add userType to Firestore
       });
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) => HomePage1(user: userCredential.user)),
-      );
+      // Navigate to different pages based on user type
+      if (_userType == 'Turf Owner') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomePage2(user: userCredential.user),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomePage1(user: userCredential.user),
+          ),
+        );
+      }
     } catch (e) {
       Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
     } finally {
