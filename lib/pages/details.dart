@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // Add this for date formatting
 
-class DetailsPage extends StatelessWidget {
+class DetailsPage extends StatefulWidget {
   final String documentId;
   final String documentname;
 
@@ -11,12 +12,21 @@ class DetailsPage extends StatelessWidget {
     required this.documentname,
   }) : super(key: key);
 
+  @override
+  _DetailsPageState createState() => _DetailsPageState();
+}
+
+class _DetailsPageState extends State<DetailsPage> {
+  DateTime? _selectedDate;
+  TimeOfDay? _selectedFromTime;
+  TimeOfDay? _selectedToTime;
+
   Future<Map<String, dynamic>?> _fetchDetails() async {
     try {
       DocumentSnapshot<Map<String, dynamic>> documentSnapshot =
           await FirebaseFirestore.instance
               .collection('turfs') // Replace with your collection
-              .doc(documentId)
+              .doc(widget.documentId)
               .get();
 
       if (documentSnapshot.exists) {
@@ -76,9 +86,9 @@ class DetailsPage extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '$title:',
+          title,
           style: TextStyle(
-              fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black),
         ),
         SizedBox(height: 8),
         Wrap(
@@ -107,11 +117,186 @@ class DetailsPage extends StatelessWidget {
     );
   }
 
+  void _showBookingDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(50),
+          ),
+          backgroundColor: Colors.grey[800], // Dark background for the dialog
+          elevation: 10, // Adding elevation to the dialog
+          title: Text('Book Now',
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Select Date and Time:',
+                  style: TextStyle(fontSize: 18, color: Colors.white)),
+              SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () async {
+                  DateTime? pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2101),
+                  );
+                  setState(() {
+                    _selectedDate = pickedDate;
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                  elevation: 5,
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                ),
+                child: Text(
+                  _selectedDate != null
+                      ? DateFormat('yyyy-MM-dd').format(_selectedDate!)
+                      : 'Select Date',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ),
+              SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () async {
+                  TimeOfDay? pickedFromTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.now(),
+                  );
+                  setState(() {
+                    _selectedFromTime = pickedFromTime;
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  elevation: 5,
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                ),
+                child: Text(
+                  _selectedFromTime != null
+                      ? 'From: ${_selectedFromTime!.format(context)}'
+                      : 'Select From Time',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ),
+              SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () async {
+                  TimeOfDay? pickedToTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.now(),
+                  );
+                  setState(() {
+                    _selectedToTime = pickedToTime;
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 5,
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                ),
+                child: Text(
+                  _selectedToTime != null
+                      ? 'To: ${_selectedToTime!.format(context)}'
+                      : 'Select To Time',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ),
+              SizedBox(height: 16),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancel',
+                  style: TextStyle(color: Colors.red, fontSize: 16)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (_selectedDate == null ||
+                    _selectedFromTime == null ||
+                    _selectedToTime == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Please select date and time')),
+                  );
+                  return;
+                }
+
+                // Replace with actual user ID and name
+                String userId =
+                    ''; // Fetch user ID from authentication or state
+                String userName =
+                    'user_name'; // Fetch user name from authentication or state
+
+                // Create booking data
+                Map<String, dynamic> bookingData = {
+                  'userId': userId,
+                  'userName': userName,
+                  'bookingDate':
+                      DateFormat('yyyy-MM-dd').format(_selectedDate!),
+                  'bookingFromTime': _selectedFromTime!.format(context),
+                  'bookingToTime': _selectedToTime!.format(context),
+                  'turfId':
+                      widget.documentId, // Store the turf ID for reference
+                  'turfName': widget.documentname, // Store the turf name
+                };
+
+                try {
+                  await FirebaseFirestore.instance
+                      .collection('bookings') // Your Firestore collection
+                      .add(bookingData);
+
+                  // Show a success message
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Booking confirmed!')),
+                  );
+                  Navigator.of(context).pop(); // Close the dialog
+                } catch (e) {
+                  print('Error saving booking: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to confirm booking')),
+                  );
+                }
+              },
+              child: Text('Confirm', style: TextStyle(fontSize: 16)),
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: Colors.blueAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 5,
+                padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white, // Dark background for the entire page
       body: FutureBuilder<Map<String, dynamic>?>(
-        // Note the removal of the AppBar from here
         future: _fetchDetails(),
         builder: (BuildContext context,
             AsyncSnapshot<Map<String, dynamic>?> snapshot) {
@@ -120,7 +305,9 @@ class DetailsPage extends StatelessWidget {
           }
 
           if (snapshot.hasError) {
-            return Center(child: Text('Error fetching details'));
+            return Center(
+                child: Text('Error fetching details',
+                    style: TextStyle(color: Colors.white)));
           }
 
           if (snapshot.hasData && snapshot.data != null) {
@@ -136,21 +323,42 @@ class DetailsPage extends StatelessWidget {
                   expandedHeight: 250,
                   pinned: true,
                   flexibleSpace: FlexibleSpaceBar(
-                    title: Text(documentname),
-                    background: imageUrl.isNotEmpty
-                        ? Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                          )
-                        : Container(
-                            color: Colors.grey,
-                            child: Center(
-                              child: Text(
-                                'Image not available',
-                                style: TextStyle(color: Colors.white),
+                    title: Text(widget.documentname,
+                        style: TextStyle(color: Colors.white, fontSize: 20)),
+                    background: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        imageUrl.isNotEmpty
+                            ? Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                color: Colors.black
+                                    .withOpacity(0.5), // Gradient overlay
+                                colorBlendMode: BlendMode.darken,
+                              )
+                            : Container(
+                                color: Colors.grey[700],
+                                child: Center(
+                                  child: Text(
+                                    'Image not available',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
                               ),
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withOpacity(0.7)
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
                             ),
                           ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 SliverList(
@@ -162,17 +370,33 @@ class DetailsPage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _buildChipList(
-                              'Available Grounds',
-                              availableGrounds,
-                              Colors.blueAccent,
-                              Colors.white,
+                                'Available Grounds',
+                                availableGrounds,
+                                Colors.blueAccent,
+                                Colors.white),
+                            _buildChipList('Facilities', facilities,
+                                Colors.green, Colors.white),
+                            SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: _showBookingDialog,
+                                style: ElevatedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  backgroundColor: Colors.blueAccent,
+                                  padding: EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(50),
+                                  ),
+                                  elevation: 5,
+                                ),
+                                child: Text(
+                                  'Book Now',
+                                  style: TextStyle(fontSize: 18),
+                                ),
+                              ),
                             ),
-                            _buildChipList(
-                              'Facilities',
-                              facilities,
-                              Colors.green,
-                              Colors.black,
-                            ),
+                            SizedBox(height: 20),
                           ],
                         ),
                       ),
@@ -181,9 +405,11 @@ class DetailsPage extends StatelessWidget {
                 ),
               ],
             );
+          } else {
+            return Center(
+                child: Text('No details available',
+                    style: TextStyle(color: Colors.white)));
           }
-
-          return Center(child: Text('No data found for $documentId'));
         },
       ),
     );
