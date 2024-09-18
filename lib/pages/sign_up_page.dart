@@ -194,157 +194,169 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     Size size = MediaQuery.of(context).size;
     return Scaffold(
       backgroundColor: Color(0xff192028),
-      body: SingleChildScrollView(
-        // Wrap in SingleChildScrollView to avoid overflow
-        child: Stack(
-          children: [
-            Positioned(
-              top: size.height * (animation2.value + .58),
-              left: size.width * .21,
-              child: CustomPaint(
-                painter: MyPainter(50),
-              ),
+      body: Stack(
+        children: [
+          Positioned(
+            top: size.height * (animation2.value + .58),
+            left: size.width * .21,
+            child: CustomPaint(
+              painter: MyPainter(50),
             ),
-            Positioned(
-              top: size.height * .90,
-              left: size.width * .1,
-              child: CustomPaint(
-                painter: MyPainter(animation4.value - 30),
-              ),
+          ),
+          Positioned(
+            top: size.height * .98,
+            left: size.width * .1,
+            child: CustomPaint(
+              painter: MyPainter(animation4.value - 30),
             ),
-            Positioned(
-              top: size.height * .5,
-              left: size.width * (animation2.value + .8),
-              child: CustomPaint(
-                painter: MyPainter(30),
-              ),
+          ),
+          Positioned(
+            top: size.height * .5,
+            left: size.width * (animation2.value + .8),
+            child: CustomPaint(
+              painter: MyPainter(30),
             ),
-            Positioned(
-              top: size.height * .1,
-              left: size.width * .8,
-              child: CustomPaint(
-                painter: MyPainter(animation4.value),
-              ),
+          ),
+          Positioned(
+            top: size.height * .5,
+            left: size.width * (animation2.value + .8),
+            child: CustomPaint(
+              painter: MyPainter(30),
             ),
-            Padding(
-              padding: EdgeInsets.symmetric(
-                  horizontal: size.width * 0.05), // Adjust padding
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(height: size.height * 0.1), // Add some top padding
-                  Text(
-                    'Create an Account',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(.7),
-                      fontSize: size.width * 0.08, // Responsive font size
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                      wordSpacing: 0.9,
+          ),
+          Positioned(
+            top: size.height * .1,
+            left: size.width * .8,
+            child: CustomPaint(
+              painter: MyPainter(animation4.value),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: size.width * 0.05), // Adjust padding
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Create an Account',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(.7),
+                    fontSize: size.width * 0.08, // Responsive font size
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                    wordSpacing: 0.9,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // User Type Selection Container
+                Container(
+                  height: size.width / 8,
+                  width: size.width * 0.9, // Responsive width
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.5),
+                      width: 2,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Container(
-                    height: size.width / 8,
-                    width: size.width * 0.9,
-                    decoration: BoxDecoration(
-                      color: Colors.transparent,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _userType = 'User';
+                            });
+                          },
+                          child: Container(
+                            color: _userType == 'User'
+                                ? Colors.white.withOpacity(0.1)
+                                : Colors.transparent,
+                            alignment: Alignment.center,
+                            child: Text(
+                              'User',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _userType = 'Turf Owner';
+                            });
+                          },
+                          child: Container(
+                            color: _userType == 'Turf Owner'
+                                ? Colors.white.withOpacity(0.1)
+                                : Colors.transparent,
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Turf Owner',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+                component1(Icons.person_outline, 'Name...', false, false,
+                    _nameController),
+                const SizedBox(height: 10),
+                component1(Icons.email_outlined, 'Email...', false, true,
+                    _emailController),
+                const SizedBox(height: 10),
+                component1(Icons.lock_outline, 'Password...', true, false,
+                    _passwordController),
+                const SizedBox(height: 10),
+                component1(Icons.phone_outlined, 'Mobile Number...', false,
+                    false, _mobileController),
+                const SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: _loading ? null : _signup,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(size.width * 0.8, 50), // Responsive width
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.grey.withOpacity(0.3), // Text color
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.5),
-                        width: 2,
-                      ),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _userType = 'User';
-                              });
-                            },
-                            child: Container(
-                              color: _userType == 'User'
-                                  ? Colors.white.withOpacity(0.1)
-                                  : Colors.transparent,
-                              alignment: Alignment.center,
-                              child: Text(
-                                'User',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _userType = 'Turf Owner';
-                              });
-                            },
-                            child: Container(
-                              color: _userType == 'Turf Owner'
-                                  ? Colors.white.withOpacity(0.1)
-                                  : Colors.transparent,
-                              alignment: Alignment.center,
-                              child: Text(
-                                'Turf Owner',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    elevation: 0, // Remove shadow if desired
+                    padding: EdgeInsets.symmetric(
+                        vertical: 15), // Adjust padding as needed
                   ),
-                  const SizedBox(height: 10),
-                  component1(Icons.person_outline, 'Name...', false, false,
-                      _nameController),
-                  const SizedBox(height: 10),
-                  component1(Icons.email_outlined, 'Email...', false, true,
-                      _emailController),
-                  const SizedBox(height: 10),
-                  component1(Icons.lock_outline, 'Password...', true, false,
-                      _passwordController),
-                  const SizedBox(height: 10),
-                  component1(Icons.phone_outlined, 'Mobile Number...', false,
-                      false, _mobileController),
-                  const SizedBox(height: 10),
-                  ElevatedButton(
-                    onPressed: _loading ? null : _signup,
+                  child: _loading
+                      ? CircularProgressIndicator()
+                      : Text('Signup', style: TextStyle(color: Colors.white)),
+                ),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      minimumSize: Size(size.width * 0.8, 50),
+                      minimumSize:
+                          Size(size.width * 0.8, 50), // Responsive width
                       foregroundColor: Colors.white,
-                      backgroundColor: Colors.grey.withOpacity(0.3),
+                      backgroundColor:
+                          Colors.grey.withOpacity(0.3), // Text color
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(15),
                       ),
-                      elevation: 0,
-                      padding: EdgeInsets.symmetric(vertical: 15),
-                    ),
-                    child: _loading
-                        ? CircularProgressIndicator()
-                        : Text('Signup', style: TextStyle(color: Colors.white)),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: Size(size.width * 0.8, 50),
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.grey.withOpacity(0.3),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      elevation: 0,
-                      padding: EdgeInsets.symmetric(vertical: 15),
+                      elevation: 0, // Remove shadow if desired
+                      padding: EdgeInsets.symmetric(
+                          vertical: 15), // Adjust padding as needed
                     ),
                     onPressed: () {
                       Navigator.push(
@@ -355,13 +367,11 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                     child: Text('Already have an account? Login',
                         style: TextStyle(color: Colors.white)),
                   ),
-                  SizedBox(
-                      height: size.height * 0.05), // Add some bottom padding
-                ],
-              ),
+                )
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
