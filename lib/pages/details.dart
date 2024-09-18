@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Add this for date formatting
+import 'package:intl/intl.dart'; // Add this for date formattingF
 
 class DetailsPage extends StatefulWidget {
   final String documentId;
@@ -117,7 +118,38 @@ class _DetailsPageState extends State<DetailsPage> {
     );
   }
 
-  void _showBookingDialog() {
+  Future<String> _fetchUserName(String userId) async {
+    try {
+      DocumentSnapshot<Map<String, dynamic>> userDoc =
+          await FirebaseFirestore.instance
+              .collection('users') // Your Firestore collection for user details
+              .doc(userId)
+              .get();
+
+      if (userDoc.exists) {
+        return userDoc.data()?['name'] ?? 'Anonymous';
+      } else {
+        return 'Anonymous';
+      }
+    } catch (e) {
+      print('Error fetching user name: $e');
+      return 'Anonymous';
+    }
+  }
+
+  void _showBookingDialog() async {
+    String userName = 'Anonymous'; // Default value
+
+    // Fetch the current user from Firebase Authentication
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      userName = await _fetchUserName(currentUser.uid);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('User not logged in')),
+      );
+    }
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -239,23 +271,16 @@ class _DetailsPageState extends State<DetailsPage> {
                   return;
                 }
 
-                // Replace with actual user ID and name
-                String userId =
-                    ''; // Fetch user ID from authentication or state
-                String userName =
-                    'user_name'; // Fetch user name from authentication or state
-
                 // Create booking data
                 Map<String, dynamic> bookingData = {
-                  'userId': userId,
+                  'userId': currentUser?.uid ?? '',
                   'userName': userName,
                   'bookingDate':
                       DateFormat('yyyy-MM-dd').format(_selectedDate!),
                   'bookingFromTime': _selectedFromTime!.format(context),
                   'bookingToTime': _selectedToTime!.format(context),
-                  'turfId':
-                      widget.documentId, // Store the turf ID for reference
-                  'turfName': widget.documentname, // Store the turf name
+                  'turfId': widget.documentId,
+                  'turfName': widget.documentname,
                 };
 
                 try {
