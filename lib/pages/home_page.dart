@@ -23,12 +23,14 @@ class _HomePage1State extends State<HomePage1> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Position? _currentPosition;
   List<DocumentSnapshot> _turfs = []; // List to store fetched turfs
+  List<DocumentSnapshot> _pastBookings = []; // List to store past bookings
 
   @override
   void initState() {
     super.initState();
     _checkAndFetchLocation();
     _fetchTurfs();
+    _fetchPastBookings(); // Fetch past bookings on initialization
   }
 
   Future<void> _checkAndFetchLocation() async {
@@ -61,6 +63,22 @@ class _HomePage1State extends State<HomePage1> {
       });
     } catch (e) {
       print('Error fetching turfs: $e');
+    }
+  }
+
+  // Method to fetch past bookings from Firestore
+  Future<void> _fetchPastBookings() async {
+    try {
+      QuerySnapshot querySnapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('userId', isEqualTo: widget.user?.uid) // Filtering by user
+          .get();
+
+      setState(() {
+        _pastBookings = querySnapshot.docs;
+      });
+    } catch (e) {
+      print('Error fetching past bookings: $e');
     }
   }
 
@@ -184,8 +202,9 @@ class _HomePage1State extends State<HomePage1> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Turfs section
             Text(
-              'Quick Access',
+              'Turfs',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 22,
@@ -210,6 +229,18 @@ class _HomePage1State extends State<HomePage1> {
                 },
               ),
             ),
+            SizedBox(height: 20),
+            // Past Bookings section
+            Text(
+              'Past Bookings',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 10),
+            _buildPastBookingsList(), // Dynamic past bookings list
           ],
         ),
       ),
@@ -252,6 +283,40 @@ class _HomePage1State extends State<HomePage1> {
         borderRadius: BorderRadius.circular(10),
       ),
       onTap: onTap,
+    );
+  }
+
+  // Method to build the list of past bookings dynamically
+  Widget _buildPastBookingsList() {
+    if (_pastBookings.isEmpty) {
+      return Center(
+        child: Text(
+          'No past bookings found',
+          style: TextStyle(color: Colors.white, fontSize: 18),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: NeverScrollableScrollPhysics(),
+      itemCount: _pastBookings.length,
+      itemBuilder: (context, index) {
+        var booking = _pastBookings[index].data() as Map<String, dynamic>;
+        return Card(
+          color: Colors.grey[850],
+          child: ListTile(
+            title: Text(
+              booking['turfName'] ?? 'Unknown Turf',
+              style: TextStyle(color: Colors.white),
+            ),
+            subtitle: Text(
+              'Date: ${booking['bookingDate'] ?? 'N/A'}',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+        );
+      },
     );
   }
 }
