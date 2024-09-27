@@ -23,28 +23,11 @@ class HomePage2 extends StatefulWidget {
 class _HomePage2State extends State<HomePage2> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Position? _currentPosition;
-  String? turfOwnerTurfId;
 
   @override
   void initState() {
     super.initState();
-    _fetchTurfId();
     _checkAndFetchLocation();
-  }
-
-  Future<void> _fetchTurfId() async {
-    try {
-      // Fetch the turf owner's turfId from the Firestore database (Assuming it's stored in 'users' collection)
-      DocumentSnapshot userSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.user?.uid)
-          .get();
-      setState(() {
-        turfOwnerTurfId = userSnapshot['turfId'];
-      });
-    } catch (e) {
-      print('Error fetching turfId: $e');
-    }
   }
 
   Future<void> _checkAndFetchLocation() async {
@@ -70,13 +53,12 @@ class _HomePage2State extends State<HomePage2> {
   Stream<List<DocumentSnapshot>> _fetchPastBookings() {
     return FirebaseFirestore.instance
         .collection('bookings')
-        .where('turfId', isEqualTo: widget.user?.uid) // Fetch bookings for the logged-in turf owner
+        .where('turfId', isEqualTo: widget.user?.uid) // Match turfId with the user's turfId
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.isNotEmpty ? snapshot.docs : []; // Return an empty list if no bookings found
+      return snapshot.docs;
     });
   }
-
 
   Widget _buildPastBookingsWidget() {
     return StreamBuilder<List<DocumentSnapshot>>(
@@ -89,7 +71,7 @@ class _HomePage2State extends State<HomePage2> {
           return Center(child: Text('Error fetching past bookings'));
         }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(child: Text('No previous bookings.'));
+          return Center(child: Text('No previous bookings found')); // Display no bookings found
         }
 
         var pastBookings = snapshot.data!;
@@ -103,11 +85,11 @@ class _HomePage2State extends State<HomePage2> {
               color: Colors.grey[850],
               child: ListTile(
                 title: Text(
-                  booking['userName'] ?? 'Unknown User', // Displaying userName of the booking
+                  booking['turfName'] ?? 'Unknown Turf',
                   style: TextStyle(color: Colors.white),
                 ),
                 subtitle: Text(
-                  'Date: ${booking['bookingDate'] ?? 'N/A'}\nFrom: ${booking['bookingFromTime'] ?? 'N/A'}',
+                  'Date: ${booking['bookingDate'] ?? 'N/A'}',
                   style: TextStyle(color: Colors.white70),
                 ),
               ),
@@ -117,7 +99,6 @@ class _HomePage2State extends State<HomePage2> {
       },
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -370,75 +351,60 @@ class FirebaseImageCard extends StatefulWidget {
 }
 
 class _FirebaseImageCardState extends State<FirebaseImageCard> {
-  String? imageUrl;
+  late Future<String> _imageUrl;
 
   @override
   void initState() {
     super.initState();
-    _loadImage();
+    _imageUrl = _loadImage();
   }
 
-  Future<void> _loadImage() async {
-    try {
-      fs.Reference ref = fs.FirebaseStorage.instance.ref().child(widget.imagePath);
-      String url = await ref.getDownloadURL();
-      setState(() {
-        imageUrl = url;
-      });
-    } catch (e) {
-      print('Error loading image: $e');
-    }
+  Future<String> _loadImage() async {
+    String url = await fs.FirebaseStorage.instance.ref(widget.imagePath).getDownloadURL();
+    return url;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 200,
-      margin: EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: imageUrl != null
-                ? ClipRRect(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
-              child: Image.network(
-                imageUrl!,
-                fit: BoxFit.cover,
-              ),
-            )
-                : Center(child: CircularProgressIndicator()),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
+    return FutureBuilder<String>(
+      future: _imageUrl,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            width: 200,
+            margin: EdgeInsets.only(right: 16),
+            color: Colors.grey,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Container(
+            width: 200,
+            margin: EdgeInsets.only(right: 16),
+            color: Colors.grey,
+            child: Center(child: Text('Error loading image')),
+          );
+        }
+        return Container(
+          width: 200,
+          margin: EdgeInsets.only(right: 16),
+          child: Card(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.title,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Image.network(snapshot.data!),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(widget.title, style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
-                SizedBox(height: 5),
-                Text(
-                  widget.description,
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(widget.description),
                 ),
               ],
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

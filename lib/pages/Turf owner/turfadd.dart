@@ -1,6 +1,6 @@
 import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Authentication
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,17 +9,16 @@ class AddTurfPage extends StatefulWidget {
   @override
   _AddTurfPageState createState() => _AddTurfPageState();
 }
-
 class _AddTurfPageState extends State<AddTurfPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _priceController =
-      TextEditingController(); // Price controller
+  final TextEditingController _priceController = TextEditingController(); // Price controller
   File? _imageFile;
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _firebaseStorage = FirebaseStorage.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance; // Initialize FirebaseAuth
 
   // Facilities list
   final List<String> _facilities = [
@@ -131,6 +130,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
     try {
       String imageUrl = await _uploadImage(_imageFile!);
+      String userId = _auth.currentUser!.uid; // Get the current user UID
       await _firestore.collection('turfs').add({
         'name': _nameController.text,
         'description': _descriptionController.text,
@@ -138,6 +138,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
         'imageUrl': imageUrl,
         'facilities': _selectedFacilities,
         'availableGrounds': _selectedAvailableGrounds,
+        'ownerId': userId, // Add ownerId to Firestore
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Turf added successfully!')),
@@ -262,32 +263,17 @@ class _AddTurfPageState extends State<AddTurfPage> {
         ),
         child: _imageFile == null
             ? Center(
-                child: Text(
-                  'Pick an Image',
-                  style: TextStyle(color: Colors.black38),
-                ),
-              )
+          child: Text(
+            'Pick an Image',
+            style: TextStyle(color: Colors.grey[500]),
+          ),
+        )
             : ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  _imageFile!,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                ),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildTopicTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: Colors.black,
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(
+            _imageFile!,
+            fit: BoxFit.cover,
+          ),
         ),
       ),
     );
@@ -295,41 +281,20 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
   Widget _buildFacilitiesChips() {
     return Wrap(
-      spacing: 8.0,
+      spacing: 8,
       children: _facilities.map((facility) {
-        final isSelected = _selectedFacilities.contains(facility);
         return ChoiceChip(
-          avatar: Icon(
-            _getIconForItem(facility),
-            color: isSelected ? Colors.white : Colors.black54,
-            size: 20,
-          ),
-          label: Text(
-            facility,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black54,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          selected: isSelected,
-          onSelected: (selected) {
+          label: Text(facility),
+          selected: _selectedFacilities.contains(facility),
+          onSelected: (isSelected) {
             setState(() {
-              if (selected) {
+              if (isSelected) {
                 _selectedFacilities.add(facility);
               } else {
                 _selectedFacilities.remove(facility);
               }
             });
           },
-          selectedColor: Colors.green,
-          backgroundColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(50),
-            side: isSelected
-                ? BorderSide.none // Remove border when selected
-                : BorderSide(
-                    color: Colors.black26, width: 1), // Border for unselected
-          ),
         );
       }).toList(),
     );
@@ -337,63 +302,41 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
   Widget _buildAvailableGroundsChips() {
     return Wrap(
-      spacing: 8.0,
+      spacing: 8,
       children: _availableGrounds.map((ground) {
-        final isSelected = _selectedAvailableGrounds.contains(ground);
         return ChoiceChip(
-          avatar: Icon(
-            _getIconForItem(ground),
-            color: isSelected ? Colors.white : Colors.black54,
-            size: 20,
-          ),
-          label: Text(
-            ground,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black54,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          selected: isSelected,
-          onSelected: (selected) {
+          label: Text(ground),
+          selected: _selectedAvailableGrounds.contains(ground),
+          onSelected: (isSelected) {
             setState(() {
-              if (selected) {
+              if (isSelected) {
                 _selectedAvailableGrounds.add(ground);
               } else {
                 _selectedAvailableGrounds.remove(ground);
               }
             });
           },
-          selectedColor: Colors.green,
-          backgroundColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(50),
-            side: isSelected
-                ? BorderSide.none // Remove border when selected
-                : BorderSide(
-                    color: Colors.black26, width: 1), // Border for unselected
-          ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildTopicTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Text(
+        title,
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
     );
   }
 
   Widget _buildSubmitButton() {
     return ElevatedButton(
       onPressed: _submitTurf,
-      child: Text(
-        'Submit',
-        style: TextStyle(
-          fontSize: 18, // Font size of the text
-          fontWeight: FontWeight.bold, // Font weight of the text
-          color: Colors.white, // Text color
-        ),
-      ),
+      child: Text('Submit'),
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.redAccent, // Button background color
-        padding: EdgeInsets.symmetric(vertical: 10), // Padding for the button
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(50), // Border radius
-        ),
+        padding: EdgeInsets.symmetric(vertical: 16),
       ),
     );
   }
