@@ -24,13 +24,31 @@ class HomePage2 extends StatefulWidget {
 class _HomePage1State extends State<HomePage2> {
   final GlobalKey<ScaffoldState> _scaffoldKey =
       GlobalKey<ScaffoldState>(); // Added GlobalKey
-
+  List<Map<String, dynamic>> pastBookings = [];
   Position? _currentPosition;
 
   @override
   void initState() {
     super.initState();
     _checkAndFetchLocation(); // Check permissions and fetch location
+    _checkAndFetchLocation();
+    _fetchPastBookings(); // Fetch past bookings
+  }
+  Future<void> _fetchPastBookings() async {
+    if (widget.user != null) {
+      try {
+        QuerySnapshot snapshot = await FirebaseFirestore.instance
+            .collection('bookings')
+            .where('turfOwnerId', isEqualTo: widget.user!.uid) // Assuming turfOwnerId field holds the owner's userId
+            .get();
+
+        setState(() {
+          pastBookings = snapshot.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+        });
+      } catch (e) {
+        print('Error fetching past bookings: $e');
+      }
+    }
   }
 
   Future<void> _fetchUserType() async {
@@ -68,6 +86,45 @@ class _HomePage1State extends State<HomePage2> {
       print('Error fetching location: $e');
     }
   }
+  Widget _buildPastBookingsWidget() {
+    if (pastBookings.isEmpty) {
+      return Container(
+        height: 120,
+        child: Card(
+          color: Colors.grey[800],
+          child: Center(
+            child: Text(
+              'No past bookings available',
+              style: TextStyle(color: Colors.white, fontSize: 18),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: NeverScrollableScrollPhysics(),
+      itemCount: pastBookings.length,
+      itemBuilder: (context, index) {
+        final booking = pastBookings[index];
+        return Card(
+          color: Colors.grey[800],
+          margin: EdgeInsets.symmetric(vertical: 5),
+          child: ListTile(
+            title: Text(booking['userName'], style: TextStyle(color: Colors.white)),
+            subtitle: Text(
+              'Booking Date: ${booking['bookingDate']}\n'
+                  'From: ${booking['bookingFromTime']}\n'
+                  'Turf ID: ${booking['turfId']}\n'
+                  'Turf Name: ${booking['turfName']}',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   Future<void> _logout() async {
     try {
@@ -84,7 +141,7 @@ class _HomePage1State extends State<HomePage2> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey, // Use the GlobalKey
+      key: _scaffoldKey,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -95,8 +152,7 @@ class _HomePage1State extends State<HomePage2> {
               IconButton(
                 icon: Icon(Icons.menu, color: Colors.white),
                 onPressed: () {
-                  _scaffoldKey.currentState
-                      ?.openDrawer(); // Open drawer using the GlobalKey
+                  _scaffoldKey.currentState?.openDrawer();
                 },
               ),
               _buildLocationWidget(),
@@ -206,20 +262,24 @@ class _HomePage1State extends State<HomePage2> {
                 scrollDirection: Axis.horizontal,
                 children: [
                   FirebaseImageCard(
-                      imagePath: 'Turf images test/turf 2.jpeg',
-                      title: 'Turf 1',
-                      description: 'Description for Turf 1'),
+                    imagePath: 'Turf images test/turf 2.jpeg',
+                    title: 'Turf 1',
+                    description: 'Description for Turf 1',
+                  ),
                   FirebaseImageCard(
-                      imagePath: 'Turf images test/turf 3.jpeg',
-                      title: 'Turf 2',
-                      description: 'Description for Turf 2'),
+                    imagePath: 'Turf images test/turf 3.jpeg',
+                    title: 'Turf 2',
+                    description: 'Description for Turf 2',
+                  ),
                   FirebaseImageCard(
-                      imagePath: 'Turf images test/turf 4.jpeg',
-                      title: 'Turf 3',
-                      description: 'Description for Turf 3'),
+                    imagePath: 'Turf images test/turf 4.jpeg',
+                    title: 'Turf 3',
+                    description: 'Description for Turf 3',
+                  ),
                 ],
               ),
             ),
+            SizedBox(height: 20), // Add some space between sections
             Container(
               height: 120,
               child: Card(
@@ -255,6 +315,16 @@ class _HomePage1State extends State<HomePage2> {
                 ),
               ),
             ),
+            SizedBox(height: 20), // Space before Past Bookings title
+            Text(
+              'Past Bookings',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            _buildPastBookingsWidget(),
           ],
         ),
       ),
