@@ -2,15 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart' as fs;
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart'; // Import geolocator package
+import 'package:geolocator/geolocator.dart';
 import 'package:odp/pages/Turf%20owner/turfadd.dart';
 import 'package:permission_handler/permission_handler.dart';
-
 import '../bookingpage.dart';
 import '../home_page.dart';
 import '../login.dart';
 import '../profile.dart';
-import '../settings.dart'; // Import permission_handler package
+import '../settings.dart';
 
 class HomePage2 extends StatefulWidget {
   final User? user;
@@ -18,51 +17,33 @@ class HomePage2 extends StatefulWidget {
   const HomePage2({Key? key, this.user}) : super(key: key);
 
   @override
-  _HomePage1State createState() => _HomePage1State();
+  _HomePage2State createState() => _HomePage2State();
 }
 
-class _HomePage1State extends State<HomePage2> {
-  final GlobalKey<ScaffoldState> _scaffoldKey =
-      GlobalKey<ScaffoldState>(); // Added GlobalKey
-  List<Map<String, dynamic>> pastBookings = [];
+class _HomePage2State extends State<HomePage2> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Position? _currentPosition;
+  String? turfOwnerTurfId;
 
   @override
   void initState() {
     super.initState();
-    _checkAndFetchLocation(); // Check permissions and fetch location
+    _fetchTurfId();
     _checkAndFetchLocation();
-    _fetchPastBookings(); // Fetch past bookings
-  }
-  Future<void> _fetchPastBookings() async {
-    if (widget.user != null) {
-      try {
-        QuerySnapshot snapshot = await FirebaseFirestore.instance
-            .collection('bookings')
-            .where('turfOwnerId', isEqualTo: widget.user!.uid) // Assuming turfOwnerId field holds the owner's userId
-            .get();
-
-        setState(() {
-          pastBookings = snapshot.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
-        });
-      } catch (e) {
-        print('Error fetching past bookings: $e');
-      }
-    }
   }
 
-  Future<void> _fetchUserType() async {
-    if (widget.user != null) {
-      try {
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.user!.uid)
-            .get();
-
-        setState(() {});
-      } catch (e) {
-        print('Error fetching user type: $e');
-      }
+  Future<void> _fetchTurfId() async {
+    try {
+      // Fetch the turf owner's turfId from the Firestore database (Assuming it's stored in 'users' collection)
+      DocumentSnapshot userSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.user?.uid)
+          .get();
+      setState(() {
+        turfOwnerTurfId = userSnapshot['turfId'];
+      });
+    } catch (e) {
+      print('Error fetching turfId: $e');
     }
   }
 
@@ -70,7 +51,6 @@ class _HomePage1State extends State<HomePage2> {
     if (await Permission.location.request().isGranted) {
       _fetchCurrentLocation();
     } else {
-      // Handle the case where permission is not granted
       print('Location permission not granted');
     }
   }
@@ -86,57 +66,58 @@ class _HomePage1State extends State<HomePage2> {
       print('Error fetching location: $e');
     }
   }
-  Widget _buildPastBookingsWidget() {
-    if (pastBookings.isEmpty) {
-      return Container(
-        height: 120,
-        child: Card(
-          color: Colors.grey[800],
-          child: Center(
-            child: Text(
-              'No past bookings available',
-              style: TextStyle(color: Colors.white, fontSize: 18),
-            ),
-          ),
-        ),
-      );
-    }
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: NeverScrollableScrollPhysics(),
-      itemCount: pastBookings.length,
-      itemBuilder: (context, index) {
-        final booking = pastBookings[index];
-        return Card(
-          color: Colors.grey[800],
-          margin: EdgeInsets.symmetric(vertical: 5),
-          child: ListTile(
-            title: Text(booking['userName'], style: TextStyle(color: Colors.white)),
-            subtitle: Text(
-              'Booking Date: ${booking['bookingDate']}\n'
-                  'From: ${booking['bookingFromTime']}\n'
-                  'Turf ID: ${booking['turfId']}\n'
-                  'Turf Name: ${booking['turfName']}',
-              style: TextStyle(color: Colors.white70),
-            ),
-          ),
+  Stream<List<DocumentSnapshot>> _fetchPastBookings() {
+    return FirebaseFirestore.instance
+        .collection('bookings')
+        .where('turfId', isEqualTo: widget.user?.uid) // Fetch bookings for the logged-in turf owner
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.isNotEmpty ? snapshot.docs : []; // Return an empty list if no bookings found
+    });
+  }
+
+
+  Widget _buildPastBookingsWidget() {
+    return StreamBuilder<List<DocumentSnapshot>>(
+      stream: _fetchPastBookings(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error fetching past bookings'));
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Center(child: Text('No previous bookings.'));
+        }
+
+        var pastBookings = snapshot.data!;
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          itemCount: pastBookings.length,
+          itemBuilder: (context, index) {
+            var booking = pastBookings[index].data() as Map<String, dynamic>;
+            return Card(
+              color: Colors.grey[850],
+              child: ListTile(
+                title: Text(
+                  booking['userName'] ?? 'Unknown User', // Displaying userName of the booking
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: Text(
+                  'Date: ${booking['bookingDate'] ?? 'N/A'}\nFrom: ${booking['bookingFromTime'] ?? 'N/A'}',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  Future<void> _logout() async {
-    try {
-      await FirebaseAuth.instance.signOut();
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => LoginApp()),
-      );
-    } catch (e) {
-      print('Error logging out: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -161,85 +142,7 @@ class _HomePage1State extends State<HomePage2> {
         ),
         automaticallyImplyLeading: false,
       ),
-      drawer: Drawer(
-        backgroundColor: Colors.black,
-        child: Column(
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.blueAccent, Colors.purpleAccent],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundImage: AssetImage('assets/profile_picture.png'),
-                  ),
-                  SizedBox(width: 20),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ProfilePage(user: widget.user),
-                        ),
-                      );
-                    },
-                    child: Text(
-                      widget.user?.displayName ?? 'John Doe',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  _createDrawerItem(
-                    icon: Icons.home,
-                    text: 'Home',
-                    onTap: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => HomePage1(user: widget.user),
-                        ),
-                      );
-                    },
-                  ),
-                  _createDrawerItem(
-                    icon: Icons.settings,
-                    text: 'Settings',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => SettingsPage()),
-                      );
-                    },
-                  ),
-                  _createDrawerItem(
-                    icon: Icons.logout,
-                    text: 'Logout',
-                    onTap: () {
-                      _logout(); // Implement logout functionality
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+      drawer: _buildDrawer(),
       backgroundColor: Color(0xff192028),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -255,47 +158,8 @@ class _HomePage1State extends State<HomePage2> {
               ),
             ),
             SizedBox(height: 10),
-            // Display content based on user type
-            Container(
-              height: 250, // Adjust height as needed
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  FirebaseImageCard(
-                    imagePath: 'Turf images test/turf 2.jpeg',
-                    title: 'Turf 1',
-                    description: 'Description for Turf 1',
-                  ),
-                  FirebaseImageCard(
-                    imagePath: 'Turf images test/turf 3.jpeg',
-                    title: 'Turf 2',
-                    description: 'Description for Turf 2',
-                  ),
-                  FirebaseImageCard(
-                    imagePath: 'Turf images test/turf 4.jpeg',
-                    title: 'Turf 3',
-                    description: 'Description for Turf 3',
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 20), // Add some space between sections
-            Container(
-              height: 120,
-              child: Card(
-                color: Colors.grey[800],
-                child: Center(
-                  child: Text(
-                    'No content available',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(height: 20), // Add some space before the button
+            _buildImageCards(),
+            SizedBox(height: 20),
             Center(
               child: ElevatedButton(
                 onPressed: () {
@@ -307,7 +171,7 @@ class _HomePage1State extends State<HomePage2> {
                 child: Text('Add Turf'),
                 style: ElevatedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  backgroundColor: Colors.blueAccent, // Text color
+                  backgroundColor: Colors.blueAccent,
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -315,7 +179,7 @@ class _HomePage1State extends State<HomePage2> {
                 ),
               ),
             ),
-            SizedBox(height: 20), // Space before Past Bookings title
+            SizedBox(height: 20),
             Text(
               'Past Bookings',
               style: TextStyle(
@@ -343,12 +207,104 @@ class _HomePage1State extends State<HomePage2> {
 
   Widget _buildLocationWidget() {
     if (_currentPosition == null) {
-      return CircularProgressIndicator(); // or any placeholder
+      return CircularProgressIndicator();
     }
     return Text(
       '${_currentPosition!.latitude.toStringAsFixed(2)}, ${_currentPosition!.longitude.toStringAsFixed(2)}',
       style: TextStyle(color: Colors.white, fontSize: 16),
     );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      backgroundColor: Colors.black,
+      child: Column(
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blueAccent, Colors.purpleAccent],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 40,
+                  backgroundImage: AssetImage('assets/profile_picture.png'),
+                ),
+                SizedBox(width: 20),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ProfilePage(user: widget.user),
+                      ),
+                    );
+                  },
+                  child: Text(
+                    widget.user?.displayName ?? 'John Doe',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _createDrawerItem(
+                  icon: Icons.home,
+                  text: 'Home',
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => HomePage1(user: widget.user),
+                      ),
+                    );
+                  },
+                ),
+                _createDrawerItem(
+                  icon: Icons.settings,
+                  text: 'Settings',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => SettingsPage()),
+                    );
+                  },
+                ),
+                _createDrawerItem(
+                  icon: Icons.logout,
+                  text: 'Logout',
+                  onTap: _logout,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _logout() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginApp()),
+      );
+    } catch (e) {
+      print('Error logging out: $e');
+    }
   }
 
   Widget _createDrawerItem({
@@ -367,6 +323,32 @@ class _HomePage1State extends State<HomePage2> {
         borderRadius: BorderRadius.circular(10),
       ),
       onTap: onTap,
+    );
+  }
+
+  Widget _buildImageCards() {
+    return Container(
+      height: 250,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          FirebaseImageCard(
+            imagePath: 'Turf images test/turf 2.jpeg',
+            title: 'Turf 1',
+            description: 'Description for Turf 1',
+          ),
+          FirebaseImageCard(
+            imagePath: 'Turf images test/turf 3.jpeg',
+            title: 'Turf 2',
+            description: 'Description for Turf 2',
+          ),
+          FirebaseImageCard(
+            imagePath: 'Turf images test/turf 4.jpeg',
+            title: 'Turf 3',
+            description: 'Description for Turf 3',
+          ),
+        ],
+      ),
     );
   }
 }
@@ -388,9 +370,7 @@ class FirebaseImageCard extends StatefulWidget {
 }
 
 class _FirebaseImageCardState extends State<FirebaseImageCard> {
-  fs.FirebaseStorage storage = fs.FirebaseStorage.instance;
   String? imageUrl;
-  bool isLoading = true;
 
   @override
   void initState() {
@@ -400,104 +380,64 @@ class _FirebaseImageCardState extends State<FirebaseImageCard> {
 
   Future<void> _loadImage() async {
     try {
-      // Fetch the download URL from Firebase Storage
-      String downloadURL = await storage.ref(widget.imagePath).getDownloadURL();
-
+      fs.Reference ref = fs.FirebaseStorage.instance.ref().child(widget.imagePath);
+      String url = await ref.getDownloadURL();
       setState(() {
-        imageUrl = downloadURL;
-        isLoading = false;
+        imageUrl = url;
       });
     } catch (e) {
       print('Error loading image: $e');
-      setState(() {
-        isLoading = false;
-      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: MediaQuery.of(context).size.width * 0.6, // Adjust width as needed
-      height: MediaQuery.of(context).size.height * 0.75, // 75% of screen height
-      margin: EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
-      child: Card(
-        elevation: 0, // Set elevation to 0 to avoid shadow
-        color: Colors.transparent, // Transparent background
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Stack(
-          children: [
-            // Background image
-            ClipRRect(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
-              child: isLoading
-                  ? Center(child: CircularProgressIndicator())
-                  : imageUrl != null
-                      ? Image.network(
-                          imageUrl!,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                        )
-                      : Center(
-                          child: Text(
-                            'Failed to load image',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ),
-            ),
-            // Overlay for text readability
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                color: Colors.black54, // Semi-transparent overlay
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white, // Ensure title is visible
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      widget.description,
-                      style: TextStyle(
-                        color:
-                            Colors.white, // Set description text color to white
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => AddTurfPage()));
-                      },
-                      child: Text('Book Now'),
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor:
-                            Colors.blueAccent, // Text color on button
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+      width: 200,
+      margin: EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: imageUrl != null
+                ? ClipRRect(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
+              child: Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
               ),
+            )
+                : Center(child: CircularProgressIndicator()),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.title,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  widget.description,
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
