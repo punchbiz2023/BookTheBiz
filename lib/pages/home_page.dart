@@ -125,7 +125,7 @@ class _HomePage1State extends State<HomePage1> {
                   ),
                 ),
               ),
-              // _buildLocationWidget(),
+              _buildLocationWidget(),
             ],
           ),
         ),
@@ -350,12 +350,12 @@ class _HomePage1State extends State<HomePage1> {
     );
   }
 
-//   Widget _buildLocationWidget() {
-//     return Text(
-//       _currentPosition != null
-//           ? 'Lat: ${_currentPosition!.latitude}, Lng: ${_currentPosition!.longitude}'
-//           : 'Fetching location...',
-//       style: TextStyle(color: Colors.white),
-//     );
-//   }
+  Widget _buildLocationWidget() {
+    return Text(
+      _currentPosition != null
+          ? 'Lat: ${_currentPosition!.latitude}, Lng: ${_currentPosition!.longitude}'
+          : 'Fetching location...',
+      style: TextStyle(color: Colors.white),
+    );
+  }
 }
