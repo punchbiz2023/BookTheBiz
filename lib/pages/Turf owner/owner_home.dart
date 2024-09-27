@@ -50,6 +50,16 @@ class _HomePage2State extends State<HomePage2> {
     }
   }
 
+  Stream<List<DocumentSnapshot>> _fetchImageCards() {
+    return FirebaseFirestore.instance
+        .collection('turfs')
+        .where('ownerId', isEqualTo: widget.user?.uid) // Fetch turfs owned by the current user
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs;
+    });
+  }
+
   Stream<List<DocumentSnapshot>> _fetchPastBookings() {
     return FirebaseFirestore.instance
         .collection('bookings')
@@ -139,7 +149,23 @@ class _HomePage2State extends State<HomePage2> {
               ),
             ),
             SizedBox(height: 10),
-            _buildImageCards(),
+            StreamBuilder<List<DocumentSnapshot>>(
+              stream: _fetchImageCards(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error fetching turfs'));
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Center(child: Text('No turfs found')); // Display if no turfs are found
+                }
+
+                var turfs = snapshot.data!;
+                return _buildImageCards(turfs);
+              },
+            ),
             SizedBox(height: 20),
             Center(
               child: ElevatedButton(
@@ -307,31 +333,26 @@ class _HomePage2State extends State<HomePage2> {
     );
   }
 
-  Widget _buildImageCards() {
+  Widget _buildImageCards(List<DocumentSnapshot> turfs) {
+    // Find the turf that matches the current user's UID
+    var userUid = widget.user?.uid;
+    var turf = turfs.firstWhere(
+          (turfSnapshot) => turfSnapshot.data()['ownerId'] == userUid,
+       // Return null if no matching turf is found
+    );
+    // Display the matched turf
     return Container(
       height: 250,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          FirebaseImageCard(
-            imagePath: 'Turf images test/turf 2.jpeg',
-            title: 'Turf 1',
-            description: 'Description for Turf 1',
-          ),
-          FirebaseImageCard(
-            imagePath: 'Turf images test/turf 3.jpeg',
-            title: 'Turf 2',
-            description: 'Description for Turf 2',
-          ),
-          FirebaseImageCard(
-            imagePath: 'Turf images test/turf 4.jpeg',
-            title: 'Turf 3',
-            description: 'Description for Turf 3',
-          ),
-        ],
+      child: FirebaseImageCard(
+        imagePath: turf['imageUrl'],
+        title: turf['name'],
+        description: turf['description'],
       ),
     );
   }
+
+
+
 }
 
 class FirebaseImageCard extends StatefulWidget {
@@ -351,60 +372,52 @@ class FirebaseImageCard extends StatefulWidget {
 }
 
 class _FirebaseImageCardState extends State<FirebaseImageCard> {
-  late Future<String> _imageUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _imageUrl = _loadImage();
-  }
-
-  Future<String> _loadImage() async {
-    String url = await fs.FirebaseStorage.instance.ref(widget.imagePath).getDownloadURL();
-    return url;
-  }
-
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _imageUrl,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Container(
-            width: 200,
-            margin: EdgeInsets.only(right: 16),
-            color: Colors.grey,
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasError) {
-          return Container(
-            width: 200,
-            margin: EdgeInsets.only(right: 16),
-            color: Colors.grey,
-            child: Center(child: Text('Error loading image')),
-          );
-        }
-        return Container(
-          width: 200,
-          margin: EdgeInsets.only(right: 16),
-          child: Card(
+    return Container(
+      width: 200,
+      margin: EdgeInsets.only(right: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+            ),
+            child: Image.network(
+              widget.imagePath,
+              height: 150,
+              width: 200,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Image.network(snapshot.data!),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(widget.title, style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  widget.title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(widget.description),
+                SizedBox(height: 4),
+                Text(
+                  widget.description,
+                  style: TextStyle(fontSize: 14),
                 ),
               ],
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
