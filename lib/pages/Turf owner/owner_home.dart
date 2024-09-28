@@ -1,20 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart' as fs;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:odp/pages/Turf%20owner/turfadd.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import '../bookingpage.dart';
 import '../home_page.dart';
 import '../login.dart';
 import '../profile.dart';
 import '../settings.dart';
+import 'turfadd.dart';
 
 class HomePage2 extends StatefulWidget {
-  final User? user;
+  User? user;
 
-  const HomePage2({Key? key, this.user}) : super(key: key);
+  HomePage2({Key? key, this.user}) : super(key: key);
 
   @override
   _HomePage2State createState() => _HomePage2State();
@@ -28,8 +28,27 @@ class _HomePage2State extends State<HomePage2> {
   void initState() {
     super.initState();
     _checkAndFetchLocation();
+    _checkCurrentUser();
   }
 
+  // Fetch the current logged-in user
+  Future<void> _checkCurrentUser() async {
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      print('User is logged in: ${currentUser.uid}');
+      setState(() {
+        widget.user = currentUser;
+      });
+    } else {
+      print('No user logged in');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginApp()), // Redirect to login if no user found
+      );
+    }
+  }
+
+  // Check and fetch location if permission is granted
   Future<void> _checkAndFetchLocation() async {
     if (await Permission.location.request().isGranted) {
       _fetchCurrentLocation();
@@ -40,8 +59,7 @@ class _HomePage2State extends State<HomePage2> {
 
   Future<void> _fetchCurrentLocation() async {
     try {
-      Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       setState(() {
         _currentPosition = position;
       });
@@ -50,64 +68,17 @@ class _HomePage2State extends State<HomePage2> {
     }
   }
 
-  Stream<List<DocumentSnapshot>> _fetchImageCards() {
-    return FirebaseFirestore.instance
-        .collection('turfs')
-        .where('ownerId', isEqualTo: widget.user?.uid) // Fetch turfs owned by the current user
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs;
-    });
-  }
-
-  Stream<List<DocumentSnapshot>> _fetchPastBookings() {
-    return FirebaseFirestore.instance
-        .collection('bookings')
-        .where('turfId', isEqualTo: widget.user?.uid) // Match turfId with the user's turfId
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs;
-    });
-  }
-
-  Widget _buildPastBookingsWidget() {
-    return StreamBuilder<List<DocumentSnapshot>>(
-      stream: _fetchPastBookings(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Error fetching past bookings'));
-        }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(child: Text('No previous bookings found')); // Display no bookings found
-        }
-
-        var pastBookings = snapshot.data!;
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          itemCount: pastBookings.length,
-          itemBuilder: (context, index) {
-            var booking = pastBookings[index].data() as Map<String, dynamic>;
-            return Card(
-              color: Colors.grey[850],
-              child: ListTile(
-                title: Text(
-                  booking['turfName'] ?? 'Unknown Turf',
-                  style: TextStyle(color: Colors.white),
-                ),
-                subtitle: Text(
-                  'Date: ${booking['bookingDate'] ?? 'N/A'}',
-                  style: TextStyle(color: Colors.white70),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
+  // Logout function
+  Future<void> _logout() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginApp()),
+      );
+    } catch (e) {
+      print('Error logging out: $e');
+    }
   }
 
   @override
@@ -140,33 +111,7 @@ class _HomePage2State extends State<HomePage2> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Quick Access',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 10),
-            StreamBuilder<List<DocumentSnapshot>>(
-              stream: _fetchImageCards(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error fetching turfs'));
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(child: Text('No turfs found')); // Display if no turfs are found
-                }
-
-                var turfs = snapshot.data!;
-                return _buildImageCards(turfs);
-              },
-            ),
-            SizedBox(height: 20),
+            // Add Turf button
             Center(
               child: ElevatedButton(
                 onPressed: () {
@@ -179,23 +124,54 @@ class _HomePage2State extends State<HomePage2> {
                 style: ElevatedButton.styleFrom(
                   foregroundColor: Colors.white,
                   backgroundColor: Colors.blueAccent,
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: EdgeInsets.symmetric(horizontal: 140, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
             ),
-            SizedBox(height: 20),
-            Text(
-              'Past Bookings',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
+            SizedBox(height: 20), // Space after button
+
+            // Listed Turfs heading
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: Text(
+                'Listed Turfs',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-            _buildPastBookingsWidget(),
+
+            // Turf Listing
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('turfs')
+                  .where('ownerId', isEqualTo: widget.user?.uid) // Filter by ownerId
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(child: Text('No turfs available', style: TextStyle(color: Colors.white)));
+                }
+
+                final turfDocs = snapshot.data!.docs;
+                return ListView.builder(
+                  physics: NeverScrollableScrollPhysics(),
+                  shrinkWrap: true,
+                  itemCount: turfDocs.length,
+                  itemBuilder: (context, index) {
+                    final turfData = turfDocs[index].data() as Map<String, dynamic>;
+                    return _buildTurfCard(turfData);
+                  },
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -212,9 +188,10 @@ class _HomePage2State extends State<HomePage2> {
     );
   }
 
+  // Build location widget
   Widget _buildLocationWidget() {
     if (_currentPosition == null) {
-      return CircularProgressIndicator();
+      return CircularProgressIndicator(); // Placeholder
     }
     return Text(
       '${_currentPosition!.latitude.toStringAsFixed(2)}, ${_currentPosition!.longitude.toStringAsFixed(2)}',
@@ -222,6 +199,7 @@ class _HomePage2State extends State<HomePage2> {
     );
   }
 
+  // Build drawer with navigation options
   Widget _buildDrawer() {
     return Drawer(
       backgroundColor: Colors.black,
@@ -292,7 +270,9 @@ class _HomePage2State extends State<HomePage2> {
                 _createDrawerItem(
                   icon: Icons.logout,
                   text: 'Logout',
-                  onTap: _logout,
+                  onTap: () {
+                    _logout();
+                  },
                 ),
               ],
             ),
@@ -302,18 +282,40 @@ class _HomePage2State extends State<HomePage2> {
     );
   }
 
-  Future<void> _logout() async {
-    try {
-      await FirebaseAuth.instance.signOut();
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => LoginApp()),
-      );
-    } catch (e) {
-      print('Error logging out: $e');
-    }
+  // Build turf card
+  Widget _buildTurfCard(Map<String, dynamic> turfData) {
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      color: Colors.grey[900],
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      shadowColor: Colors.black.withOpacity(0.5),
+      elevation: 5.0,
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: ListTile(
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(8.0),
+            child: turfData['imageUrl'] != null
+                ? Image.network(turfData['imageUrl'], width: 50, height: 50, fit: BoxFit.cover)
+                : Icon(Icons.image, size: 50, color: Colors.grey),
+          ),
+          title: Text(
+            turfData['name'] ?? 'No Name',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(
+            turfData['description'] ?? 'No Description',
+            style: TextStyle(color: Colors.grey),
+          ),
+          trailing: Icon(Icons.arrow_forward_ios, color: Colors.white),
+        ),
+      ),
+    );
   }
 
+  // Drawer item creation helper
   Widget _createDrawerItem({
     required IconData icon,
     required String text,
@@ -325,99 +327,8 @@ class _HomePage2State extends State<HomePage2> {
         text,
         style: TextStyle(color: Colors.white, fontSize: 18),
       ),
-      contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
+      contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
       onTap: onTap,
-    );
-  }
-
-  Widget _buildImageCards(List<DocumentSnapshot> turfs) {
-    // Find the turf that matches the current user's UID
-    var userUid = widget.user?.uid;
-    var turf = turfs.firstWhere(
-          (turfSnapshot) => turfSnapshot.data()['ownerId'] == userUid,
-       // Return null if no matching turf is found
-    );
-    // Display the matched turf
-    return Container(
-      height: 250,
-      child: FirebaseImageCard(
-        imagePath: turf['imageUrl'],
-        title: turf['name'],
-        description: turf['description'],
-      ),
-    );
-  }
-
-
-
-}
-
-class FirebaseImageCard extends StatefulWidget {
-  final String imagePath;
-  final String title;
-  final String description;
-
-  const FirebaseImageCard({
-    Key? key,
-    required this.imagePath,
-    required this.title,
-    required this.description,
-  }) : super(key: key);
-
-  @override
-  _FirebaseImageCardState createState() => _FirebaseImageCardState();
-}
-
-class _FirebaseImageCardState extends State<FirebaseImageCard> {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 200,
-      margin: EdgeInsets.only(right: 16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: Colors.white,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
-            ),
-            child: Image.network(
-              widget.imagePath,
-              height: 150,
-              width: 200,
-              fit: BoxFit.cover,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  widget.description,
-                  style: TextStyle(fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
