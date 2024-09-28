@@ -23,12 +23,22 @@ class HomePage2 extends StatefulWidget {
 class _HomePage2State extends State<HomePage2> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Position? _currentPosition;
+  Stream<QuerySnapshot>? _turfsStream;
 
   @override
   void initState() {
     super.initState();
     _checkAndFetchLocation();
     _checkCurrentUser();
+    _setupTurfStream();
+  }
+
+  // Set up Firestore stream
+  void _setupTurfStream() {
+    _turfsStream = FirebaseFirestore.instance
+        .collection('turfs')
+        .where('ownerId', isEqualTo: widget.user?.uid)
+        .snapshots();
   }
 
   // Fetch the current logged-in user
@@ -43,7 +53,7 @@ class _HomePage2State extends State<HomePage2> {
       print('No user logged in');
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => LoginApp()), // Redirect to login if no user found
+        MaterialPageRoute(builder: (context) => LoginApp()),
       );
     }
   }
@@ -148,10 +158,7 @@ class _HomePage2State extends State<HomePage2> {
 
             // Turf Listing
             StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('turfs')
-                  .where('ownerId', isEqualTo: widget.user?.uid) // Filter by ownerId
-                  .snapshots(),
+              stream: _turfsStream, // Use the stream created in initState
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
@@ -325,9 +332,8 @@ class _HomePage2State extends State<HomePage2> {
       leading: Icon(icon, color: Colors.white),
       title: Text(
         text,
-        style: TextStyle(color: Colors.white, fontSize: 18),
+        style: TextStyle(color: Colors.white),
       ),
-      contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
       onTap: onTap,
     );
   }
