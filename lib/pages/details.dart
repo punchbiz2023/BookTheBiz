@@ -21,7 +21,7 @@ class _DetailsPageState extends State<DetailsPage> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedFromTime;
   TimeOfDay? _selectedToTime;
-
+  double price = 0.0;
   Future<Map<String, dynamic>?> _fetchDetails() async {
     try {
       DocumentSnapshot<Map<String, dynamic>> documentSnapshot =
@@ -31,6 +31,7 @@ class _DetailsPageState extends State<DetailsPage> {
               .get();
 
       if (documentSnapshot.exists) {
+        price = documentSnapshot.data()?['price'] ?? 0.0;
         return documentSnapshot.data();
       } else {
         print('Document does not exist');
@@ -281,6 +282,39 @@ class _DetailsPageState extends State<DetailsPage> {
                   'bookingToTime': _selectedToTime!.format(context),
                   'turfId': widget.documentId,
                   'turfName': widget.documentname,
+                  'totalHoursBooked': () {
+                    // Assuming _selectedFromTime and _selectedToTime are TimeOfDay objects
+                    TimeOfDay fromTime = _selectedFromTime!;
+                    TimeOfDay toTime = _selectedToTime!;
+
+                    // Convert TimeOfDay to DateTime for both from and to times (using the current date)
+                    final now = DateTime.now();
+                    DateTime fromDateTime = DateTime(now.year, now.month, now.day, fromTime.hour, fromTime.minute);
+                    DateTime toDateTime = DateTime(now.year, now.month, now.day, toTime.hour, toTime.minute);
+
+                    // Calculate the duration difference between the two times
+                    Duration bookingDuration = toDateTime.difference(fromDateTime);
+
+                    // Calculate the total number of hours (including fractional hours)
+                    return bookingDuration.inMinutes / 60.0;
+                  }(),
+                  'amount': () {
+                    // Assuming price is the global price variable
+                    double totalHours = () {
+                      TimeOfDay fromTime = _selectedFromTime!;
+                      TimeOfDay toTime = _selectedToTime!;
+
+                      final now = DateTime.now();
+                      DateTime fromDateTime = DateTime(now.year, now.month, now.day, fromTime.hour, fromTime.minute);
+                      DateTime toDateTime = DateTime(now.year, now.month, now.day, toTime.hour, toTime.minute);
+
+                      Duration bookingDuration = toDateTime.difference(fromDateTime);
+                      return bookingDuration.inMinutes / 60.0;
+                    }();
+
+                    // Multiply total hours by the price
+                    return totalHours * price;
+                  }(),
                 };
 
                 try {
@@ -341,6 +375,7 @@ class _DetailsPageState extends State<DetailsPage> {
             List<dynamic> availableGrounds =
                 snapshot.data!['availableGrounds'] ?? [];
             List<dynamic> facilities = snapshot.data!['facilities'] ?? [];
+            //double price = snapshot.data!['price'] ?? 0.0; // Fetch the price
 
             return CustomScrollView(
               slivers: [
