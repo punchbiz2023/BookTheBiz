@@ -22,6 +22,7 @@ class _DetailsPageState extends State<DetailsPage> {
   TimeOfDay? _selectedFromTime;
   TimeOfDay? _selectedToTime;
   double price = 0.0;
+  double? totalHours = 0.0;
   Future<Map<String, dynamic>?> _fetchDetails() async {
     try {
       DocumentSnapshot<Map<String, dynamic>> documentSnapshot =
@@ -168,7 +169,7 @@ class _DetailsPageState extends State<DetailsPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Select Date and Time:',
+              Text('Select Date and Time(More than 1 hour)',
                   style: TextStyle(fontSize: 18, color: Colors.white)),
               SizedBox(height: 16),
               ElevatedButton(
@@ -272,12 +273,14 @@ class _DetailsPageState extends State<DetailsPage> {
                   return;
                 }
 
+                //double? totalHours;
                 // Create booking data
+                double? totalHours; // Declare totalHours variable
+
                 Map<String, dynamic> bookingData = {
                   'userId': currentUser?.uid ?? '',
                   'userName': userName,
-                  'bookingDate':
-                      DateFormat('yyyy-MM-dd').format(_selectedDate!),
+                  'bookingDate': DateFormat('yyyy-MM-dd').format(_selectedDate!),
                   'bookingFromTime': _selectedFromTime!.format(context),
                   'bookingToTime': _selectedToTime!.format(context),
                   'turfId': widget.documentId,
@@ -287,46 +290,74 @@ class _DetailsPageState extends State<DetailsPage> {
                     TimeOfDay fromTime = _selectedFromTime!;
                     TimeOfDay toTime = _selectedToTime!;
 
-                    // Convert TimeOfDay to DateTime for both from and to times (using the current date)
                     final now = DateTime.now();
-                    DateTime fromDateTime = DateTime(now.year, now.month, now.day, fromTime.hour, fromTime.minute);
-                    DateTime toDateTime = DateTime(now.year, now.month, now.day, toTime.hour, toTime.minute);
+                    DateTime fromDateTime =
+                    DateTime(now.year, now.month, now.day, fromTime.hour, fromTime.minute);
+                    DateTime toDateTime =
+                    DateTime(now.year, now.month, now.day, toTime.hour, toTime.minute);
 
                     // Calculate the duration difference between the two times
                     Duration bookingDuration = toDateTime.difference(fromDateTime);
 
-                    // Calculate the total number of hours (including fractional hours)
-                    return bookingDuration.inMinutes / 60.0;
+                    // Calculate the total number of hours (rounded down to the nearest whole number)
+                    double hours = bookingDuration.inMinutes / 60.0;
+                    int roundedHours = hours.floor(); // Round down to the nearest hour
+                    totalHours = roundedHours.toDouble();
+                    if (roundedHours < 1) {
+                      // Show a message and prevent booking
+                      showDialog(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            title: Text('Cannot Book'),
+                            content: Text(
+                                'Bookings less than 1 hour are not allowed. Please visit the turf for manual bookings.'),
+                            actions: <Widget>[
+                              TextButton(
+                                child: Text('Okay'),
+                                onPressed: () {
+                                  Navigator.of(context).pop(); // Close the dialog
+                                },
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                      return null; // Return null to prevent booking
+                    }
+
+                    return totalHours; // Return the total hours (rounded down)
                   }(),
                   'amount': () {
-                    // Assuming price is the global price variable
-                    double totalHours = () {
-                      TimeOfDay fromTime = _selectedFromTime!;
-                      TimeOfDay toTime = _selectedToTime!;
-
-                      final now = DateTime.now();
-                      DateTime fromDateTime = DateTime(now.year, now.month, now.day, fromTime.hour, fromTime.minute);
-                      DateTime toDateTime = DateTime(now.year, now.month, now.day, toTime.hour, toTime.minute);
-
-                      Duration bookingDuration = toDateTime.difference(fromDateTime);
-                      return bookingDuration.inMinutes / 60.0;
-                    }();
-
-                    // Multiply total hours by the price
-                    return totalHours * price;
+                    // Use the stored totalHours to calculate the amount
+                    if (totalHours != null) {
+                      return totalHours! * price;
+                    }
+                    return 0; // Return 0 if totalHours is not set
                   }(),
                 };
 
                 try {
-                  await FirebaseFirestore.instance
-                      .collection('bookings') // Your Firestore collection
-                      .add(bookingData);
+                  // Check if totalHours is valid before saving to Firestore
+                  if (totalHours != null && totalHours! >= 1) {
+                    await FirebaseFirestore.instance
+                        .collection('bookings') // Your Firestore collection
+                        .add(bookingData);
 
-                  // Show a success message
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Booking confirmed!')),
-                  );
-                  Navigator.of(context).pop(); // Close the dialog
+                    // Show a success message
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Booking confirmed!')),
+                    );
+                    Navigator.of(context).pop(); // Close the dialog
+                  } else {
+                    // Show a message indicating booking was not allowed
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                            'Cannot confirm booking. Total hours must be at least 1 hour.'),
+                      ),
+                    );
+                  }
                 } catch (e) {
                   print('Error saving booking: $e');
                   ScaffoldMessenger.of(context).showSnackBar(
