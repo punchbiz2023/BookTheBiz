@@ -186,10 +186,17 @@ class _HomePage1State extends State<HomePage1> {
         var turfs = snapshot.data!;
         var filteredTurfs = turfs.where((turf) {
           var turfData = turf.data() as Map<String, dynamic>;
+          // Filter turfs based on search text
           return turfData['name']
               .toString()
               .toLowerCase()
               .contains(_searchText.toLowerCase());
+        }).toList();
+
+        // Skip turfs with missing or empty 'imageUrl'
+        filteredTurfs = filteredTurfs.where((turf) {
+          var turfData = turf.data() as Map<String, dynamic>;
+          return turfData['imageUrl'] != null && turfData['imageUrl'].isNotEmpty;
         }).toList();
 
         if (filteredTurfs.isEmpty) {
@@ -204,16 +211,19 @@ class _HomePage1State extends State<HomePage1> {
             itemBuilder: (context, index) {
               var turfData = filteredTurfs[index].data() as Map<String, dynamic>;
 
-              // Assuming 'availableGrounds' is a field in Firestore that stores a list of grounds
+              // Fetch fields with null checks
+              String imageUrl = turfData['imageUrl'] ?? '';
+              String name = turfData['name'] ?? 'Unknown Turf';
+              String description = turfData['description'] ?? 'No description available';
               List<String> availableGrounds = List<String>.from(turfData['availableGrounds'] ?? []);
 
               return FirebaseImageCard(
-                imageUrl: turfData['imageUrl'],
-                title: turfData['name'],
-                description: turfData['description'],
+                imageUrl: imageUrl,
+                title: name,
+                description: description,
                 documentId: filteredTurfs[index].id,
-                docname: turfData['name'],
-                chips: availableGrounds, // Pass the fetched available grounds here
+                docname: name,
+                chips: availableGrounds,
               );
             },
           ),
@@ -221,6 +231,8 @@ class _HomePage1State extends State<HomePage1> {
       },
     );
   }
+
+
 
   Widget _buildPastBookingsSection() {
     return StreamBuilder<List<DocumentSnapshot>>(
