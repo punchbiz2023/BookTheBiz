@@ -53,15 +53,18 @@ class _HomePage1State extends State<HomePage1> {
   Future<void> _logout() async {
     try {
       await FirebaseAuth.instance.signOut();
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => LoginApp()),
+            (Route<dynamic> route) => false, // Remove all previous routes
       );
     } catch (e) {
       print('Error logging out: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logout failed. Please try again.')),
+      );
     }
   }
-
   Stream<List<DocumentSnapshot>> _fetchTurfs() {
     return FirebaseFirestore.instance
         .collection('turfs')
@@ -343,6 +346,7 @@ class _HomePage1State extends State<HomePage1> {
                 _createDrawerItem(
                   icon: Icons.logout,
                   text: 'Logout',
+
                   onTap: _logout,
                 ),
               ],

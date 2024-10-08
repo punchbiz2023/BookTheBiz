@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
+import 'package:odp/pages/Turf%20owner/owner_home.dart';
 import 'package:odp/pages/Turf%20owner/turfadd.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/login.dart';
@@ -32,15 +35,41 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      // Define routes for navigation
-      routes: {
-        '/': (context) => LoginApp(),
-        '/home': (context) => HomePage1(),
-        '/profile': (context) => ProfilePage(),
-        '/settings': (context) => SettingsPage(),
-        '/addTurf': (context) => AddTurfPage(),
-      },
-      initialRoute: '/',
+      home: AuthWrapper(),  // Use AuthWrapper to determine initial screen
     );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    // Get the current user
+    User? user = FirebaseAuth.instance.currentUser;
+
+    // If the user is signed in, navigate to the respective home page, else login page
+    if (user != null) {
+      return FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error loading user data'));
+          }
+          if (snapshot.hasData && snapshot.data != null) {
+            var userType = snapshot.data!.get('userType');
+            if (userType == 'Turf Owner') {
+              return HomePage2(); // Turf owner home
+            } else {
+              return HomePage1(); // Regular user home
+            }
+          }
+          return LoginApp();
+        },
+      );
+    } else {
+      return LoginApp();  // Show login page if no user is signed in
+    }
   }
 }
