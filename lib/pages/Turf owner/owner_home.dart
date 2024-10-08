@@ -10,7 +10,7 @@ import '../login.dart';
 import '../profile.dart';
 import '../settings.dart';
 import 'turfadd.dart';
-
+import 'turf_details.dart';
 class HomePage2 extends StatefulWidget {
   User? user;
 
@@ -316,11 +316,23 @@ class _HomePage2State extends State<HomePage2> {
             turfData['description'] ?? 'No Description',
             style: TextStyle(color: Colors.grey),
           ),
-          trailing: Icon(Icons.arrow_forward_ios, color: Colors.white),
+          trailing: InkWell(
+            onTap: () {
+              // Redirect to the turf_details page, passing the turfId
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TurfDetails(turfId: turfData['turfId']),
+                ),
+              );
+            },
+            child: Icon(Icons.arrow_forward_ios, color: Colors.white),
+          ),
         ),
       ),
     );
   }
+
 
   // Drawer item creation helper
   Widget _createDrawerItem({

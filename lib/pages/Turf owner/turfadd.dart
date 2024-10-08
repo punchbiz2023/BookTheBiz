@@ -131,7 +131,13 @@ class _AddTurfPageState extends State<AddTurfPage> {
     try {
       String imageUrl = await _uploadImage(_imageFile!);
       String userId = _auth.currentUser!.uid; // Get the current user UID
-      await _firestore.collection('turfs').add({
+      DocumentReference turfRef = _firestore.collection('turfs')
+          .doc(); // Create a reference to a new document
+      String turfId = turfRef.id; // Use the document ID as turfId
+
+      // Add the document with the turfId as the document ID
+      await turfRef.set({
+        'turfId': turfId,
         'name': _nameController.text,
         'description': _descriptionController.text,
         'price': double.parse(_priceController.text), // Add price to Firestore
@@ -140,6 +146,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
         'availableGrounds': _selectedAvailableGrounds,
         'ownerId': userId, // Add ownerId to Firestore
       });
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Turf added successfully!')),
       );
@@ -155,7 +162,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
     }
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
     Size size = MediaQuery.of(context).size;
     return Scaffold(
