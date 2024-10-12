@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  booking_and_publish_slots
   cloud_firestore
   file_selector_windows
   firebase_auth

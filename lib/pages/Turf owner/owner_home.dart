@@ -186,7 +186,7 @@ class _HomePage2State extends State<HomePage2> {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => BookingPage()),
+            MaterialPageRoute(builder: (context) => BookingPage(documentId:'unknown',documentname: 'unknown', userId: 'unknown')),
           );
         },
         backgroundColor: Colors.blueAccent,

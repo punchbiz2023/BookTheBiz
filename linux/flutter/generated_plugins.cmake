@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  booking_and_publish_slots
   file_selector_linux
 )
 

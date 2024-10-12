@@ -10,21 +10,29 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  mailer: ^4.0.0
+  otp_timer_button: ^1.0.0
   cupertino_icons: ^1.0.6
   fluttertoast: ^8.2.5
+
   icons_plus: ^5.0.0
   image_picker: ^0.8.4+5
   permission_handler: ^11.3.1
   firebase_core: ^3.3.0
   cloud_firestore: ^5.2.1
   firebase_storage: ^12.1.3
-  intl: ^0.19.0
+  intl: ^0.17.0
   firebase_auth: ^5.2.0
   google_maps_flutter: ^2.9.0
   location: ^7.0.0
   geolocator: ^12.0.0
   webview_flutter: ^4.9.0
+  booking_and_publish_slots: ^0.0.18
+  table_calendar: ^3.1.2
+  booking_range_slider: ^0.0.1
 
+dependency_overrides:
+    intl: ^0.18.1
 
 dev_dependencies:
   flutter_test:

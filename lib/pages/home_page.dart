@@ -149,7 +149,7 @@ class _HomePage1State extends State<HomePage1> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
+      /*floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
@@ -158,7 +158,7 @@ class _HomePage1State extends State<HomePage1> {
         },
         backgroundColor: Colors.blueAccent,
         child: Icon(Icons.add, color: Colors.white),
-      ),
+      ),*/
     );
   }
 
