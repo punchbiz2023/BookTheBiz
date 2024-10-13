@@ -511,25 +511,36 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
 }
 
 class MyPainter extends CustomPainter {
-  final double strokeWidth;
+  final double radius;
 
-  MyPainter(this.strokeWidth);
+  MyPainter(this.radius);
 
   @override
   void paint(Canvas canvas, Size size) {
-    Paint paint = Paint()
-      ..color = Colors.white.withOpacity(0.1)
-      ..style = PaintingStyle.fill;
+    final paint = Paint()
+      ..shader = LinearGradient(
+        colors: [Color(0xffFD5E3D), Color(0xffC43990)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromCircle(
+        center: Offset(0, 0),
+        radius: radius,
+      ));
 
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      100 + strokeWidth,
-      paint,
-    );
+    canvas.drawCircle(Offset.zero, radius, paint);
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
     return true;
   }
+}
+
+class MyBehavior extends ScrollBehavior {
+  Widget buildViewportChrome(
+      BuildContext context, Widget child, AxisDirection axisDirection) {
+    return child;
+  }
+
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
