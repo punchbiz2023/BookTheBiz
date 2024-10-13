@@ -1,8 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Add this for date formattingF
-
+import 'package:booking_and_publish_slots/booking_and_publish_slots.dart';
+import 'package:intl/intl.dart'; // Add this for date formatting
+import 'bookingpage.dart';
 class DetailsPage extends StatefulWidget {
   final String documentId;
   final String documentname;
@@ -140,9 +141,7 @@ class _DetailsPageState extends State<DetailsPage> {
   }
 
   void _showBookingDialog() async {
-    String userName = 'Anonymous'; // Default value
-
-    // Fetch the current user from Firebase Authentication
+    String userName = 'Anonymous';
     User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
       userName = await _fetchUserName(currentUser.uid);
@@ -151,116 +150,143 @@ class _DetailsPageState extends State<DetailsPage> {
         SnackBar(content: Text('User not logged in')),
       );
     }
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
+        // Automatically open the date picker when the dialog is built
+        Future<void> _selectDate(BuildContext context) async {
+          DateTime? pickedDate = await showDatePicker(
+            context: context,
+            initialDate: DateTime.now(),
+            firstDate: DateTime.now(),
+            lastDate: DateTime(2101),
+          );
+          if (pickedDate != null) {
+            setState(() {
+              _selectedDate = pickedDate;
+            });
+          }
+        }
+
+        // Immediately call the date picker once the dialog is displayed
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _selectDate(context);
+        });
+
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(50),
+            shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+        ),
+        backgroundColor: Colors.grey[900], // Darker background for the dialog
+        elevation: 10, // Adding elevation to the dialog
+        title: Text(
+        'Book Now',
+        style: TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+        ),
+        ),
+        content: Container(
+        width: 800, // Increased width of the dialog
+        height: 800, // Height of the dialog
+        child: SingleChildScrollView(
+        child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+        Text(
+        'Select Date and Time (More than 1 hour)',
+        style: TextStyle(fontSize: 18, color: Colors.white),
+        ),
+        SizedBox(height: 16),
+        // Date Selection Display
+        Card(
+        color: Colors.blueGrey[800],
+        shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        ),
+        child: ListTile(
+        title: Text(
+        _selectedDate != null
+        ? DateFormat('yyyy-MM-dd').format(_selectedDate!)
+            : 'Date Not Selected',
+        style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+          trailing: GestureDetector(
+            onTap: () => _selectDate(context), // Call _selectDate on tap
+            child: Icon(Icons.calendar_today, color: Colors.white),
           ),
-          backgroundColor: Colors.grey[800], // Dark background for the dialog
-          elevation: 10, // Adding elevation to the dialog
-          title: Text('Book Now',
-              style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Select Date and Time(More than 1 hour)',
-                  style: TextStyle(fontSize: 18, color: Colors.white)),
-              SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () async {
-                  DateTime? pickedDate = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime.now(),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime(2101),
-                  );
-                  setState(() {
-                    _selectedDate = pickedDate;
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  elevation: 5,
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                ),
-                child: Text(
-                  _selectedDate != null
-                      ? DateFormat('yyyy-MM-dd').format(_selectedDate!)
-                      : 'Select Date',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-              SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () async {
-                  TimeOfDay? pickedFromTime = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.now(),
-                  );
-                  setState(() {
-                    _selectedFromTime = pickedFromTime;
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  elevation: 5,
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                ),
-                child: Text(
-                  _selectedFromTime != null
-                      ? 'From: ${_selectedFromTime!.format(context)}'
-                      : 'Select From Time',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-              SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () async {
-                  TimeOfDay? pickedToTime = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.now(),
-                  );
-                  setState(() {
-                    _selectedToTime = pickedToTime;
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 5,
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                ),
-                child: Text(
-                  _selectedToTime != null
-                      ? 'To: ${_selectedToTime!.format(context)}'
-                      : 'Select To Time',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-              SizedBox(height: 16),
-            ],
-          ),
+        ),
+        ),
+        SizedBox(height: 16),
+        // From Time Selection Card
+        Card(
+        color: Colors.blueGrey[800],
+        shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        ),
+        child: ListTile(
+        title: Text(
+        _selectedFromTime != null
+        ? 'From: ${_selectedFromTime!.format(context)}'
+            : 'Select From Time',
+        style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        trailing: Icon(Icons.access_time, color: Colors.white),
+        onTap: () async {
+        TimeOfDay? pickedFromTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+        );
+        if (pickedFromTime != null) {
+        setState(() {
+        _selectedFromTime = pickedFromTime;
+        });
+        }
+        },
+        ),
+        ),
+        SizedBox(height: 16),
+        // To Time Selection Card
+        Card(
+        color: Colors.blueGrey[800],
+        shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        ),
+        child: ListTile(
+        title: Text(
+        _selectedToTime != null
+        ? 'To: ${_selectedToTime!.format(context)}'
+            : 'Select To Time',
+        style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        trailing: Icon(Icons.access_time, color: Colors.white),
+        onTap: () async {
+        TimeOfDay? pickedToTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+        );
+        if (pickedToTime != null) {
+        setState(() {
+        _selectedToTime = pickedToTime;
+        });
+        }
+        },
+        ),
+        ),
+        SizedBox(height: 16),
+        ],
+        ),
+        ),),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: Text('Cancel',
-                  style: TextStyle(color: Colors.red, fontSize: 16)),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.redAccent, fontSize: 16),
+              ),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -272,11 +298,9 @@ class _DetailsPageState extends State<DetailsPage> {
                   );
                   return;
                 }
-
                 //double? totalHours;
                 // Create booking data
                 double? totalHours; // Declare totalHours variable
-
                 Map<String, dynamic> bookingData = {
                   'userId': currentUser?.uid ?? '',
                   'userName': userName,
@@ -323,22 +347,19 @@ class _DetailsPageState extends State<DetailsPage> {
                           );
                         },
                       );
-                      return null; // Return null to prevent booking
+                      return null;
                     }
 
-                    return totalHours; // Return the total hours (rounded down)
+                    return totalHours;
                   }(),
                   'amount': () {
-                    // Use the stored totalHours to calculate the amount
                     if (totalHours != null) {
                       return totalHours! * price;
                     }
-                    return 0; // Return 0 if totalHours is not set
+                    return 0;
                   }(),
                 };
-
                 try {
-                  // Check if totalHours is valid before saving to Firestore
                   if (totalHours != null && totalHours! >= 1) {
                     await FirebaseFirestore.instance
                         .collection('bookings') // Your Firestore collection
@@ -455,43 +476,58 @@ class _DetailsPageState extends State<DetailsPage> {
                 SliverList(
                   delegate: SliverChildListDelegate(
                     [
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildChipList(
-                                'Available Grounds',
-                                availableGrounds,
-                                Colors.blueAccent,
-                                Colors.white),
-                            _buildChipList('Facilities', facilities,
-                                Colors.green, Colors.white),
-                            SizedBox(height: 20),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _showBookingDialog,
-                                style: ElevatedButton.styleFrom(
-                                  foregroundColor: Colors.white,
-                                  backgroundColor: Colors.blueAccent,
-                                  padding: EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(50),
-                                  ),
-                                  elevation: 5,
-                                ),
-                                child: Text(
-                                  'Book Now',
-                                  style: TextStyle(fontSize: 18),
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 20),
-                          ],
-                        ),
-                      ),
-                    ],
+                Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                _buildChipList('Available Grounds', availableGrounds, Colors.blueAccent, Colors.white),
+                _buildChipList('Facilities', facilities, Colors.green, Colors.white),
+                SizedBox(height: 20),
+                SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                onPressed: () {
+                // Navigate to BookingPage
+                  User? currentUser = FirebaseAuth.instance.currentUser;
+                  if (currentUser == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('User not logged in')),
+                    );
+                    return;
+                  }
+
+                  String documentId = widget.documentId; // TurfId is the document ID you're passing to DetailsPage
+                  String UserId = currentUser.uid;
+                  String documentname = widget.documentname;
+                Navigator.push(
+                context,
+                MaterialPageRoute(
+                builder: (context) => BookingPage(documentId:documentId,documentname: documentname,userId: UserId),
+                ),
+                );
+                },
+                style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: Colors.blueAccent,
+                padding: EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(50),
+              ),
+            elevation: 5,
+            ),
+          child: Text(
+          'Book Now',
+          style: TextStyle(fontSize: 18),
+          ),
+          ),
+          ),
+          SizedBox(height: 20),
+          ],
+          ),
+          ),
+
+          ],
                   ),
                 ),
               ],
