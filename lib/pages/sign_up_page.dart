@@ -23,13 +23,9 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
-  final TextEditingController _otpController = TextEditingController(); // Controller for OTP
 
   bool _loading = false;
   String _userType = 'User'; // Default user type
-  String _verificationId = ''; // Store the verification ID
-  bool _isOTPSent = false; // Check if OTP is sent
-  bool _isOTPVerified = false; // Check if OTP is verified
 
   late AnimationController controller1;
   late AnimationController controller2;
@@ -113,67 +109,43 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     _emailController.dispose();
     _passwordController.dispose();
     _mobileController.dispose();
-    _otpController.dispose(); // Dispose the OTP controller
     super.dispose();
   }
-
-  Future<void> _sendOTP() async {
-    setState(() {
-      _loading = true;
-    });
-
-    try {
-      // Send OTP to email
-      String email = _emailController.text;
-      await _auth.sendSignInLinkToEmail(
-        email: email,
-        actionCodeSettings: ActionCodeSettings(
-          url: 'https://example.com/?email=$email',
-          handleCodeInApp: true,
-        ),
-      );
-      Fluttertoast.showToast(msg: 'OTP sent to $email');
-      _isOTPSent = true;
-    } catch (e) {
-      Fluttertoast.showToast(msg: 'Failed to send OTP: ${e.toString()}');
-    } finally {
-      setState(() {
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _verifyOTP() async {
-    setState(() {
-      _loading = true;
-    });
-
-    // Here, implement your logic to verify the OTP. For example:
-    // Check the OTP entered by the user with the one sent to the email.
-    // If verified, proceed with registration.
-    try {
-      // Assuming OTP is always '123456' for demo purposes.
-      if (_otpController.text == '123456') {
-        _isOTPVerified = true; // Mark OTP as verified
-        Fluttertoast.showToast(msg: 'OTP verified successfully');
-      } else {
-        Fluttertoast.showToast(msg: 'Invalid OTP');
-      }
-    } catch (e) {
-      Fluttertoast.showToast(msg: 'Failed to verify OTP: ${e.toString()}');
-    } finally {
-      setState(() {
-        _loading = false;
-      });
-    }
-  }
+  //
+  // Future<void> _signup() async {
+  //   setState(() {
+  //     _loading = true;
+  //   });
+  //
+  //   try {
+  //     UserCredential userCredential =
+  //         await _auth.createUserWithEmailAndPassword(
+  //       email: _emailController.text,
+  //       password: _passwordController.text,
+  //     );
+  //
+  //     await _firestore.collection('users').doc(userCredential.user!.uid).set({
+  //       'name': _nameController.text,
+  //       'email': _emailController.text,
+  //       'mobile': _mobileController.text,
+  //       'userType': _userType, // Add userType to Firestore
+  //     });
+  //
+  //     Navigator.pushReplacement(
+  //       context,
+  //       MaterialPageRoute(
+  //           builder: (context) => HomePage1(user: userCredential.user)),
+  //     );
+  //   } catch (e) {
+  //     Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
+  //   } finally {
+  //     setState(() {
+  //       _loading = false;
+  //     });
+  //   }
+  // }
 
   Future<void> _signup() async {
-    if (!_isOTPVerified) {
-      Fluttertoast.showToast(msg: 'Please verify your OTP first.');
-      return;
-    }
-
     setState(() {
       _loading = true;
     });
@@ -301,14 +273,14 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                           },
                           child: Container(
                             color: _userType == 'User'
-                                ? Colors.blue.withOpacity(0.5)
+                                ? Colors.white.withOpacity(0.1)
                                 : Colors.transparent,
                             alignment: Alignment.center,
                             child: Text(
                               'User',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
-                                fontSize: size.width * 0.04,
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 14,
                               ),
                             ),
                           ),
@@ -323,14 +295,14 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                           },
                           child: Container(
                             color: _userType == 'Turf Owner'
-                                ? Colors.blue.withOpacity(0.5)
+                                ? Colors.white.withOpacity(0.1)
                                 : Colors.transparent,
                             alignment: Alignment.center,
                             child: Text(
                               'Turf Owner',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
-                                fontSize: size.width * 0.04,
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 14,
                               ),
                             ),
                           ),
@@ -339,168 +311,63 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                     ],
                   ),
                 ),
-                const SizedBox(height: 15),
 
-                // Name Field
-                TextField(
-                  controller: _nameController,
-                  style: TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Colors.white.withOpacity(0.5),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Colors.blue,
-                      ),
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 10),
-
-                // Email Field
-                TextField(
-                  controller: _emailController,
-                  style: TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Colors.white.withOpacity(0.5),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Colors.blue,
-                      ),
-                    ),
-                  ),
-                ),
+                component1(Icons.person_outline, 'Name...', false, false,
+                    _nameController),
                 const SizedBox(height: 10),
-
-                // Password Field
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  style: TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Colors.white.withOpacity(0.5),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Colors.blue,
-                      ),
-                    ),
-                  ),
-                ),
+                component1(Icons.email_outlined, 'Email...', false, true,
+                    _emailController),
                 const SizedBox(height: 10),
-
-                // Mobile Number Field
-                TextField(
-                  controller: _mobileController,
-                  style: TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Mobile Number',
-                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Colors.white.withOpacity(0.5),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Colors.blue,
-                      ),
-                    ),
-                  ),
-                ),
+                component1(Icons.lock_outline, 'Password...', true, false,
+                    _passwordController),
                 const SizedBox(height: 10),
-
-                // OTP Field
-                if (_isOTPSent) ...[
-                  TextField(
-                    controller: _otpController,
-                    style: TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'OTP',
-                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.5),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-
-                // Buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (!_isOTPSent) // Show 'Send OTP' button if OTP is not sent
-                      ElevatedButton(
-                        onPressed: _sendOTP,
-                        child: _loading
-                            ? CircularProgressIndicator(
-                          valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.white),
-                        )
-                            : Text('Send OTP'),
-                      ),
-                    if (_isOTPSent && !_isOTPVerified) // Show 'Verify OTP' button if OTP is sent but not verified
-                      ElevatedButton(
-                        onPressed: _verifyOTP,
-                        child: _loading
-                            ? CircularProgressIndicator(
-                          valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.white),
-                        )
-                            : Text('Verify OTP'),
-                      ),
-                  ],
-                ),
+                component1(Icons.phone_outlined, 'Mobile Number...', false,
+                    false, _mobileController),
                 const SizedBox(height: 10),
-
                 ElevatedButton(
-                  onPressed: _signup,
+                  onPressed: _loading ? null : _signup,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(size.width * 0.8, 50), // Responsive width
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.grey.withOpacity(0.3), // Text color
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    elevation: 0, // Remove shadow if desired
+                    padding: EdgeInsets.symmetric(
+                        vertical: 15), // Adjust padding as needed
+                  ),
                   child: _loading
-                      ? CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  )
-                      : Text('Sign Up'),
+                      ? CircularProgressIndicator()
+                      : Text('Signup', style: TextStyle(color: Colors.white)),
                 ),
                 const SizedBox(height: 10),
-
                 GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => LoginApp(),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      minimumSize:
+                      Size(size.width * 0.8, 50), // Responsive width
+                      foregroundColor: Colors.white,
+                      backgroundColor:
+                      Colors.grey.withOpacity(0.3), // Text color
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
                       ),
-                    );
-                  },
-                  child: Text(
-                    'Already have an account? Login',
-                    style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                      elevation: 0, // Remove shadow if desired
+                      padding: EdgeInsets.symmetric(
+                          vertical: 15), // Adjust padding as needed
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => LoginApp()),
+                      );
+                    },
+                    child: Text('Already have an account? Login',
+                        style: TextStyle(color: Colors.white)),
                   ),
-                ),
+                )
               ],
             ),
           ),
@@ -508,39 +375,47 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       ),
     );
   }
-}
 
-class MyPainter extends CustomPainter {
-  final double radius;
+  Widget component1(IconData icon, String hintText, bool isPassword,
+      bool isEmail, TextEditingController controller) {
+    Size size = MediaQuery.of(context).size;
 
-  MyPainter(this.radius);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..shader = LinearGradient(
-        colors: [Color(0xffFD5E3D), Color(0xffC43990)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ).createShader(Rect.fromCircle(
-        center: Offset(0, 0),
-        radius: radius,
-      ));
-
-    canvas.drawCircle(Offset.zero, radius, paint);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(15),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaY: 15,
+          sigmaX: 15,
+        ),
+        child: Container(
+          height: size.width / 8,
+          width: size.width / 1.2,
+          alignment: Alignment.center,
+          padding: EdgeInsets.only(right: size.width / 30),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(.05),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: TextField(
+            controller: controller,
+            style: TextStyle(color: Colors.white.withOpacity(.8)),
+            cursorColor: Colors.white,
+            obscureText: isPassword,
+            keyboardType:
+            isEmail ? TextInputType.emailAddress : TextInputType.text,
+            decoration: InputDecoration(
+              prefixIcon: Icon(
+                icon,
+                color: Colors.white.withOpacity(.7),
+              ),
+              border: InputBorder.none,
+              hintMaxLines: 1,
+              hintText: hintText,
+              hintStyle: TextStyle(color: Colors.white.withOpacity(.5)),
+            ),
+          ),
+        ),
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
-  }
-}
-
-class MyBehavior extends ScrollBehavior {
-  Widget buildViewportChrome(
-      BuildContext context, Widget child, AxisDirection axisDirection) {
-    return child;
-  }
-
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
