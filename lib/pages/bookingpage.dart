@@ -265,11 +265,33 @@ class _BookingPageState extends State<BookingPage> {
         return isSameDay(selectedDate, day);
       },
       onDaySelected: (selectedDay, focusedDay) {
-        setState(() {
-          selectedDate = selectedDay;
-          selectedSlots.clear(); // Clear selected slots when date changes
-        });
+        if (selectedDay.isAfter(DateTime.now())) {
+          setState(() {
+            selectedDate = selectedDay;
+            selectedSlots.clear(); // Clear selected slots when date changes
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('You cannot book for today or past dates')),
+          );
+        }
       },
+      enabledDayPredicate: (day) {
+        return day.isAfter(DateTime.now()); // Disable today and all previous dates
+      },
+      calendarStyle: CalendarStyle(
+        selectedDecoration: BoxDecoration(
+          color: Colors.green, // Set the selected date color to green
+          shape: BoxShape.circle, // Shape of the selected date (circle or rectangle)
+        ),
+        todayDecoration: BoxDecoration(
+          color: Colors.blue, // Set the color for today's date (if you need it)
+          shape: BoxShape.circle,
+        ),
+        defaultDecoration: BoxDecoration(
+          shape: BoxShape.circle, // Set shape for the default unselected days
+        ),
+      ),
     );
   }
 
@@ -291,16 +313,43 @@ class _BookingPageState extends State<BookingPage> {
               ),
               SizedBox(height: 10),
               // Early Morning Slot
-              _buildSlotChips('Early Morning', '12 AM - 5 AM', ['12:00 AM', '1:00 AM', '2:00 AM', '3:00 AM', '4:00 AM'], snapshot.data!),
+              _buildSlotChips('Early Morning', '12 AM - 5 AM', [
+                '12:00 AM - 1:00 AM',
+                '1:00 AM - 2:00 AM',
+                '2:00 AM - 3:00 AM',
+                '3:00 AM - 4:00 AM',
+                '4:00 AM - 5:00 AM'
+              ], snapshot.data!),
               SizedBox(height: 10),
-              // Morning Slot
-              _buildSlotChips('Morning', '5 AM - 11 AM', ['5:00 AM', '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM'], snapshot.data!),
+// Morning Slot
+              _buildSlotChips('Morning', '5 AM - 11 AM', [
+                '5:00 AM - 6:00 AM',
+                '6:00 AM - 7:00 AM',
+                '7:00 AM - 8:00 AM',
+                '8:00 AM - 9:00 AM',
+                '9:00 AM - 10:00 AM',
+                '10:00 AM - 11:00 AM'
+              ], snapshot.data!),
               SizedBox(height: 10),
-              // Afternoon Slot
-              _buildSlotChips('Afternoon', '12 PM - 5 PM', ['12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM'], snapshot.data!),
+// Afternoon Slot
+              _buildSlotChips('Afternoon', '12 PM - 5 PM', [
+                '12:00 PM - 1:00 PM',
+                '1:00 PM - 2:00 PM',
+                '2:00 PM - 3:00 PM',
+                '3:00 PM - 4:00 PM',
+                '4:00 PM - 5:00 PM'
+              ], snapshot.data!),
               SizedBox(height: 10),
-              // Evening Slot
-              _buildSlotChips('Evening', '5 PM - 11 PM', ['5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM', '10:00 PM', '11:00 PM'], snapshot.data!),
+// Evening Slot
+              _buildSlotChips('Evening', '5 PM - 11 PM', [
+                '5:00 PM - 6:00 PM',
+                '6:00 PM - 7:00 PM',
+                '7:00 PM - 8:00 PM',
+                '8:00 PM - 9:00 PM',
+                '9:00 PM - 10:00 PM',
+                '10:00 PM - 11:00 PM'
+              ], snapshot.data!),
+
             ],
           );
         } else {
@@ -313,16 +362,43 @@ class _BookingPageState extends State<BookingPage> {
               ),
               SizedBox(height: 10),
               // Early Morning Slot
-              _buildSlotChips('Early Morning', '12 AM - 5 AM', ['12:00 AM', '1:00 AM', '2:00 AM', '3:00 AM', '4:00 AM'], snapshot.data!),
+              _buildSlotChips('Early Morning', '12 AM - 5 AM', [
+                '12:00 AM - 1:00 AM',
+                '1:00 AM - 2:00 AM',
+                '2:00 AM - 3:00 AM',
+                '3:00 AM - 4:00 AM',
+                '4:00 AM - 5:00 AM'
+              ], snapshot.data!),
               SizedBox(height: 10),
-              // Morning Slot
-              _buildSlotChips('Morning', '5 AM - 11 AM', ['5:00 AM', '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM'], snapshot.data!),
+// Morning Slot
+              _buildSlotChips('Morning', '5 AM - 11 AM', [
+                '5:00 AM - 6:00 AM',
+                '6:00 AM - 7:00 AM',
+                '7:00 AM - 8:00 AM',
+                '8:00 AM - 9:00 AM',
+                '9:00 AM - 10:00 AM',
+                '10:00 AM - 11:00 AM'
+              ], snapshot.data!),
               SizedBox(height: 10),
-              // Afternoon Slot
-              _buildSlotChips('Afternoon', '12 PM - 5 PM', ['12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM'], snapshot.data!),
+// Afternoon Slot
+              _buildSlotChips('Afternoon', '12 PM - 5 PM', [
+                '12:00 PM - 1:00 PM',
+                '1:00 PM - 2:00 PM',
+                '2:00 PM - 3:00 PM',
+                '3:00 PM - 4:00 PM',
+                '4:00 PM - 5:00 PM'
+              ], snapshot.data!),
               SizedBox(height: 10),
-              // Evening Slot
-              _buildSlotChips('Evening', '5 PM - 11 PM', ['5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM', '10:00 PM', '11:00 PM'], snapshot.data!),
+// Evening Slot
+              _buildSlotChips('Evening', '5 PM - 11 PM', [
+                '5:00 PM - 6:00 PM',
+                '6:00 PM - 7:00 PM',
+                '7:00 PM - 8:00 PM',
+                '8:00 PM - 9:00 PM',
+                '9:00 PM - 10:00 PM',
+                '10:00 PM - 11:00 PM'
+              ], snapshot.data!),
+
             ],
           );
         }
