@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:odp/pages/home_page.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 class BookingPage extends StatefulWidget {
@@ -22,8 +23,7 @@ class BookingPage extends StatefulWidget {
 
 class _BookingPageState extends State<BookingPage> {
   DateTime? selectedDate;
-  TimeOfDay? selectedStartTime;
-  TimeOfDay? selectedEndTime;
+  List<String> selectedSlots = []; // Allow multiple selections
   bool timeSlotBooked = false;
   double price = 0.0;
   double? totalHours = 0.0;
@@ -49,6 +49,27 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
+  Future<List<String>> _fetchBookedSlots() async {
+    try {
+      QuerySnapshot<Map<String, dynamic>> bookingSnapshot = await _firestore
+          .collection('turfs')
+          .doc(widget.documentId)
+          .collection('bookings')
+          .where('bookingDate', isEqualTo: DateFormat('yyyy-MM-dd').format(selectedDate!))
+          .get();
+
+      List<String> bookedSlots = [];
+      for (var doc in bookingSnapshot.docs) {
+        List<String> slots = List<String>.from(doc.data()['bookingSlots']);
+        bookedSlots.addAll(slots);
+      }
+      return bookedSlots;
+    } catch (e) {
+      print('Error fetching booked slots: $e');
+      return [];
+    }
+  }
+
   Future<String> _fetchUserName(String userId) async {
     try {
       DocumentSnapshot<Map<String, dynamic>> userDoc =
@@ -70,20 +91,19 @@ class _BookingPageState extends State<BookingPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Book Your Turf',
-            style:
-            TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.bold)),
+            style: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.bold)),
         backgroundColor: Colors.black,
         elevation: 0,
       ),
-      body: Padding(
+      body: SingleChildScrollView( // Enable scrolling
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Wrap(
+          spacing: 16.0,
+          runSpacing: 16.0,
           children: [
             if (!isBookingConfirmed) _buildCalendar(),
-            if (!isBookingConfirmed) _buildTimeSelector(),
-            Spacer(),
-            if (selectedStartTime != null && selectedEndTime != null)
+            if (!isBookingConfirmed) _buildSlotSelector(),
+            if (selectedSlots.isNotEmpty) // Check if any slots are selected
               Center(
                 child: ElevatedButton(
                   onPressed: () {
@@ -97,8 +117,7 @@ class _BookingPageState extends State<BookingPage> {
                     }
                   },
                   style: ElevatedButton.styleFrom(
-                    padding:
-                    EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
                     backgroundColor: Colors.blueAccent,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -121,7 +140,7 @@ class _BookingPageState extends State<BookingPage> {
   void _showBookingDialog() async {
     String userName = 'Anonymous';
     User? currentUser = FirebaseAuth.instance.currentUser;
-    future: _fetchDetails();
+
     if (currentUser != null) {
       userName = await _fetchUserName(currentUser.uid);
     } else {
@@ -131,34 +150,22 @@ class _BookingPageState extends State<BookingPage> {
       return; // Exit if the user is not logged in
     }
 
-    if (selectedDate == null || selectedStartTime == null || selectedEndTime == null) {
+    if (selectedDate == null || selectedSlots.isEmpty) { // Check if slots are selected
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please select date and time')),
+        SnackBar(content: Text('Please select a date and at least one slot')),
       );
       return;
     }
 
-    // Calculate the total hours booked
-    TimeOfDay fromTime = selectedStartTime!;
-    TimeOfDay toTime = selectedEndTime!;
-    final now = DateTime.now();
-    DateTime fromDateTime = DateTime(now.year, now.month, now.day, fromTime.hour, fromTime.minute);
-    DateTime toDateTime = DateTime(now.year, now.month, now.day, toTime.hour, toTime.minute);
-    Duration bookingDuration = toDateTime.difference(fromDateTime);
+    // Calculate total amount and total hours
+    double totalAmount = 0.0;
+    totalHours = 0.0;
 
-    double hours = bookingDuration.inMinutes / 60.0;
-    int roundedHours = hours.floor();
-    totalHours = roundedHours.toDouble();
-
-    if (roundedHours < 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Bookings less than 1 hour are not allowed.')),
-      );
-      return;
+    for (String slot in selectedSlots) {
+      double hours = _getHoursForSlot(slot);
+      totalHours = (totalHours ?? 0) + hours;
+      totalAmount += hours * price;
     }
-
-    // Calculate total amount
-    double amount = totalHours! * price;
 
     // Show the confirmation dialog
     showDialog(
@@ -172,11 +179,11 @@ class _BookingPageState extends State<BookingPage> {
               SizedBox(height: 10),
               Text(widget.documentname, style: TextStyle(fontSize: 18)),
               SizedBox(height: 10),
-              Text('Play Time: ${selectedStartTime!.format(context)} - ${selectedEndTime!.format(context)}'),
+              Text('Slots: ${selectedSlots.join(", ")}'),
               SizedBox(height: 10),
-              Text('Hours: ${totalHours!.toStringAsFixed(0)} hours'),
+              Text('Total Hours: ${totalHours!.toStringAsFixed(0)} hours'),
               SizedBox(height: 10),
-              Text('Amount: ₹${amount.toStringAsFixed(2)}'),
+              Text('Total Amount: ₹${totalAmount.toStringAsFixed(2)}'),
             ],
           ),
           actions: [
@@ -192,133 +199,56 @@ class _BookingPageState extends State<BookingPage> {
               onPressed: () async {
                 Navigator.of(context).pop(); // Close the dialog
 
-                // Store the booking in Firestore
-                Map<String, dynamic> bookingData = {
-                  'userId': currentUser?.uid ?? '',
-                  'userName': userName,
-                  'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                  'bookingFromTime': selectedStartTime!.format(context),
-                  'bookingToTime': selectedEndTime!.format(context),
-                  'turfId': widget.documentId,
-                  'turfName': widget.documentname,
-                  'totalHoursBooked': () {
-                    // Assuming _selectedFromTime and _selectedToTime are TimeOfDay objects
-                    TimeOfDay fromTime = selectedStartTime!;
-                    TimeOfDay toTime = selectedEndTime!;
+                // Store the booking in Firestore under the specific turf's bookings subcollection
+        // Store the booking in Firestore under the specific turf's bookings subcollection
+        Map<String, dynamic> bookingData = {
+        'userId': currentUser?.uid ?? '',
+        'userName': userName,
+        'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+        'bookingSlots': selectedSlots, // Store selected slots as a list
+        'totalHours': totalHours,
+        'amount': totalAmount,
+        'turfId': widget.documentId,
+        'turfName': widget.documentname,
+        };
 
-                    final now = DateTime.now();
-                    DateTime fromDateTime =
-                    DateTime(now.year, now.month, now.day, fromTime.hour, fromTime.minute);
-                    DateTime toDateTime =
-                    DateTime(now.year, now.month, now.day, toTime.hour, toTime.minute);
+        try {
+        // Change the path to store booking in the turf document's bookings subcollection
+        await _firestore.collection('turfs')
+            .doc(widget.documentId)
+            .collection('bookings') // Create or reference the 'bookings' subcollection
+            .add(bookingData);
 
-                    // Calculate the duration difference between the two times
-                    Duration bookingDuration = toDateTime.difference(fromDateTime);
+        // Also store the booking in the top-level 'bookings' collection
+        await _firestore.collection('bookings') // Add to the top-level bookings collection
+            .add(bookingData);
 
-                    // Calculate the total number of hours (rounded down to the nearest whole number)
-                    double hours = bookingDuration.inMinutes / 60.0;
-                    int roundedHours = hours.floor(); // Round down to the nearest hour
-                    totalHours = roundedHours.toDouble();
-                    if (roundedHours < 1) {
-                      // Show a message and prevent booking
-                      showDialog(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return AlertDialog(
-                            title: Text('Cannot Book'),
-                            content: Text(
-                                'Bookings less than 1 hour are not allowed. Please visit the turf for manual bookings.'),
-                            actions: <Widget>[
-                              TextButton(
-                                child: Text('Okay'),
-                                onPressed: () {
-                                  Navigator.of(context).pop(); // Close the dialog
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                      return null;
-                    }
+        setState(() {
+        timeSlotBooked = true;
+        });
 
-                    return totalHours;
-                  }(),
-                  'amount': () {
-                    if (totalHours != null) {
-                      return totalHours! * price;
-                    }
-                    return 0;
-                  }(),
-                };
-
-                if (totalHours != null) {
-                  try {
-                    await _firestore.collection('bookings').add(bookingData);
-                    setState(() {
-                      timeSlotBooked = true;
-                    });
-                    _showSuccessMessage('Booking Confirmed!', true);
-                    Navigator.pushNamed(context, '/home_page.dart'); // Redirect to the Home Page
-                  } catch (e) {
-                    _showSuccessMessage('Oops! Failed, try again later.', false);
-                  }
-                }
-              },
-            ),
-          ],
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+        content: Text('Booking confirmed successfully!'),
+        backgroundColor: Colors.green, // Set background color to green
+        ),
         );
-      },
-    );
-  }
-  void _showCancellationDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Booking Cancelled'),
-          content: Text('Your booking has been cancelled.'),
-          actions: [
-            TextButton(
-              child: Text('OK'),
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                Navigator.pushNamed(context, '/home_page.dart'); // Redirect to the home page
-              },
-            ),
-          ],
+
+        // Navigate to the home screen after a short delay
+        Future.delayed(Duration(seconds: 2), () {
+        Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => HomePage1()), // Replace HomeScreen with your home screen widget
+        (Route<dynamic> route) => false, // Remove all previous routes
         );
-      },
-    );
-  }
-
-
-  void _showSuccessMessage(String message, bool isSuccess) {
-    final snackBar = SnackBar(
-      content: Text(message),
-      backgroundColor: isSuccess ? Colors.green : Colors.red,
-    );
-
-    // Show the SnackBar at the center of the screen for 4 seconds
-    ScaffoldMessenger.of(context).showSnackBar(snackBar);
-    Future.delayed(Duration(seconds: 4), () {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    });
-  }
-
-  void _showErrorDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Error'),
-          content: Text('You have already booked this time slot.'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('Close'),
+        });
+        } catch (e) {
+        print('Error booking: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to confirm booking')),
+        );
+        }
+              }
             ),
           ],
         );
@@ -327,141 +257,226 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   Widget _buildCalendar() {
+    return TableCalendar(
+      firstDay: DateTime.utc(2022, 1, 1),
+      lastDay: DateTime.utc(2025, 12, 31),
+      focusedDay: selectedDate ?? DateTime.now(),
+      selectedDayPredicate: (day) {
+        return isSameDay(selectedDate, day);
+      },
+      onDaySelected: (selectedDay, focusedDay) {
+        if (selectedDay.isAfter(DateTime.now())) {
+          setState(() {
+            selectedDate = selectedDay;
+            selectedSlots.clear(); // Clear selected slots when date changes
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('You cannot book for today or past dates')),
+          );
+        }
+      },
+      enabledDayPredicate: (day) {
+        return day.isAfter(DateTime.now()); // Disable today and all previous dates
+      },
+      calendarStyle: CalendarStyle(
+        selectedDecoration: BoxDecoration(
+          color: Colors.green, // Set the selected date color to green
+          shape: BoxShape.circle, // Shape of the selected date (circle or rectangle)
+        ),
+        todayDecoration: BoxDecoration(
+          color: Colors.blue, // Set the color for today's date (if you need it)
+          shape: BoxShape.circle,
+        ),
+        defaultDecoration: BoxDecoration(
+          shape: BoxShape.circle, // Set shape for the default unselected days
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlotSelector() {
+    return FutureBuilder<List<String>>(
+      future: selectedDate != null ? _fetchBookedSlots() : Future.value([]),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return CircularProgressIndicator();
+        } else if (snapshot.hasError) {
+          return Text('Error fetching booked slots: ${snapshot.error}');
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select Slots:',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+              ),
+              SizedBox(height: 10),
+              // Early Morning Slot
+              _buildSlotChips('Early Morning', '12 AM - 5 AM', [
+                '12:00 AM - 1:00 AM',
+                '1:00 AM - 2:00 AM',
+                '2:00 AM - 3:00 AM',
+                '3:00 AM - 4:00 AM',
+                '4:00 AM - 5:00 AM'
+              ], snapshot.data!),
+              SizedBox(height: 10),
+// Morning Slot
+              _buildSlotChips('Morning', '5 AM - 11 AM', [
+                '5:00 AM - 6:00 AM',
+                '6:00 AM - 7:00 AM',
+                '7:00 AM - 8:00 AM',
+                '8:00 AM - 9:00 AM',
+                '9:00 AM - 10:00 AM',
+                '10:00 AM - 11:00 AM'
+              ], snapshot.data!),
+              SizedBox(height: 10),
+// Afternoon Slot
+              _buildSlotChips('Afternoon', '12 PM - 5 PM', [
+                '12:00 PM - 1:00 PM',
+                '1:00 PM - 2:00 PM',
+                '2:00 PM - 3:00 PM',
+                '3:00 PM - 4:00 PM',
+                '4:00 PM - 5:00 PM'
+              ], snapshot.data!),
+              SizedBox(height: 10),
+// Evening Slot
+              _buildSlotChips('Evening', '5 PM - 11 PM', [
+                '5:00 PM - 6:00 PM',
+                '6:00 PM - 7:00 PM',
+                '7:00 PM - 8:00 PM',
+                '8:00 PM - 9:00 PM',
+                '9:00 PM - 10:00 PM',
+                '10:00 PM - 11:00 PM'
+              ], snapshot.data!),
+
+            ],
+          );
+        } else {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select Slots:',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+              ),
+              SizedBox(height: 10),
+              // Early Morning Slot
+              _buildSlotChips('Early Morning', '12 AM - 5 AM', [
+                '12:00 AM - 1:00 AM',
+                '1:00 AM - 2:00 AM',
+                '2:00 AM - 3:00 AM',
+                '3:00 AM - 4:00 AM',
+                '4:00 AM - 5:00 AM'
+              ], snapshot.data!),
+              SizedBox(height: 10),
+// Morning Slot
+              _buildSlotChips('Morning', '5 AM - 11 AM', [
+                '5:00 AM - 6:00 AM',
+                '6:00 AM - 7:00 AM',
+                '7:00 AM - 8:00 AM',
+                '8:00 AM - 9:00 AM',
+                '9:00 AM - 10:00 AM',
+                '10:00 AM - 11:00 AM'
+              ], snapshot.data!),
+              SizedBox(height: 10),
+// Afternoon Slot
+              _buildSlotChips('Afternoon', '12 PM - 5 PM', [
+                '12:00 PM - 1:00 PM',
+                '1:00 PM - 2:00 PM',
+                '2:00 PM - 3:00 PM',
+                '3:00 PM - 4:00 PM',
+                '4:00 PM - 5:00 PM'
+              ], snapshot.data!),
+              SizedBox(height: 10),
+// Evening Slot
+              _buildSlotChips('Evening', '5 PM - 11 PM', [
+                '5:00 PM - 6:00 PM',
+                '6:00 PM - 7:00 PM',
+                '7:00 PM - 8:00 PM',
+                '8:00 PM - 9:00 PM',
+                '9:00 PM - 10:00 PM',
+                '10:00 PM - 11:00 PM'
+              ], snapshot.data!),
+
+            ],
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildSlotChips(String title, String subtitle, List<String> slots, List<String> bookedSlots) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Select a Date:',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        SizedBox(height: 10),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.blueGrey[900],
-            borderRadius: BorderRadius.circular(15),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 8,
-                spreadRadius: 2,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          child: TableCalendar(
-            firstDay: DateTime.now(),
-            lastDay: DateTime(2100),
-            focusedDay: selectedDate ?? DateTime.now(),
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                selectedDate = selectedDay;
-              });
-            },
-            selectedDayPredicate: (day) {
-              return isSameDay(selectedDate, day);
-            },
-            calendarStyle: CalendarStyle(
-              selectedDecoration: BoxDecoration(
-                color: Colors.orange,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              todayDecoration: BoxDecoration(
-                color: Colors.lightBlue,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              markerDecoration: BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-              defaultDecoration: BoxDecoration(
-                color: Colors.blueGrey[700],
-                borderRadius: BorderRadius.circular(10),
-              ),
-              weekendDecoration: BoxDecoration(
-                color: Colors.blueGrey[800],
-                borderRadius: BorderRadius.circular(10),
-              ),
-              holidayDecoration: BoxDecoration(
-                color: Colors.green,
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
+        Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey)),
+        Wrap(
+          spacing: 8.0,
+          children: slots.map((slot) {
+            bool isBooked = bookedSlots.contains(slot); // Check if slot is booked
+            return ChoiceChip(
+              label: Text(slot),
+              selected: selectedSlots.contains(slot),
+              selectedColor: isBooked ? Colors.red : Colors.blue,
+              disabledColor: Colors.grey,
+              onSelected: isBooked
+                  ? null // Disable the chip if it's booked
+                  : (selected) {
+                setState(() {
+                  selectedSlots.contains(slot) ? selectedSlots.remove(slot) : selectedSlots.add(slot);
+                });
+              },
+            );
+          }).toList(),
         ),
       ],
     );
   }
 
-  Widget _buildTimeSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Select Time:',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildTimeCard(
-              title: 'Start Time',
-              timeText: selectedStartTime != null
-                  ? selectedStartTime!.format(context)
-                  : 'Select Start Time',
-              onTap: () async {
-                final startTime = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.now(),
-                );
-                if (startTime != null) {
-                  setState(() {
-                    selectedStartTime = startTime;
-                  });
-                }
-              },
-            ),
-            _buildTimeCard(
-              title: 'End Time',
-              timeText: selectedEndTime != null
-                  ? selectedEndTime!.format(context)
-                  : 'Select End Time',
-              onTap: () async {
-                final endTime = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.now(),
-                );
-                if (endTime != null) {
-                  setState(() {
-                    selectedEndTime = endTime;
-                  });
-                }
+  double _getHoursForSlot(String slot) {
+    // Assuming each slot is for 1 hour. You can adjust this if needed.
+    return 1.0;
+  }
+
+  void _showErrorDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Error'),
+          content: Text('This time slot is already booked.'),
+          actions: [
+            TextButton(
+              child: Text('Close'),
+              onPressed: () {
+                Navigator.of(context).pop();
               },
             ),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 
-
-  Widget _buildTimeCard({required String title, required String timeText, required VoidCallback onTap}) {
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        foregroundColor: Colors.white, backgroundColor: Colors.blueGrey[800],
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-      ),
-      onPressed: onTap,
-      child: Column(
-        children: [
-          Text(title, style: TextStyle(fontSize: 16)),
-          SizedBox(height: 5),
-          Text(timeText, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        ],
-      ),
+  void _showCancellationDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Booking Canceled'),
+          content: Text('Your booking has been canceled.'),
+          actions: [
+            TextButton(
+              child: Text('Okay'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
