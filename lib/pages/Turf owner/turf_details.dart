@@ -166,6 +166,64 @@ class TurfDetails extends StatelessWidget {
                         ],
                       ),
 
+                      SizedBox(height: 16),
+
+                      Text(
+                        'Bookings:',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('turfs')
+                            .doc(turfId)
+                            .collection('bookings')
+                            .snapshots(),
+                        builder: (context, AsyncSnapshot<QuerySnapshot> bookingSnapshot) {
+                          if (bookingSnapshot.connectionState == ConnectionState.waiting) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+
+                          if (bookingSnapshot.hasError) {
+                            return Text('Error loading bookings.');
+                          }
+
+                          if (!bookingSnapshot.hasData || bookingSnapshot.data!.docs.isEmpty) {
+                            return Text('No bookings available.');
+                          }
+
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            physics: NeverScrollableScrollPhysics(),
+                            itemCount: bookingSnapshot.data!.docs.length,
+                            itemBuilder: (context, index) {
+                              var bookingData = bookingSnapshot.data!.docs[index].data() as Map<String, dynamic>;
+
+                              return Card(
+                                elevation: 4,
+                                margin: EdgeInsets.symmetric(vertical: 8),
+                                child: ListTile(
+                                  title: Text('Booking by: ${bookingData['userName'] ?? 'N/A'}'),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Amount: ₹${bookingData['amount']?.toStringAsFixed(2) ?? 'N/A'}'),
+                                      Text('Booking Date: ${bookingData['bookingDate'] ?? 'N/A'}'),
+                                      Text('Selected Ground: ${bookingData['selectedGround'] ?? 'N/A'}'),
+                                      Text('Total Hours: ${bookingData['totalHours'] ?? 'N/A'}'),
+                                      SizedBox(height: 4),
+                                      Text('Slots:'),
+                                      ...List.generate(
+                                        bookingData['bookingSlots']?.length ?? 0,
+                                            (slotIndex) => Text(bookingData['bookingSlots'][slotIndex] ?? 'N/A'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
