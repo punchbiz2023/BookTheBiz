@@ -2,9 +2,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:odp/pages/BookingFailedPage.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:table_calendar/table_calendar.dart';
-
+import 'BookingSuccessPage.dart';
+import 'BookingFailedPage.dart';
 class BookingPage extends StatefulWidget {
   final String documentId;
   final String documentname;
@@ -23,34 +25,18 @@ class BookingPage extends StatefulWidget {
 
 class _BookingPageState extends State<BookingPage> {
   DateTime? selectedDate;
-  List<String> selectedSlots = []; // Allow multiple selections
+  List<String> selectedSlots = [];
   bool timeSlotBooked = false;
   double price = 0.0;
   double? totalHours = 0.0;
   bool isBookingConfirmed = false;
-
+  String? selectedGround;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<Map<String, dynamic>?> _fetchDetails() async {
-    try {
-      DocumentSnapshot<Map<String, dynamic>> documentSnapshot =
-      await _firestore.collection('turfs').doc(widget.documentId).get();
 
-      if (documentSnapshot.exists) {
-        price = documentSnapshot.data()?['price'] ?? 0.0;
-        return documentSnapshot.data();
-      } else {
-        print('Document does not exist');
-        return null;
-      }
-    } catch (e) {
-      print('Error fetching document: $e');
-      return null;
-    }
-  }
-
-  Future<List<String>> _fetchBookedSlots() async {
+  Future<Map<String, List<String>>> _fetchBookedSlots() async {
     try {
+      // Fetch the booking documents for the selected date
       QuerySnapshot<Map<String, dynamic>> bookingSnapshot = await _firestore
           .collection('turfs')
           .doc(widget.documentId)
@@ -58,17 +44,32 @@ class _BookingPageState extends State<BookingPage> {
           .where('bookingDate', isEqualTo: DateFormat('yyyy-MM-dd').format(selectedDate!))
           .get();
 
-      List<String> bookedSlots = [];
+      // Initialize a map to hold the ground names and their corresponding booking slots
+      Map<String, List<String>> bookedSlotsMap = {};
+
+      // Iterate through each booking document
       for (var doc in bookingSnapshot.docs) {
+        // Fetch the selected ground and booking slots
+        String selectedGround = doc.data()['selectedGround']; // Adjust this based on your data structure
         List<String> slots = List<String>.from(doc.data()['bookingSlots']);
-        bookedSlots.addAll(slots);
+
+        // If the ground name is not already in the map, initialize it
+        if (!bookedSlotsMap.containsKey(selectedGround)) {
+          bookedSlotsMap[selectedGround] = [];
+        }
+
+        // Add the booking slots to the corresponding ground
+        bookedSlotsMap[selectedGround]!.addAll(slots);
       }
-      return bookedSlots;
+
+      return bookedSlotsMap;
     } catch (e) {
       print('Error fetching booked slots: $e');
-      return [];
+      return {};
     }
   }
+
+
 
   Future<String> _fetchUserName(String userId) async {
     try {
@@ -112,6 +113,7 @@ class _BookingPageState extends State<BookingPage> {
                         isBookingConfirmed = true;
                       });
                       _showBookingDialog();
+
                     } else {
                       _showErrorDialog(context);
                     }
@@ -150,9 +152,9 @@ class _BookingPageState extends State<BookingPage> {
       return; // Exit if the user is not logged in
     }
 
-    if (selectedDate == null || selectedSlots.isEmpty) { // Check if slots are selected
+    if (selectedDate == null || selectedSlots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please select a date and at least one slot')),
+        SnackBar(content: Text('These slots has been already booked try for new slots')),
       );
       return;
     }
@@ -160,7 +162,12 @@ class _BookingPageState extends State<BookingPage> {
     // Calculate total amount and total hours
     double totalAmount = 0.0;
     totalHours = 0.0;
-
+    //price = _fetchDetails() as double;
+    DocumentSnapshot turfSnapshot = await FirebaseFirestore.instance
+        .collection('turfs')
+        .doc(widget.documentId)
+        .get();
+    price = turfSnapshot['price'];
     for (String slot in selectedSlots) {
       double hours = _getHoursForSlot(slot);
       totalHours = (totalHours ?? 0) + hours;
@@ -197,9 +204,13 @@ class _BookingPageState extends State<BookingPage> {
             TextButton(
               child: Text('Confirm Booking', style: TextStyle(color: Colors.green)),
               onPressed: () async {
-                Navigator.of(context).pop(); // Close the dialog
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BookingSuccessPage(),
+                  ),
+                );// Close the dialog
 
-                // Store the booking in Firestore under the specific turf's bookings subcollection
         // Store the booking in Firestore under the specific turf's bookings subcollection
         Map<String, dynamic> bookingData = {
         'userId': currentUser?.uid ?? '',
@@ -210,6 +221,7 @@ class _BookingPageState extends State<BookingPage> {
         'amount': totalAmount,
         'turfId': widget.documentId,
         'turfName': widget.documentname,
+          'selectedGround': selectedGround,
         };
 
         try {
@@ -225,29 +237,30 @@ class _BookingPageState extends State<BookingPage> {
 
         setState(() {
         timeSlotBooked = true;
+
         });
 
         // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-        content: Text('Booking confirmed successfully!'),
-        backgroundColor: Colors.green, // Set background color to green
-        ),
-        );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                  content: Text('Booking confirmed successfully!'),
+                  backgroundColor: Colors.green, // Set background color to green
+                  ),
+                );
 
         // Navigate to the home screen after a short delay
-        Future.delayed(Duration(seconds: 2), () {
-        Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => HomePage1()), // Replace HomeScreen with your home screen widget
-        (Route<dynamic> route) => false, // Remove all previous routes
-        );
-        });
-        } catch (e) {
-        print('Error booking: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to confirm booking')),
-        );
-        }
+                  Future.delayed(Duration(seconds: 2), () {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => BookingSuccessPage()), // Replace HomeScreen with your home screen widget
+                    (Route<dynamic> route) => false, // Remove all previous routes
+                  );
+                  });
+                    } catch (e) {
+                      print('Error booking: $e');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to confirm booking')),
+                  );
+                }
               }
             ),
           ],
@@ -256,155 +269,364 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
+  int bookingSlotsForSelectedDay = 0; // Track booked slots for the selected day
+
+// Calendar widget with click functionality to update booking status
   Widget _buildCalendar() {
-    return TableCalendar(
-      firstDay: DateTime.utc(2022, 1, 1),
-      lastDay: DateTime.utc(2025, 12, 31),
-      focusedDay: selectedDate ?? DateTime.now(),
-      selectedDayPredicate: (day) {
-        return isSameDay(selectedDate, day);
-      },
-      onDaySelected: (selectedDay, focusedDay) {
-        if (selectedDay.isAfter(DateTime.now())) {
-          setState(() {
-            selectedDate = selectedDay;
-            selectedSlots.clear(); // Clear selected slots when date changes
-          });
+    return FutureBuilder(
+      future: getBookedSlotsPerDate(widget.documentId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return CircularProgressIndicator(); // Show loading indicator
+        } else if (snapshot.hasError) {
+          return Text('Error fetching bookings: ${snapshot.error}');
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('You cannot book for today or past dates')),
+          Map<DateTime, int> bookingCounts = snapshot.data ?? {}; // Fetch booking counts
+
+          return Column(
+            children: [
+              TableCalendar(
+                firstDay: DateTime.utc(2022, 1, 1),
+                lastDay: DateTime.utc(2025, 12, 31),
+                focusedDay: selectedDate ?? DateTime.now(),
+                selectedDayPredicate: (day) => isSameDay(selectedDate, day),
+                onDaySelected: (selectedDay, focusedDay) {
+                  if (selectedDay.isAfter(DateTime.now())) {
+                    setState(() {
+                      selectedDate = selectedDay;
+                      // Update booking slots based on the selected day
+                      bookingSlotsForSelectedDay = bookingCounts[selectedDay] ?? 0;
+                    });
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('You cannot book for today or past dates')),
+                    );
+                  }
+                },
+                enabledDayPredicate: (day) => day.isAfter(DateTime.now()), // Disable today & past
+                calendarBuilders: CalendarBuilders(
+                  defaultBuilder: (context, day, focusedDay) {
+                    if (bookingCounts.containsKey(day)) {
+                      int bookedSlots = bookingCounts[day] ?? 0;
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: _getColorForBookingSlots(bookedSlots), // Slot-based color
+                          shape: BoxShape.circle,
+                        ),
+                        margin: const EdgeInsets.all(6.0),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '${day.day}',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      );
+                    }
+                    return null;
+                  },
+                ),
+                calendarStyle: CalendarStyle(
+                  selectedDecoration: BoxDecoration(
+                    color: Colors.green, // Selected date color
+                    shape: BoxShape.circle,
+                  ),
+                  todayDecoration: BoxDecoration(
+                    color: Colors.blue, // Today's date color
+                    shape: BoxShape.circle,
+                  ),
+                  defaultDecoration: BoxDecoration(shape: BoxShape.circle),
+                ),
+                daysOfWeekVisible: true,
+                headerStyle: HeaderStyle(formatButtonVisible: false),
+              ),
+              SizedBox(height: 16),
+              _buildBookingStatus(),
+            ],
           );
         }
       },
-      enabledDayPredicate: (day) {
-        return day.isAfter(DateTime.now()); // Disable today and all previous dates
-      },
-      calendarStyle: CalendarStyle(
-        selectedDecoration: BoxDecoration(
-          color: Colors.green, // Set the selected date color to green
-          shape: BoxShape.circle, // Shape of the selected date (circle or rectangle)
-        ),
-        todayDecoration: BoxDecoration(
-          color: Colors.blue, // Set the color for today's date (if you need it)
-          shape: BoxShape.circle,
-        ),
-        defaultDecoration: BoxDecoration(
-          shape: BoxShape.circle, // Set shape for the default unselected days
-        ),
-      ),
     );
   }
 
+// Function to determine color based on booked slots
+  Color _getColorForBookingSlots(int bookedSlots) {
+    if (bookedSlots <= 2) {
+      return Colors.green; // 0-2 slots booked
+    } else if (bookedSlots <= 5) {
+      return Colors.yellow; // 3-5 slots booked
+    } else if (bookedSlots <= 9) {
+      return Colors.orange; // 6-9 slots booked
+    } else {
+      return Colors.red; // 10 or more slots booked
+    }
+  }
+
+  Widget _buildBookingStatus() {
+    const int maxSlotsPerDay = 10; // Maximum slots per day
+
+    if (selectedDate == null) {
+      return Text("Select a date to see booking status");
+    }
+    double bookingPercentage = (bookingSlotsForSelectedDay / maxSlotsPerDay) * 100;
+    int availableSlots = maxSlotsPerDay - bookingSlotsForSelectedDay;
+    Color statusColor;
+    String statusText;
+    // Determine the booking status based on number of booked slots
+    if (bookingSlotsForSelectedDay == 0) {
+      statusColor = Colors.green;
+      statusText = "Available (0/$maxSlotsPerDay slots booked)";
+    } else if (bookingPercentage >= 100) {
+      statusColor = Colors.red;
+      statusText = "Fully Booked ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
+    } else if (bookingPercentage >= 50) {
+      statusColor = Colors.orange;
+      statusText =
+      "Partially Booked ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
+    } else {
+      statusColor = Colors.yellow;
+      statusText =
+      "Available ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          'Booking Status: ',
+          style: TextStyle(fontSize: 16),
+        ),
+        Container(
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(
+            color: statusColor,
+            shape: BoxShape.circle,
+          ),
+        ),
+        SizedBox(width: 8),
+        Text(
+          statusText,
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+
+
+// Fetch booked slots per date from Firestore for the given turf
+  Future<Map<DateTime, int>> getBookedSlotsPerDate(String turfId) async {
+    Map<DateTime, int> bookingCounts = {};
+
+    try {
+      QuerySnapshot bookingsSnapshot = await FirebaseFirestore.instance
+          .collection('turfs')
+          .doc(turfId)
+          .collection('bookings')
+          .get();
+
+      for (QueryDocumentSnapshot bookingDoc in bookingsSnapshot.docs) {
+        var bookingDateRaw = bookingDoc['bookingDate'];
+        DateTime bookingDate;
+
+        if (bookingDateRaw is String) {
+          bookingDate = DateTime.parse(bookingDateRaw);
+        } else if (bookingDateRaw is Timestamp) {
+          bookingDate = bookingDateRaw.toDate();
+        } else {
+          print('Unknown booking date format: $bookingDateRaw');
+          continue;
+        }
+
+        // Count the number of booked slots (length of bookingSlots array)
+        List<dynamic> bookingSlotsRaw = bookingDoc['bookingSlots'] ?? [];
+        int bookingSlotsCount = bookingSlotsRaw.length;
+
+        if (!bookingCounts.containsKey(bookingDate)) {
+          bookingCounts[bookingDate] = 0;
+        }
+        bookingCounts[bookingDate] = (bookingCounts[bookingDate] ?? 0) + bookingSlotsCount;
+      }
+    } catch (e) {
+      print('Error fetching bookings: $e');
+    }
+
+    return bookingCounts;
+  }
+
+
+
   Widget _buildSlotSelector() {
+    return FutureBuilder<Map<String, List<String>>>(
+      future: selectedDate != null ? _fetchBookedSlots() : Future.value({}),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Error fetching booked slots: ${snapshot.error}'));
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          // When no data is available
+          return _buildSlotSelectionColumn([]);
+        } else {
+          // When data is successfully fetched
+          final bookedSlotsMap = snapshot.data!;
+          return _buildSlotSelectionColumn(bookedSlotsMap[selectedGround] ?? []);
+        }
+      },
+    );
+  }
+
+
+  Column _buildSlotSelectionColumn(List<String> bookedSlots) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildGroundSelector(), // Add ground selector
+        SizedBox(height: 20),
+        Text(
+          'Select Slots:',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+        ),
+        SizedBox(height: 10),
+        // Early Morning Slot
+        _buildSlotChips('Early Morning', '12 AM - 5 AM', [
+          '12:00 AM - 1:00 AM',
+          '1:00 AM - 2:00 AM',
+          '2:00 AM - 3:00 AM',
+          '3:00 AM - 4:00 AM',
+          '4:00 AM - 5:00 AM',
+        ], bookedSlots),
+        SizedBox(height: 10),
+        // Morning Slot
+        _buildSlotChips('Morning', '5 AM - 11 AM', [
+          '5:00 AM - 6:00 AM',
+          '6:00 AM - 7:00 AM',
+          '7:00 AM - 8:00 AM',
+          '8:00 AM - 9:00 AM',
+          '9:00 AM - 10:00 AM',
+          '10:00 AM - 11:00 AM',
+        ], bookedSlots),
+        SizedBox(height: 10),
+        // Afternoon Slot
+        _buildSlotChips('Afternoon', '12 PM - 5 PM', [
+          '12:00 PM - 1:00 PM',
+          '1:00 PM - 2:00 PM',
+          '2:00 PM - 3:00 PM',
+          '3:00 PM - 4:00 PM',
+          '4:00 PM - 5:00 PM',
+        ], bookedSlots),
+        SizedBox(height: 10),
+        // Evening Slot
+        _buildSlotChips('Evening', '5 PM - 11 PM', [
+          '5:00 PM - 6:00 PM',
+          '6:00 PM - 7:00 PM',
+          '7:00 PM - 8:00 PM',
+          '8:00 PM - 9:00 PM',
+          '9:00 PM - 10:00 PM',
+          '10:00 PM - 11:00 PM',
+        ], bookedSlots),
+      ],
+    );
+  }
+
+
+  Widget _buildGroundSelector() {
     return FutureBuilder<List<String>>(
-      future: selectedDate != null ? _fetchBookedSlots() : Future.value([]),
+      future: _fetchAvailableGrounds(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return CircularProgressIndicator();
         } else if (snapshot.hasError) {
-          return Text('Error fetching booked slots: ${snapshot.error}');
+          return Text('Error fetching available grounds: ${snapshot.error}');
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Select Slots:',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
-              ),
-              SizedBox(height: 10),
-              // Early Morning Slot
-              _buildSlotChips('Early Morning', '12 AM - 5 AM', [
-                '12:00 AM - 1:00 AM',
-                '1:00 AM - 2:00 AM',
-                '2:00 AM - 3:00 AM',
-                '3:00 AM - 4:00 AM',
-                '4:00 AM - 5:00 AM'
-              ], snapshot.data!),
-              SizedBox(height: 10),
-// Morning Slot
-              _buildSlotChips('Morning', '5 AM - 11 AM', [
-                '5:00 AM - 6:00 AM',
-                '6:00 AM - 7:00 AM',
-                '7:00 AM - 8:00 AM',
-                '8:00 AM - 9:00 AM',
-                '9:00 AM - 10:00 AM',
-                '10:00 AM - 11:00 AM'
-              ], snapshot.data!),
-              SizedBox(height: 10),
-// Afternoon Slot
-              _buildSlotChips('Afternoon', '12 PM - 5 PM', [
-                '12:00 PM - 1:00 PM',
-                '1:00 PM - 2:00 PM',
-                '2:00 PM - 3:00 PM',
-                '3:00 PM - 4:00 PM',
-                '4:00 PM - 5:00 PM'
-              ], snapshot.data!),
-              SizedBox(height: 10),
-// Evening Slot
-              _buildSlotChips('Evening', '5 PM - 11 PM', [
-                '5:00 PM - 6:00 PM',
-                '6:00 PM - 7:00 PM',
-                '7:00 PM - 8:00 PM',
-                '8:00 PM - 9:00 PM',
-                '9:00 PM - 10:00 PM',
-                '10:00 PM - 11:00 PM'
-              ], snapshot.data!),
-
-            ],
-          );
+          return Text('No grounds available');
         } else {
+          List<String> availableGrounds = snapshot.data!;
+
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Select Slots:',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+                'Select Your Ground:',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.indigo,  // Changed to a more vibrant color
+                ),
               ),
-              SizedBox(height: 10),
-              // Early Morning Slot
-              _buildSlotChips('Early Morning', '12 AM - 5 AM', [
-                '12:00 AM - 1:00 AM',
-                '1:00 AM - 2:00 AM',
-                '2:00 AM - 3:00 AM',
-                '3:00 AM - 4:00 AM',
-                '4:00 AM - 5:00 AM'
-              ], snapshot.data!),
-              SizedBox(height: 10),
-// Morning Slot
-              _buildSlotChips('Morning', '5 AM - 11 AM', [
-                '5:00 AM - 6:00 AM',
-                '6:00 AM - 7:00 AM',
-                '7:00 AM - 8:00 AM',
-                '8:00 AM - 9:00 AM',
-                '9:00 AM - 10:00 AM',
-                '10:00 AM - 11:00 AM'
-              ], snapshot.data!),
-              SizedBox(height: 10),
-// Afternoon Slot
-              _buildSlotChips('Afternoon', '12 PM - 5 PM', [
-                '12:00 PM - 1:00 PM',
-                '1:00 PM - 2:00 PM',
-                '2:00 PM - 3:00 PM',
-                '3:00 PM - 4:00 PM',
-                '4:00 PM - 5:00 PM'
-              ], snapshot.data!),
-              SizedBox(height: 10),
-// Evening Slot
-              _buildSlotChips('Evening', '5 PM - 11 PM', [
-                '5:00 PM - 6:00 PM',
-                '6:00 PM - 7:00 PM',
-                '7:00 PM - 8:00 PM',
-                '8:00 PM - 9:00 PM',
-                '9:00 PM - 10:00 PM',
-                '10:00 PM - 11:00 PM'
-              ], snapshot.data!),
-
+              SizedBox(height: 15),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.indigo,  // Border color to match the text color
+                    width: 1.5,
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: selectedGround,  // Display the selected ground in the dropdown
+                    dropdownColor: Colors.indigo.shade50,  // Background color for the dropdown
+                    hint: Text(
+                      'Select your ground',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    isExpanded: true,
+                    icon: Icon(Icons.arrow_drop_down, color: Colors.indigo),  // Customized the dropdown icon color
+                    items: availableGrounds.map((ground) {
+                      return DropdownMenuItem<String>(
+                        value: ground,
+                        child: Text(
+                          ground,
+                          style: TextStyle(fontSize: 18, color: Colors.black87),  // Increased font size and color contrast
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        selectedGround = newValue;  // Set the selected ground when chosen
+                      });
+                    },
+                  ),
+                ),
+              ),
+              if (selectedGround != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 20),
+                  child: Text(
+                    'You selected: $selectedGround',  // Feedback text after selection
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.indigo,
+                    ),
+                  ),
+                ),
             ],
           );
         }
       },
     );
   }
+
+  Future<List<String>> _fetchAvailableGrounds() async {
+    DocumentSnapshot snapshot = await FirebaseFirestore.instance
+        .collection('turfs')
+        .doc(widget.documentId) // Use turfId to get the specific document
+        .get();
+
+    List<String> grounds = [];
+    if (snapshot.exists) {
+      // Get the availableGrounds from the document
+      List<dynamic> availableGroundsList = snapshot['availableGrounds'];
+      grounds = availableGroundsList.map((ground) => ground.toString()).toList();
+    }
+
+    return grounds;
+  }
+
 
   Widget _buildSlotChips(String title, String subtitle, List<String> slots, List<String> bookedSlots) {
     return Column(
@@ -461,22 +683,11 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   void _showCancellationDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Booking Canceled'),
-          content: Text('Your booking has been canceled.'),
-          actions: [
-            TextButton(
-              child: Text('Okay'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BookingFailedPage(),
+      ),
     );
   }
 }

@@ -428,7 +428,7 @@ class _DetailsPageState extends State<DetailsPage> {
                 snapshot.data!['availableGrounds'] ?? [];
             List<dynamic> facilities = snapshot.data!['facilities'] ?? [];
             //double price = snapshot.data!['price'] ?? 0.0; // Fetch the price
-
+            String status = snapshot.data!['status'] ?? 'Opened';
             return CustomScrollView(
               slivers: [
                 SliverAppBar(
@@ -486,42 +486,56 @@ class _DetailsPageState extends State<DetailsPage> {
                 SizedBox(height: 20),
                 SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
-                onPressed: () {
-                // Navigate to BookingPage
-                  User? currentUser = FirebaseAuth.instance.currentUser;
-                  if (currentUser == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('User not logged in')),
-                    );
-                    return;
-                  }
+                  child: ElevatedButton(
+                    onPressed: () {
+                      // Check if the turf is available (not closed)
+                      if (status.toLowerCase() == 'closed') {
+                        // Show a message when the turf is unavailable
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Turf is currently unavailable, please check again later!')),
+                        );
+                        return; // Do not proceed if the turf is unavailable
+                      }
 
-                  String documentId = widget.documentId; // TurfId is the document ID you're passing to DetailsPage
-                  String UserId = currentUser.uid;
-                  String documentname = widget.documentname;
-                Navigator.push(
-                context,
-                MaterialPageRoute(
-                builder: (context) => BookingPage(documentId:documentId,documentname: documentname,userId: UserId),
+                      // Navigate to BookingPage if the turf is available
+                      User? currentUser = FirebaseAuth.instance.currentUser;
+                      if (currentUser == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('User not logged in')),
+                        );
+                        return;
+                      }
+
+                      String documentId = widget.documentId; // TurfId is the document ID you're passing to DetailsPage
+                      String userId = currentUser.uid;
+                      String documentname = widget.documentname;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => BookingPage(documentId: documentId, documentname: documentname, userId: userId),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: status.toLowerCase() == 'closed'
+                          ? Colors.red // Disabled color when turf is closed
+                          : Colors.blueAccent, // Active color when turf is available
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                      elevation: 5,
+                    ),
+                    child: Text(
+                      status.toLowerCase() == 'closed'
+                          ? '⚠️ Turf is unavailable, please check later ⚠️ '
+                          : 'Book Now',
+                      style: TextStyle(fontSize: 16,fontWeight: FontWeight.bold),
+                    ),
+                  ),
+
                 ),
-                );
-                },
-                style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.blueAccent,
-                padding: EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(50),
-              ),
-            elevation: 5,
-            ),
-          child: Text(
-          'Book Now',
-          style: TextStyle(fontSize: 18),
-          ),
-          ),
-          ),
           SizedBox(height: 20),
           ],
           ),
