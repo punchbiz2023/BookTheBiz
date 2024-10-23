@@ -11,6 +11,7 @@ import '../profile.dart';
 import '../settings.dart';
 import 'turfadd.dart';
 import 'turf_details.dart';
+
 class HomePage2 extends StatefulWidget {
   User? user;
 
@@ -69,7 +70,8 @@ class _HomePage2State extends State<HomePage2> {
 
   Future<void> _fetchCurrentLocation() async {
     try {
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
       setState(() {
         _currentPosition = position;
       });
@@ -164,7 +166,9 @@ class _HomePage2State extends State<HomePage2> {
                   return Center(child: CircularProgressIndicator());
                 }
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(child: Text('No turfs available', style: TextStyle(color: Colors.white)));
+                  return Center(
+                      child: Text('No turfs available',
+                          style: TextStyle(color: Colors.white)));
                 }
 
                 final turfDocs = snapshot.data!.docs;
@@ -173,7 +177,8 @@ class _HomePage2State extends State<HomePage2> {
                   shrinkWrap: true,
                   itemCount: turfDocs.length,
                   itemBuilder: (context, index) {
-                    final turfData = turfDocs[index].data() as Map<String, dynamic>;
+                    final turfData =
+                    turfDocs[index].data() as Map<String, dynamic>;
                     return _buildTurfCard(turfData);
                   },
                 );
@@ -182,16 +187,7 @@ class _HomePage2State extends State<HomePage2> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => BookingPage(documentId:'unknown',documentname: 'unknown', userId: 'unknown')),
-          );
-        },
-        backgroundColor: Colors.blueAccent,
-        child: Icon(Icons.add, color: Colors.white),
-      ),
+      // Removed FloatingActionButton here
     );
   }
 
@@ -232,7 +228,8 @@ class _HomePage2State extends State<HomePage2> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ProfilePage(user: widget.user),
+                        builder: (context) =>
+                            ProfilePage(user: widget.user),
                       ),
                     );
                   },
@@ -305,12 +302,14 @@ class _HomePage2State extends State<HomePage2> {
           leading: ClipRRect(
             borderRadius: BorderRadius.circular(8.0),
             child: turfData['imageUrl'] != null
-                ? Image.network(turfData['imageUrl'], width: 50, height: 50, fit: BoxFit.cover)
+                ? Image.network(turfData['imageUrl'],
+                width: 50, height: 50, fit: BoxFit.cover)
                 : Icon(Icons.image, size: 50, color: Colors.grey),
           ),
           title: Text(
             turfData['name'] ?? 'No Name',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold),
           ),
           subtitle: Text(
             turfData['description'] ?? 'No Description',
@@ -333,18 +332,21 @@ class _HomePage2State extends State<HomePage2> {
     );
   }
 
-
   // Drawer item creation helper
   Widget _createDrawerItem({
     required IconData icon,
     required String text,
-    required VoidCallback onTap,
+    required GestureTapCallback onTap,
   }) {
     return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(
-        text,
-        style: TextStyle(color: Colors.white),
+      title: Row(
+        children: [
+          Icon(icon, color: Colors.white),
+          Padding(
+            padding: EdgeInsets.only(left: 8.0),
+            child: Text(text, style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
       onTap: onTap,
     );
