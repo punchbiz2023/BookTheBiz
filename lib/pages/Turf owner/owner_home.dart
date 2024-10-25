@@ -105,18 +105,22 @@ class _HomePage2State extends State<HomePage2> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                icon: Icon(Icons.menu, color: Colors.white),
+                icon: Icon(Icons.account_circle, color: Colors.white),
                 onPressed: () {
-                  _scaffoldKey.currentState?.openDrawer();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ProfilePage(user: widget.user),
+                    ),
+                  );
                 },
               ),
-              _buildLocationWidget(),
+              // _buildLocationWidget(),
             ],
           ),
         ),
         automaticallyImplyLeading: false,
       ),
-      drawer: _buildDrawer(),
       backgroundColor: Color(0xff192028),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -187,104 +191,19 @@ class _HomePage2State extends State<HomePage2> {
           ],
         ),
       ),
-      // Removed FloatingActionButton here
     );
   }
 
   // Build location widget
-  Widget _buildLocationWidget() {
-    if (_currentPosition == null) {
-      return CircularProgressIndicator(); // Placeholder
-    }
-    return Text(
-      '${_currentPosition!.latitude.toStringAsFixed(2)}, ${_currentPosition!.longitude.toStringAsFixed(2)}',
-      style: TextStyle(color: Colors.white, fontSize: 16),
-    );
-  }
-
-  // Build drawer with navigation options
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: Colors.black,
-      child: Column(
-        children: [
-          DrawerHeader(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blueAccent, Colors.purpleAccent],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 40,
-                  backgroundImage: AssetImage('assets/profile_picture.png'),
-                ),
-                SizedBox(width: 20),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            ProfilePage(user: widget.user),
-                      ),
-                    );
-                  },
-                  child: Text(
-                    widget.user?.displayName ?? 'John Doe',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _createDrawerItem(
-                  icon: Icons.home,
-                  text: 'Home',
-                  onTap: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => HomePage1(user: widget.user),
-                      ),
-                    );
-                  },
-                ),
-                _createDrawerItem(
-                  icon: Icons.settings,
-                  text: 'Settings',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => SettingsPage()),
-                    );
-                  },
-                ),
-                _createDrawerItem(
-                  icon: Icons.logout,
-                  text: 'Logout',
-                  onTap: () {
-                    _logout();
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Widget _buildLocationWidget() {
+  //   if (_currentPosition == null) {
+  //     return CircularProgressIndicator(); // Placeholder
+  //   }
+  //   return Text(
+  //     '${_currentPosition!.latitude.toStringAsFixed(2)}, ${_currentPosition!.longitude.toStringAsFixed(2)}',
+  //     style: TextStyle(color: Colors.white, fontSize: 16),
+  //   );
+  // }
 
   // Build turf card
   Widget _buildTurfCard(Map<String, dynamic> turfData) {
@@ -329,26 +248,6 @@ class _HomePage2State extends State<HomePage2> {
           ),
         ),
       ),
-    );
-  }
-
-  // Drawer item creation helper
-  Widget _createDrawerItem({
-    required IconData icon,
-    required String text,
-    required GestureTapCallback onTap,
-  }) {
-    return ListTile(
-      title: Row(
-        children: [
-          Icon(icon, color: Colors.white),
-          Padding(
-            padding: EdgeInsets.only(left: 8.0),
-            child: Text(text, style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-      onTap: onTap,
     );
   }
 }
