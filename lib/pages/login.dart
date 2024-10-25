@@ -43,52 +43,53 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
         parent: controller1,
         curve: Curves.easeInOut,
       ),
-    )
-      ..addListener(() {
-        setState(() {});
-      })
-      ..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          controller1.reverse();
-        } else if (status == AnimationStatus.dismissed) {
-          controller1.forward();
-        }
-      });
+    )..addListener(() {
+      setState(() {});
+    })..addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        controller1.reverse();
+      } else if (status == AnimationStatus.dismissed) {
+        controller1.forward();
+      }
+    });
+
     animation2 = Tween<double>(begin: .02, end: .04).animate(
       CurvedAnimation(
         parent: controller1,
         curve: Curves.easeInOut,
       ),
     )..addListener(() {
-        setState(() {});
-      });
+      setState(() {});
+    });
 
     controller2 = AnimationController(
       vsync: this,
       duration: Duration(seconds: 5),
     );
-    animation3 = Tween<double>(begin: .41, end: .38).animate(CurvedAnimation(
-      parent: controller2,
-      curve: Curves.easeInOut,
-    ))
-      ..addListener(() {
-        setState(() {});
-      })
-      ..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          controller2.reverse();
-        } else if (status == AnimationStatus.dismissed) {
-          controller2.forward();
-        }
-      });
+
+    animation3 = Tween<double>(begin: .41, end: .38).animate(
+      CurvedAnimation(
+        parent: controller2,
+        curve: Curves.easeInOut,
+      ),
+    )..addListener(() {
+      setState(() {});
+    })..addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        controller2.reverse();
+      } else if (status == AnimationStatus.dismissed) {
+        controller2.forward();
+      }
+    });
+
     animation4 = Tween<double>(begin: 170, end: 190).animate(
       CurvedAnimation(
         parent: controller2,
         curve: Curves.easeInOut,
       ),
     )..addListener(() {
-        setState(() {});
-      });
+      setState(() {});
+    });
 
     Timer(Duration(milliseconds: 2500), () {
       controller1.forward();
@@ -113,9 +114,9 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
 
     try {
       final UserCredential userCredential =
-          await _auth.signInWithEmailAndPassword(
-              email: _emailController.text.trim(),
-              password: _passwordController.text.trim());
+      await _auth.signInWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim());
 
       if (userCredential.user != null) {
         // Get the user type
@@ -127,16 +128,6 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
         Map<String, dynamic> userData = await userRef
             .get()
             .then((DocumentSnapshot ds) => ds.data() as Map<String, dynamic>);
-
-        // String emailPattern =
-        //     r"/^([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/";
-        // RegExp regex = RegExp(emailPattern);
-        // String email = _emailController.text.trim();
-        //
-        // if (!regex.hasMatch(email)) {
-        //   Fluttertoast.showToast(msg: 'Invalid email format');
-        //   return;
-        // }
 
         if (userData['userType'] == 'Turf Owner') {
           // Navigate to the custom page
@@ -169,6 +160,21 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
       setState(() {
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    String email = _emailController.text.trim();
+    if (email.isEmpty) {
+      Fluttertoast.showToast(msg: 'Please enter your email address');
+      return;
+    }
+
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+      Fluttertoast.showToast(msg: 'Password reset email sent!');
+    } catch (e) {
+      Fluttertoast.showToast(msg: 'Error: ${e.toString()}');
     }
   }
 
@@ -237,6 +243,19 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
                 const SizedBox(height: 20),
                 component1(Icons.lock_outline, 'Password...', true, false,
                     _passwordController),
+                const SizedBox(height: 10),
+                // "Forgot Password?" text
+                GestureDetector(
+                  onTap: _forgotPassword, // Call the method here
+                  child: Text(
+                    'Forgot Password?',
+                    style: TextStyle(
+                      color: Colors.white,
+                      decoration: TextDecoration.underline,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
                 const SizedBox(height: 30),
                 ElevatedButton(
                   onPressed: _loading ? null : _login,
@@ -254,7 +273,7 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
                   child: _loading
                       ? const CircularProgressIndicator()
                       : const Text('Login',
-                          style: TextStyle(color: Colors.white)),
+                      style: TextStyle(color: Colors.white)),
                 ),
                 ElevatedButton(
                   onPressed: () {
@@ -268,7 +287,7 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
                   },
                   style: ElevatedButton.styleFrom(
                     foregroundColor: Colors.white,
-                    backgroundColor: Colors.grey.withOpacity(0.3), // Text color
+                    backgroundColor: Colors.white12, // Text color
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15),
                     ),
@@ -277,8 +296,7 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
                         vertical: 12,
                         horizontal: 12), // Adjust padding as needed
                   ),
-                  child: const Text('Create New Account',
-                      style: TextStyle(color: Colors.white)),
+                  child: const Text('Sign Up'),
                 ),
               ],
             ),
@@ -288,43 +306,24 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
     );
   }
 
-  Widget component1(IconData icon, String hintText, bool isPassword,
+  Widget component1(IconData iconData, String hintText, bool isObscure,
       bool isEmail, TextEditingController controller) {
-    Size size = MediaQuery.of(context).size;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(15),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaY: 15,
-          sigmaX: 15,
-        ),
-        child: Container(
-          height: size.width / 8,
-          width: size.width / 1.2,
-          alignment: Alignment.center,
-          padding: EdgeInsets.only(right: size.width / 30),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(.05),
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: TextField(
-            controller: controller,
-            style: TextStyle(color: Colors.white.withOpacity(.8)),
-            cursorColor: Colors.white,
-            obscureText: isPassword,
-            keyboardType:
-                isEmail ? TextInputType.emailAddress : TextInputType.text,
-            decoration: InputDecoration(
-              prefixIcon: Icon(
-                icon,
-                color: Colors.white.withOpacity(.7),
-              ),
-              border: InputBorder.none,
-              hintMaxLines: 1,
-              hintText: hintText,
-              hintStyle: TextStyle(color: Colors.white.withOpacity(.5)),
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        color: Colors.grey.withOpacity(.3),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: isObscure,
+        style: TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(color: Colors.white.withOpacity(.6)),
+          border: InputBorder.none,
+          prefixIcon: Icon(
+            iconData,
+            color: Colors.white.withOpacity(.6),
           ),
         ),
       ),
