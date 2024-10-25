@@ -2,13 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:odp/pages/profile.dart';
 import 'package:odp/widgets/firebaseimagecard.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'bookingpage.dart';
-import 'login.dart';
-import 'profile.dart';
-import 'settings.dart';
+
 
 class HomePage1 extends StatefulWidget {
   final User? user;
@@ -22,21 +20,7 @@ class HomePage1 extends StatefulWidget {
 class _HomePage1State extends State<HomePage1> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Position? _currentPosition;
-  String _searchText = ''; // This will hold the search text
-
-  @override
-  void initState() {
-    super.initState();
-    _checkAndFetchLocation();
-  }
-
-  Future<void> _checkAndFetchLocation() async {
-    if (await Permission.location.request().isGranted) {
-      _fetchCurrentLocation();
-    } else {
-      print('Location permission not granted');
-    }
-  }
+  String _searchText = '';
 
   Future<void> _fetchCurrentLocation() async {
     try {
@@ -50,21 +34,15 @@ class _HomePage1State extends State<HomePage1> {
     }
   }
 
-  Future<void> _logout() async {
-    try {
-      await FirebaseAuth.instance.signOut();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => LoginApp()),
-            (Route<dynamic> route) => false, // Remove all previous routes
-      );
-    } catch (e) {
-      print('Error logging out: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Logout failed. Please try again.')),
-      );
-    }
+  void _navigateToProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfilePage(user: widget.user),
+      ),
+    );
   }
+
   Stream<List<DocumentSnapshot>> _fetchTurfs() {
     return FirebaseFirestore.instance
         .collection('turfs')
@@ -92,12 +70,9 @@ class _HomePage1State extends State<HomePage1> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                icon: Icon(Icons.menu, color: Colors.white),
-                onPressed: () {
-                  _scaffoldKey.currentState?.openDrawer();
-                },
+                icon: Icon(Icons.person, color: Colors.white), // Change the icon to a profile icon
+                onPressed: _navigateToProfile, // Navigate to the ProfilePage
               ),
-              // Search bar integrated here
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 0.0),
@@ -134,7 +109,6 @@ class _HomePage1State extends State<HomePage1> {
         ),
         automaticallyImplyLeading: false,
       ),
-      drawer: _buildDrawer(),
       backgroundColor: Color(0xff192028),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -149,16 +123,6 @@ class _HomePage1State extends State<HomePage1> {
           ],
         ),
       ),
-      /*floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => BookingPage()),
-          );
-        },
-        backgroundColor: Colors.blueAccent,
-        child: Icon(Icons.add, color: Colors.white),
-      ),*/
     );
   }
 
@@ -172,6 +136,7 @@ class _HomePage1State extends State<HomePage1> {
       ),
     );
   }
+
   Widget _buildTurfsSection() {
     return StreamBuilder<List<DocumentSnapshot>>(
       stream: _fetchTurfs(),
@@ -189,14 +154,12 @@ class _HomePage1State extends State<HomePage1> {
         var turfs = snapshot.data!;
         var filteredTurfs = turfs.where((turf) {
           var turfData = turf.data() as Map<String, dynamic>;
-          // Filter turfs based on search text
           return turfData['name']
               .toString()
               .toLowerCase()
               .contains(_searchText.toLowerCase());
         }).toList();
 
-        // Skip turfs with missing or empty 'imageUrl'
         filteredTurfs = filteredTurfs.where((turf) {
           var turfData = turf.data() as Map<String, dynamic>;
           return turfData['imageUrl'] != null && turfData['imageUrl'].isNotEmpty;
@@ -207,14 +170,12 @@ class _HomePage1State extends State<HomePage1> {
         }
 
         return Container(
-          height: 250, // Adjust height as needed
+          height: 250,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: filteredTurfs.length,
             itemBuilder: (context, index) {
               var turfData = filteredTurfs[index].data() as Map<String, dynamic>;
-
-              // Fetch fields with null checks
               String imageUrl = turfData['imageUrl'] ?? '';
               String name = turfData['name'] ?? 'Unknown Turf';
               String description = turfData['description'] ?? 'No description available';
@@ -234,8 +195,6 @@ class _HomePage1State extends State<HomePage1> {
       },
     );
   }
-
-
 
   Widget _buildPastBookingsSection() {
     return StreamBuilder<List<DocumentSnapshot>>(
@@ -257,8 +216,7 @@ class _HomePage1State extends State<HomePage1> {
           physics: NeverScrollableScrollPhysics(),
           itemCount: pastBookings.length,
           itemBuilder: (context, index) {
-            var bookingData =
-            pastBookings[index].data() as Map<String, dynamic>;
+            var bookingData = pastBookings[index].data() as Map<String, dynamic>;
             return Card(
               color: Colors.grey[850],
               child: ListTile(
@@ -275,94 +233,6 @@ class _HomePage1State extends State<HomePage1> {
           },
         );
       },
-    );
-  }
-
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: Colors.black,
-      child: Column(
-        children: [
-          DrawerHeader(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blueAccent, Colors.purpleAccent],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 40,
-                  backgroundImage: AssetImage('assets/profile_picture.png'),
-                ),
-                SizedBox(width: 20),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ProfilePage(user: widget.user),
-                      ),
-                    );
-                  },
-                  child: Text(
-                    widget.user?.displayName ?? 'John Doe',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _createDrawerItem(
-                  icon: Icons.home,
-                  text: 'Home',
-                  onTap: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => HomePage1()),
-                    );
-                  },
-                ),
-                _createDrawerItem(
-                  icon: Icons.settings,
-                  text: 'Settings',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => SettingsPage()),
-                    );
-                  },
-                ),
-                _createDrawerItem(
-                  icon: Icons.logout,
-                  text: 'Logout',
-
-                  onTap: _logout,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _createDrawerItem(
-      {required IconData icon, required String text, required GestureTapCallback onTap}) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(text, style: TextStyle(color: Colors.white)),
-      onTap: onTap,
     );
   }
 
