@@ -112,38 +112,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     super.dispose();
   }
   //
-  // Future<void> _signup() async {
-  //   setState(() {
-  //     _loading = true;
-  //   });
-  //
-  //   try {
-  //     UserCredential userCredential =
-  //         await _auth.createUserWithEmailAndPassword(
-  //       email: _emailController.text,
-  //       password: _passwordController.text,
-  //     );
-  //
-  //     await _firestore.collection('users').doc(userCredential.user!.uid).set({
-  //       'name': _nameController.text,
-  //       'email': _emailController.text,
-  //       'mobile': _mobileController.text,
-  //       'userType': _userType, // Add userType to Firestore
-  //     });
-  //
-  //     Navigator.pushReplacement(
-  //       context,
-  //       MaterialPageRoute(
-  //           builder: (context) => HomePage1(user: userCredential.user)),
-  //     );
-  //   } catch (e) {
-  //     Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
-  //   } finally {
-  //     setState(() {
-  //       _loading = false;
-  //     });
-  //   }
-  // }
 
   Future<void> _signup() async {
     setState(() {
@@ -157,6 +125,9 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         password: _passwordController.text,
       );
 
+      // Send email verification
+      await userCredential.user!.sendEmailVerification();
+
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'name': _nameController.text,
         'email': _emailController.text,
@@ -164,22 +135,18 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         'userType': _userType, // Add userType to Firestore
       });
 
-      // Navigate to different pages based on user type
-      if (_userType == 'Turf Owner') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => HomePage2(user: userCredential.user),
-          ),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => HomePage1(user: userCredential.user),
-          ),
-        );
-      }
+      // Show a toast message to inform the user to verify their email
+      Fluttertoast.showToast(msg: 'Verification email sent. Please check your inbox.');
+
+      // Optionally navigate to a different page or show a dialog
+      // For now, let's just clear the fields
+      _nameController.clear();
+      _emailController.clear();
+      _passwordController.clear();
+      _mobileController.clear();
+
+      // You might want to add a way to navigate to a different page after email verification
+      // For example, you could navigate to a login page or a message page instructing them to verify their email
     } catch (e) {
       Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
     } finally {
