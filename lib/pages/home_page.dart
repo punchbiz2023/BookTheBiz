@@ -19,6 +19,7 @@ class _HomePage1State extends State<HomePage1> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Position? _currentPosition;
   String _searchText = '';
+  String _pastBookingSearchText = ''; // New state variable for past bookings search
 
   Future<void> _fetchCurrentLocation() async {
     try {
@@ -112,6 +113,7 @@ class _HomePage1State extends State<HomePage1> {
             _buildTurfsSection(),
             SizedBox(height: 20),
             _buildSectionTitle('Past Bookings'),
+            _buildPastBookingsSearchBar(), // Add search bar for past bookings
             _buildPastBookingsSection(),
           ],
         ),
@@ -189,6 +191,28 @@ class _HomePage1State extends State<HomePage1> {
     );
   }
 
+  Widget _buildPastBookingsSearchBar() {
+    return TextField(
+      onChanged: (value) {
+        setState(() {
+          _pastBookingSearchText = value;
+        });
+      },
+      style: TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: 'Search past bookings...',
+        hintStyle: TextStyle(color: Colors.white70),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: BorderSide(color: Colors.white70),
+        ),
+        filled: true,
+        fillColor: Colors.grey[800],
+        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+      ),
+    );
+  }
+
   Widget _buildPastBookingsSection() {
     return StreamBuilder<List<DocumentSnapshot>>(
       stream: _fetchPastBookings(),
@@ -204,14 +228,24 @@ class _HomePage1State extends State<HomePage1> {
         }
 
         var pastBookings = snapshot.data!;
+        // Filter past bookings based on search text
+        var filteredBookings = pastBookings.where((booking) {
+          var bookingData = booking.data() as Map<String, dynamic>;
+          return bookingData['turfName']?.toLowerCase().contains(_pastBookingSearchText.toLowerCase()) ?? false;
+        }).toList();
+
+        if (filteredBookings.isEmpty) {
+          return Center(child: Text('No past bookings match your search'));
+        }
+
         return ListView.builder(
           shrinkWrap: true,
           physics: NeverScrollableScrollPhysics(),
-          itemCount: pastBookings.length,
+          itemCount: filteredBookings.length,
           itemBuilder: (context, index) {
-            var bookingData = pastBookings[index].data() as Map<String, dynamic>;
+            var bookingData = filteredBookings[index].data() as Map<String, dynamic>;
             // Add turfId to bookingData
-            bookingData['turfId'] = pastBookings[index].get('turfId');
+            bookingData['turfId'] = filteredBookings[index].get('turfId');
 
             return Card(
               color: Colors.grey[850],
