@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:odp/pages/profile.dart';
 import 'package:odp/widgets/firebaseimagecard.dart';
-import 'package:permission_handler/permission_handler.dart';
-
-
+import 'bkdetails.dart';
 
 class HomePage1 extends StatefulWidget {
   final User? user;
@@ -24,8 +22,7 @@ class _HomePage1State extends State<HomePage1> {
 
   Future<void> _fetchCurrentLocation() async {
     try {
-      Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       setState(() {
         _currentPosition = position;
       });
@@ -44,10 +41,7 @@ class _HomePage1State extends State<HomePage1> {
   }
 
   Stream<List<DocumentSnapshot>> _fetchTurfs() {
-    return FirebaseFirestore.instance
-        .collection('turfs')
-        .snapshots()
-        .map((snapshot) => snapshot.docs);
+    return FirebaseFirestore.instance.collection('turfs').snapshots().map((snapshot) => snapshot.docs);
   }
 
   Stream<List<DocumentSnapshot>> _fetchPastBookings() {
@@ -70,8 +64,8 @@ class _HomePage1State extends State<HomePage1> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                icon: Icon(Icons.person, color: Colors.white), // Change the icon to a profile icon
-                onPressed: _navigateToProfile, // Navigate to the ProfilePage
+                icon: Icon(Icons.person, color: Colors.white),
+                onPressed: _navigateToProfile,
               ),
               Expanded(
                 child: Padding(
@@ -89,8 +83,7 @@ class _HomePage1State extends State<HomePage1> {
                       border: InputBorder.none,
                       filled: true,
                       fillColor: Colors.grey[800],
-                      contentPadding:
-                      EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(30),
                         borderSide: BorderSide.none,
@@ -217,6 +210,9 @@ class _HomePage1State extends State<HomePage1> {
           itemCount: pastBookings.length,
           itemBuilder: (context, index) {
             var bookingData = pastBookings[index].data() as Map<String, dynamic>;
+            // Add turfId to bookingData
+            bookingData['turfId'] = pastBookings[index].get('turfId');
+
             return Card(
               color: Colors.grey[850],
               child: ListTile(
@@ -228,6 +224,17 @@ class _HomePage1State extends State<HomePage1> {
                   'Date: ${bookingData['bookingDate'] ?? 'N/A'}',
                   style: TextStyle(color: Colors.white70),
                 ),
+                onTap: () {
+                  // Navigate to the BookingDetailsPage
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => BookingDetailsPage(
+                        bookingData: bookingData,
+                      ),
+                    ),
+                  );
+                },
               ),
             );
           },
