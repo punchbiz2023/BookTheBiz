@@ -206,15 +206,23 @@ class _HomePage2State extends State<HomePage2> {
   // }
 
   // Build turf card
+// Build turf card
   Widget _buildTurfCard(Map<String, dynamic> turfData) {
+    // Extract the turfId from the turf data
+    String turfId = turfData['turfId'] ?? ''; // Default to an empty string if turfId is null
+
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TurfDetails(turfId: turfData['turfId']),
-          ),
-        );
+        if (turfId.isNotEmpty) { // Check if turfId is valid
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TurfDetails(turfId: turfId), // Pass the turfId to TurfDetails
+            ),
+          );
+        } else {
+          print('Turf ID is missing'); // Debugging information
+        }
       },
       child: Card(
         shape: RoundedRectangleBorder(
