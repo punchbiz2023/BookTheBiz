@@ -246,19 +246,14 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Text(
-            'Booked Time Slots:',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
+
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('turfs')
                 .doc(widget.turfId)
                 .collection('bookings')
+                .orderBy('bookingDate', descending: true) // Sort bookings by bookingDate in descending order
                 .snapshots(),
             builder: (context, AsyncSnapshot<QuerySnapshot> bookingSnapshot) {
               if (bookingSnapshot.connectionState == ConnectionState.waiting) {
@@ -313,5 +308,6 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
       ],
     );
   }
+
 
 }
