@@ -19,17 +19,8 @@ class _HomePage1State extends State<HomePage1> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Position? _currentPosition;
   String _searchText = '';
-
-  Future<void> _fetchCurrentLocation() async {
-    try {
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      setState(() {
-        _currentPosition = position;
-      });
-    } catch (e) {
-      print('Error fetching location: $e');
-    }
-  }
+  String _pastBookingSearchText = '';
+  String _sortOrder = 'Ascending';
 
   void _navigateToProfile() {
     Navigator.push(
@@ -57,7 +48,7 @@ class _HomePage1State extends State<HomePage1> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.teal,
         elevation: 0,
         flexibleSpace: SafeArea(
           child: Row(
@@ -69,26 +60,21 @@ class _HomePage1State extends State<HomePage1> {
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 0.0),
-                  child: TextField(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: TextFormField(
                     onChanged: (value) {
                       setState(() {
                         _searchText = value;
                       });
                     },
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: Colors.black),
                     decoration: InputDecoration(
                       hintText: 'Search turfs...',
-                      hintStyle: TextStyle(color: Colors.white70),
-                      border: InputBorder.none,
+                      hintStyle: TextStyle(color: Colors.black54),
                       filled: true,
-                      fillColor: Colors.grey[800],
-                      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
+                      fillColor: Colors.white,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(30),
                         borderSide: BorderSide.none,
                       ),
@@ -96,13 +82,12 @@ class _HomePage1State extends State<HomePage1> {
                   ),
                 ),
               ),
-              _buildLocationWidget(),
             ],
           ),
         ),
         automaticallyImplyLeading: false,
       ),
-      backgroundColor: Color(0xff192028),
+      backgroundColor: Colors.white,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -111,7 +96,14 @@ class _HomePage1State extends State<HomePage1> {
             _buildSectionTitle('Turfs'),
             _buildTurfsSection(),
             SizedBox(height: 20),
-            _buildSectionTitle('Past Bookings'),
+            _buildSectionTitle('Bookings'),
+            Row(
+              children: [
+                Expanded(child: _buildPastBookingsSearchBar()),
+                SizedBox(width: 10),
+                _buildSortDropdown(),
+              ],
+            ),
             _buildPastBookingsSection(),
           ],
         ),
@@ -120,12 +112,15 @@ class _HomePage1State extends State<HomePage1> {
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: 22,
-        fontWeight: FontWeight.bold,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.teal,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -189,6 +184,83 @@ class _HomePage1State extends State<HomePage1> {
     );
   }
 
+  Widget _buildPastBookingsSearchBar() {
+    return TextFormField(
+      onChanged: (value) {
+        setState(() {
+          _pastBookingSearchText = value;
+        });
+      },
+      style: TextStyle(color: Colors.black),
+      decoration: InputDecoration(
+        hintText: 'Search bookings...',
+        hintStyle: TextStyle(color: Colors.black54),
+        filled: true,
+        fillColor: Colors.grey[200],
+        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: BorderSide(color: Colors.black54),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSortDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: Colors.grey.shade300, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _sortOrder,
+          icon: Icon(Icons.filter_list, color: Colors.teal),
+          style: TextStyle(color: Colors.black),
+          onChanged: (String? newValue) {
+            setState(() {
+              _sortOrder = newValue!;
+            });
+          },
+          items: [
+            DropdownMenuItem<String>(
+              value: 'Ascending',
+              child: Row(
+                children: [
+                  Icon(Icons.arrow_upward, color: Colors.teal),
+                  SizedBox(width: 5),
+                  Text('', style: TextStyle(color: Colors.black)),
+                ],
+              ),
+            ),
+            DropdownMenuItem<String>(
+              value: 'Descending',
+              child: Row(
+                children: [
+                  Icon(Icons.arrow_downward, color: Colors.teal),
+                  SizedBox(width: 5),
+                  Text('', style: TextStyle(color: Colors.black)),
+                ],
+              ),
+            ),
+          ],
+          dropdownColor: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPastBookingsSection() {
     return StreamBuilder<List<DocumentSnapshot>>(
       stream: _fetchPastBookings(),
@@ -204,34 +276,51 @@ class _HomePage1State extends State<HomePage1> {
         }
 
         var pastBookings = snapshot.data!;
+        var filteredBookings = pastBookings.where((booking) {
+          var bookingData = booking.data() as Map<String, dynamic>;
+          return bookingData['turfName']
+              .toString()
+              .toLowerCase()
+              .contains(_pastBookingSearchText.toLowerCase());
+        }).toList();
+
+        if (_sortOrder == 'Ascending') {
+          filteredBookings.sort((a, b) {
+            var dateA = DateTime.parse((a.data() as Map<String, dynamic>)['bookingDate']);
+            var dateB = DateTime.parse((b.data() as Map<String, dynamic>)['bookingDate']);
+            return dateA.compareTo(dateB);
+          });
+        } else {
+          filteredBookings.sort((a, b) {
+            var dateA = DateTime.parse((a.data() as Map<String, dynamic>)['bookingDate']);
+            var dateB = DateTime.parse((b.data() as Map<String, dynamic>)['bookingDate']);
+            return dateB.compareTo(dateA);
+          });
+        }
+
         return ListView.builder(
+          itemCount: filteredBookings.length,
           shrinkWrap: true,
           physics: NeverScrollableScrollPhysics(),
-          itemCount: pastBookings.length,
           itemBuilder: (context, index) {
-            var bookingData = pastBookings[index].data() as Map<String, dynamic>;
-            // Add turfId to bookingData
-            bookingData['turfId'] = pastBookings[index].get('turfId');
-
+            var bookingData = filteredBookings[index].data() as Map<String, dynamic>;
             return Card(
-              color: Colors.grey[850],
+              elevation: 2,
+              margin: EdgeInsets.symmetric(vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: ListTile(
-                title: Text(
-                  bookingData['turfName'] ?? 'Unknown Turf',
-                  style: TextStyle(color: Colors.white),
-                ),
-                subtitle: Text(
-                  'Date: ${bookingData['bookingDate'] ?? 'N/A'}',
-                  style: TextStyle(color: Colors.white70),
-                ),
+                title: Text(bookingData['turfName'], style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(bookingData['bookingDate']),
+                trailing: Text('${bookingData['amount']} INR', style: TextStyle(color: Colors.teal)),
                 onTap: () {
-                  // Navigate to the BookingDetailsPage
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => BookingDetailsPage(
-                        bookingData: bookingData,
-                      ),
+                    bookingData: bookingData,
+                  ),
                     ),
                   );
                 },
@@ -240,15 +329,6 @@ class _HomePage1State extends State<HomePage1> {
           },
         );
       },
-    );
-  }
-
-  Widget _buildLocationWidget() {
-    return Text(
-      _currentPosition != null
-          ? 'Lat: ${_currentPosition!.latitude}, Lng: ${_currentPosition!.longitude}'
-          : 'Fetching location...',
-      style: TextStyle(color: Colors.white),
     );
   }
 }

@@ -13,6 +13,7 @@ class BookingDetailsPage extends StatelessWidget {
         title: Text('Booking Details', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         elevation: 4,
+        backgroundColor: Colors.teal,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -26,12 +27,11 @@ class BookingDetailsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Fetch and display the turf image
                 _buildTurfImage(),
                 SizedBox(height: 16),
                 _buildDetailRow('Turf Name', bookingData['turfName'] ?? 'Unknown Turf'),
                 _buildDetailRow('Date', bookingData['bookingDate'] ?? 'N/A'),
-                _buildDetailRow('Amount', 'Rs ${bookingData['amount'] ?? 0} /-'),
+                _buildDetailRow('Amount', '₹${bookingData['amount'] ?? 0}'),
                 _buildDetailRow('Total Hours', '${bookingData['totalHours'] ?? 0}'),
                 _buildDetailRow(
                   'Booked Time Slots',
@@ -48,7 +48,7 @@ class BookingDetailsPage extends StatelessWidget {
   }
 
   FutureBuilder<String> _buildTurfImage() {
-    String turfId = bookingData['turfId']; // Get the turfId from bookingData
+    String turfId = bookingData['turfId'];
 
     return FutureBuilder<String>(
       future: _fetchTurfImageUrl(turfId),
@@ -57,19 +57,27 @@ class BookingDetailsPage extends StatelessWidget {
           return Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Text('Error fetching image', style: TextStyle(color: Colors.red));
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16.0),
+            child: Text('Error fetching image', style: TextStyle(color: Colors.red)),
+          );
         }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Text('No image available', style: TextStyle(color: Colors.grey));
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16.0),
+            child: Text('No image available', style: TextStyle(color: Colors.grey)),
+          );
         }
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: Image.network(
-            snapshot.data!,
-            height: 150, // Set height as needed
+          child: Container(
+            height: 250, // Set height to fit larger images
             width: double.infinity,
-            fit: BoxFit.cover,
+            child: Image.network(
+              snapshot.data!,
+              fit: BoxFit.cover, // This maintains the aspect ratio and fills the space
+            ),
           ),
         );
       },
@@ -83,7 +91,7 @@ class BookingDetailsPage extends StatelessWidget {
         .get();
 
     if (turfDoc.exists) {
-      return turfDoc['imageUrl'] ?? ''; // Return the image URL
+      return turfDoc['imageUrl'] ?? '';
     } else {
       throw Exception('Turf not found');
     }
@@ -99,9 +107,9 @@ class BookingDetailsPage extends StatelessWidget {
             child: Text(
               title,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
+                color: Colors.teal,
               ),
             ),
           ),
@@ -110,7 +118,7 @@ class BookingDetailsPage extends StatelessWidget {
             child: Text(
               value,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 18,
                 color: Colors.black87,
               ),
               textAlign: TextAlign.end,
