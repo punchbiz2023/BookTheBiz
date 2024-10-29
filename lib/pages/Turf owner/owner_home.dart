@@ -29,7 +29,7 @@ class _HomePage2State extends State<HomePage2> {
   @override
   void initState() {
     super.initState();
-    _checkAndFetchLocation();
+    // _checkAndFetchLocation();
     _checkCurrentUser();
     _setupTurfStream();
   }
@@ -60,25 +60,25 @@ class _HomePage2State extends State<HomePage2> {
   }
 
   // Check and fetch location if permission is granted
-  Future<void> _checkAndFetchLocation() async {
-    if (await Permission.location.request().isGranted) {
-      _fetchCurrentLocation();
-    } else {
-      print('Location permission not granted');
-    }
-  }
+  // Future<void> _checkAndFetchLocation() async {
+  //   if (await Permission.location.request().isGranted) {
+  //     _fetchCurrentLocation();
+  //   } else {
+  //     print('Location permission not granted');
+  //   }
+  // }
 
-  Future<void> _fetchCurrentLocation() async {
-    try {
-      Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
-      setState(() {
-        _currentPosition = position;
-      });
-    } catch (e) {
-      print('Error fetching location: $e');
-    }
-  }
+  // Future<void> _fetchCurrentLocation() async {
+  //   try {
+  //     Position position = await Geolocator.getCurrentPosition(
+  //         desiredAccuracy: LocationAccuracy.high);
+  //     setState(() {
+  //       _currentPosition = position;
+  //     });
+  //   } catch (e) {
+  //     print('Error fetching location: $e');
+  //   }
+  // }
 
   // Logout function
   Future<void> _logout() async {
@@ -207,47 +207,81 @@ class _HomePage2State extends State<HomePage2> {
 
   // Build turf card
   Widget _buildTurfCard(Map<String, dynamic> turfData) {
-    return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12.0),
-      ),
-      color: Colors.grey[900],
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      shadowColor: Colors.black.withOpacity(0.5),
-      elevation: 5.0,
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: ListTile(
-          leading: ClipRRect(
-            borderRadius: BorderRadius.circular(8.0),
-            child: turfData['imageUrl'] != null
-                ? Image.network(turfData['imageUrl'],
-                width: 50, height: 50, fit: BoxFit.cover)
-                : Icon(Icons.image, size: 50, color: Colors.grey),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TurfDetails(turfId: turfData['turfId']),
           ),
-          title: Text(
-            turfData['name'] ?? 'No Name',
-            style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          subtitle: Text(
-            turfData['description'] ?? 'No Description',
-            style: TextStyle(color: Colors.grey),
-          ),
-          trailing: InkWell(
-            onTap: () {
-              // Redirect to the turf_details page, passing the turfId
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => TurfDetails(turfId: turfData['turfId']),
+        );
+      },
+      child: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        elevation: 8,
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        shadowColor: Colors.black.withOpacity(0.2), // Slightly darker shadow
+        child: Padding(
+          padding: const EdgeInsets.all(16.0), // Increased padding for a spacious feel
+          child: Row(
+            children: [
+              // Turf Image
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: turfData['imageUrl'] != null
+                    ? Image.network(
+                  turfData['imageUrl'],
+                  width: 80,
+                  height: 80,
+                  fit: BoxFit.cover,
+                )
+                    : Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: Colors.grey[300], // Placeholder color
+                  ),
+                  child: Icon(Icons.image, size: 40, color: Colors.grey[600]),
                 ),
-              );
-            },
-            child: Icon(Icons.arrow_forward_ios, color: Colors.white),
+              ),
+              SizedBox(width: 16), // Spacing between image and text
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      turfData['name'] ?? 'Unnamed Turf',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18, // Increased font size
+                      ),
+                    ),
+                    SizedBox(height: 4), // Space between title and description
+                    Text(
+                      turfData['description'] ?? 'No description provided.',
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 14, // Slightly larger than normal
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.black54,
+                size: 20,
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+
+
 }
