@@ -36,6 +36,7 @@ class _HomePage1State extends State<HomePage1> {
   }
 
   Stream<List<DocumentSnapshot>> _fetchPastBookings() {
+    print(FirebaseAuth.instance.currentUser);
     return FirebaseFirestore.instance
         .collection('bookings')
         .where('userId', isEqualTo: widget.user?.uid)
@@ -284,6 +285,10 @@ class _HomePage1State extends State<HomePage1> {
               .contains(_pastBookingSearchText.toLowerCase());
         }).toList();
 
+        // Debugging: Check the number of filtered bookings
+        print('Filtered Bookings Count: ${widget.user?.uid}');
+        print('Past Booking Search Text: $_pastBookingSearchText');
+
         if (_sortOrder == 'Ascending') {
           filteredBookings.sort((a, b) {
             var dateA = DateTime.parse((a.data() as Map<String, dynamic>)['bookingDate']);
@@ -319,8 +324,8 @@ class _HomePage1State extends State<HomePage1> {
                     context,
                     MaterialPageRoute(
                       builder: (context) => BookingDetailsPage(
-                    bookingData: bookingData,
-                  ),
+                        bookingData: bookingData,
+                      ),
                     ),
                   );
                 },

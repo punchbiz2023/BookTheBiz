@@ -28,11 +28,6 @@ void main() async {
   runApp(MyApp());
 }
 
-
-
-
-
-
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -55,6 +50,7 @@ class AuthWrapper extends StatelessWidget {
 
     // If the user is signed in, navigate to the respective home page, else login page
     if (user != null) {
+      // User is signed in, retrieve user data
       return FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
         builder: (context, snapshot) {
@@ -69,14 +65,15 @@ class AuthWrapper extends StatelessWidget {
             if (userType == 'Turf Owner') {
               return HomePage2(); // Turf owner home
             } else {
-              return HomePage1(); // Regular user home
+              return HomePage1(user: user,); // Regular user home
             }
           }
-          return LoginApp();
+          return LoginApp(); // Fallback in case user type is not found
         },
       );
     } else {
-      return LoginApp();  // Show login page if no user is signed in
+      return LoginApp(); // Show login page if no user is signed in
     }
   }
 }
+

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:ui';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -15,6 +14,7 @@ class LoginApp extends StatefulWidget {
   @override
   _LoginPageState createState() => _LoginPageState();
 }
+final User? user = FirebaseAuth.instance.currentUser;
 
 class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
   final TextEditingController _emailController = TextEditingController();
@@ -139,7 +139,8 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
           // Navigate to the other page
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => HomePage1()),
+            MaterialPageRoute(builder: (context) => HomePage1(user: user)),
+
           );
         }
         Fluttertoast.showToast(msg: 'Login Successful');
