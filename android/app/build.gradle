@@ -1,7 +1,7 @@
 plugins {
     id "com.android.application"
     // START: FlutterFire Configuration
-    id 'com.google.gms.google-services'
+    id 'com.google.gms.google-services' // Google Services Plugin
     // END: FlutterFire Configuration
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
@@ -63,5 +63,17 @@ flutter {
 }
 
 dependencies {
-    // Add your dependencies here
+    // Add Firebase BOM for version management
+    implementation platform('com.google.firebase:firebase-bom:32.0.0') // Ensure to use the latest version
+
+    // Add Firebase Performance Monitoring
+    implementation 'com.google.firebase:firebase-perf'
+
+    // Add Firebase Analytics (optional, can help with performance data)
+    implementation 'com.google.firebase:firebase-analytics'
+
+    // Your other dependencies
 }
+
+// Make sure to apply the Google Services plugin at the bottom of the file
+apply plugin: 'com.google.gms.google-services'

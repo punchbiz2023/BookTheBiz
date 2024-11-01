@@ -1,17 +1,12 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_performance/firebase_performance.dart'; // Import Firebase Performance
 import 'package:odp/pages/Turf%20owner/Main%20Func/owner_home.dart';
-import 'package:odp/pages/Turf%20owner/Main%20Func/turfadd.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/login.dart';
-import 'package:odp/pages/profile.dart';
-import 'package:odp/pages/settings.dart';
-
 import 'firebase_options.dart';
-
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,7 +60,7 @@ class AuthWrapper extends StatelessWidget {
             if (userType == 'Turf Owner') {
               return HomePage2(); // Turf owner home
             } else {
-              return HomePage1(user: user,); // Regular user home
+              return HomePage1(user: user); // Regular user home
             }
           }
           return LoginApp(); // Fallback in case user type is not found
@@ -77,3 +72,13 @@ class AuthWrapper extends StatelessWidget {
   }
 }
 
+// Function to start performance tracing (you can call this wherever needed)
+void startPerformanceTrace() async {
+  final Trace trace = FirebasePerformance.instance.newTrace('auth_wrapper_trace');
+  trace.start();
+
+  // Simulating some work (you can replace this with actual work)
+  await Future.delayed(Duration(seconds: 1));
+
+  trace.stop();
+}
