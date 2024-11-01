@@ -135,7 +135,7 @@ class bkUserDetails extends StatelessWidget {
     );
   }
 
-  // Method to build a Chip view for booking slots
+  // Method to build a Chip view for booking slots using Wrap instead of horizontal scrolling
   Widget _buildBookingSlotsChips(List<dynamic> bookingSlots) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,19 +145,16 @@ class bkUserDetails extends StatelessWidget {
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green[700]),
         ),
         SizedBox(height: 10),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal, // Enable horizontal scrolling
-          child: Row(
-            children: bookingSlots.map<Widget>((slot) {
-              return Padding(
-                padding: const EdgeInsets.only(right: 4.0), // Space between chips
-                child: Chip(
-                  label: Text(slot.toString()),
-                  backgroundColor: Colors.green[100],
-                ),
-              );
-            }).toList(),
-          ),
+        // Use Wrap for booking slots
+        Wrap(
+          spacing: 8.0, // Space between chips
+          runSpacing: 4.0, // Space between rows
+          children: bookingSlots.map<Widget>((slot) {
+            return Chip(
+              label: Text(slot.toString()),
+              backgroundColor: Colors.green[100],
+            );
+          }).toList(),
         ),
       ],
     );
