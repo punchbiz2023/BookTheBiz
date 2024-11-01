@@ -323,7 +323,7 @@ class _HomePage1State extends State<HomePage1> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => BookingDetailsPage(
+                      builder: (context) => BookingDetailsPage1(
                         bookingData: bookingData,
                       ),
                     ),

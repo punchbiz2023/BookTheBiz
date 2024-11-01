@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../bookingpage.dart';
-import '../home_page.dart';
-import '../login.dart';
-import '../profile.dart';
-import '../settings.dart';
+import '../../bookingpage.dart';
+import '../../home_page.dart';
+import '../../login.dart';
+import '../../profile.dart';
+import '../../settings.dart';
 import 'turfadd.dart';
-import 'turf_details.dart';
+import '../Display- turfs/turf_details.dart';
 
 class HomePage2 extends StatefulWidget {
   User? user;

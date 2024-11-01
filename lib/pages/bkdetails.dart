@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class BookingDetailsPage extends StatelessWidget {
+class BookingDetailsPage1 extends StatelessWidget {
   final Map<String, dynamic> bookingData;
 
-  const BookingDetailsPage({Key? key, required this.bookingData}) : super(key: key);
+  const BookingDetailsPage1({Key? key, required this.bookingData}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {

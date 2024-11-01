@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-
-import 'bkuserdetails.dart';
+import 'package:odp/pages/Turf%20owner/Display-%20turfs/turfstats.dart';
+import 'booking_details.dart';
 
 class TurfDetails extends StatefulWidget {
   final String turfId;
@@ -15,13 +15,12 @@ class TurfDetails extends StatefulWidget {
 
 class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -32,15 +31,12 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
 
   Future<void> _updateTurfStatus(BuildContext context, String newStatus) async {
     try {
-      await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update({
-        'status': newStatus,
-      });
+      await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update({'status': newStatus});
       Fluttertoast.showToast(
         msg: "Turf status updated to $newStatus",
         toastLength: Toast.LENGTH_SHORT,
         gravity: ToastGravity.BOTTOM,
-        timeInSecForIosWeb: 1,
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.green,
         textColor: Colors.white,
         fontSize: 16.0,
       );
@@ -49,7 +45,6 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
         msg: "Error updating turf status.",
         toastLength: Toast.LENGTH_SHORT,
         gravity: ToastGravity.BOTTOM,
-        timeInSecForIosWeb: 1,
         backgroundColor: Colors.red,
         textColor: Colors.white,
         fontSize: 16.0,
@@ -57,48 +52,10 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Turf Details'),
-        backgroundColor: Colors.blueAccent,
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(48.0),
-          child: Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              labelColor: Colors.blueAccent,
-              unselectedLabelColor: Colors.grey,
-              indicatorColor: Colors.blueAccent,
-              indicatorWeight: 3.0,
-              tabs: [
-                Tab(
-                  text: 'Details',
-                ),
-                Tab(
-                  text: 'Bookings',
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildTurfDetails(context),
-          _buildBookingsList(),
-        ],
-      ),
-    );
-  }
-
   Widget _buildTurfDetails(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).snapshots(),
-      builder: (context, AsyncSnapshot<DocumentSnapshot> snapshot) {
+      builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
         }
@@ -119,32 +76,32 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
             child: Card(
               elevation: 8,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Image section
                     Container(
                       width: double.infinity,
                       height: 200,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.withOpacity(0.5), width: 2),
+                        borderRadius: BorderRadius.circular(16),
                         image: DecorationImage(
                           image: NetworkImage(turfData['imageUrl'] ?? ''),
                           fit: BoxFit.cover,
                         ),
                       ),
                       child: turfData['imageUrl'] == null
-                          ? Icon(Icons.image, size: 100, color: Colors.grey)
+                          ? Center(child: Icon(Icons.image, size: 100, color: Colors.grey))
                           : null,
                     ),
                     SizedBox(height: 16),
                     Text(
                       turfData['name'] ?? 'No Name',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black),
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blueAccent),
                     ),
                     SizedBox(height: 8),
                     Text(
@@ -154,38 +111,38 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                     SizedBox(height: 16),
                     Text(
                       'Price: ₹${turfData['price']?.toStringAsFixed(2) ?? '0.00'}',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
                     ),
                     SizedBox(height: 16),
                     Text(
                       'Facilities:',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 8),
                     ...List.generate(
                       turfData['facilities']?.length ?? 0,
                           (index) => Padding(
                         padding: const EdgeInsets.only(bottom: 4.0),
-                        child: Text(turfData['facilities'][index] ?? 'No Facility'),
+                        child: Text('• ${turfData['facilities'][index] ?? 'No Facility'}', style: TextStyle(fontSize: 16)),
                       ),
                     ),
                     SizedBox(height: 16),
                     Text(
                       'Available Grounds:',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 8),
                     ...List.generate(
                       turfData['availableGrounds']?.length ?? 0,
                           (index) => Padding(
                         padding: const EdgeInsets.only(bottom: 4.0),
-                        child: Text(turfData['availableGrounds'][index] ?? 'No Ground'),
+                        child: Text('• ${turfData['availableGrounds'][index] ?? 'No Ground'}', style: TextStyle(fontSize: 16)),
                       ),
                     ),
                     SizedBox(height: 16),
                     Text(
                       'Current Status: ${turfData['status'] ?? 'Opened'}',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 16),
                     Row(
@@ -226,88 +183,41 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
       },
     );
   }
-
-  Widget _buildBookingsList() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value.toLowerCase();
-              });
-            },
-            decoration: InputDecoration(
-              labelText: 'Search Bookings',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.search),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'Turf Details',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+        ),
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(48.0),
+          child: Container(
+            color: Colors.white,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: Colors.blueAccent,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Colors.blueAccent,
+              indicatorWeight: 3.0,
+              tabs: [
+                Tab(text: 'Details'),
+                Tab(text: 'Bookings'),
+                Tab(text: 'Stats'), // New tab for Stats
+              ],
             ),
           ),
         ),
-
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('turfs')
-                .doc(widget.turfId)
-                .collection('bookings')
-                .orderBy('bookingDate', descending: true) // Sort bookings by bookingDate in descending order
-                .snapshots(),
-            builder: (context, AsyncSnapshot<QuerySnapshot> bookingSnapshot) {
-              if (bookingSnapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator());
-              }
-
-              if (bookingSnapshot.hasError) {
-                return Center(child: Text('Error loading bookings.'));
-              }
-
-              if (!bookingSnapshot.hasData || bookingSnapshot.data!.docs.isEmpty) {
-                return Center(child: Text('No bookings available.'));
-              }
-
-              // Filter bookings based on the search query
-              var filteredBookings = bookingSnapshot.data!.docs.where((doc) {
-                var bookingData = doc.data() as Map<String, dynamic>;
-                return bookingData['userName']?.toLowerCase().contains(_searchQuery) ?? false;
-              }).toList();
-
-              return ListView.builder(
-                itemCount: filteredBookings.length,
-                itemBuilder: (context, index) {
-                  var bookingData = filteredBookings[index].data() as Map<String, dynamic>;
-                  return Card(
-                    margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                    elevation: 4,
-                    child: ListTile(
-                      title: Text(bookingData['userName'] ?? 'Unknown User'),
-                      subtitle: Text('Date: ${bookingData['bookingDate']}\n'),
-                      trailing: Text('₹${bookingData['amount']?.toStringAsFixed(2) ?? '0.00'}'),
-                      onTap: () {
-                        // Navigate to the bkUserDetails screen
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => bkUserDetails(
-                              bookingId: filteredBookings[index].id, // Pass the booking ID
-                              userId: bookingData['userId'], // Pass the user ID
-                              turfId: widget.turfId, // Pass the turf ID
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildTurfDetails(context),
+          BookingDetailsPage(turfId: widget.turfId, bookingData: {}), // Existing booking details page
+          Turfstats(turfId: widget.turfId)// Updated to use _buildTurfStats
+        ],
+      ),
     );
   }
-
-
 }

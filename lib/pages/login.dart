@@ -6,7 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:odp/pages/Turf%20owner/owner_home.dart';
+import 'package:odp/pages/Turf%20owner/Main%20Func/owner_home.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/sign_up_page.dart';
 
