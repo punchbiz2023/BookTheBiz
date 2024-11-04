@@ -21,6 +21,16 @@ class _HomePage1State extends State<HomePage1> {
   String _searchText = '';
   String _pastBookingSearchText = '';
   String _sortOrder = 'Ascending';
+  DateTime? _customDate; // Added custom date variable
+
+  void clearFilters() {
+    setState(() {
+      _searchText = '';
+      _pastBookingSearchText = '';
+      _sortOrder = 'Ascending';
+      _customDate = null; // Reset custom date
+    });
+  }
 
   void _navigateToProfile() {
     Navigator.push(
@@ -36,7 +46,6 @@ class _HomePage1State extends State<HomePage1> {
   }
 
   Stream<List<DocumentSnapshot>> _fetchPastBookings() {
-    print(FirebaseAuth.instance.currentUser);
     return FirebaseFirestore.instance
         .collection('bookings')
         .where('userId', isEqualTo: widget.user?.uid)
@@ -44,7 +53,6 @@ class _HomePage1State extends State<HomePage1> {
         .map((snapshot) => snapshot.docs);
   }
 
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
@@ -98,19 +106,39 @@ class _HomePage1State extends State<HomePage1> {
             _buildTurfsSection(),
             SizedBox(height: 20),
             _buildSectionTitle('Bookings'),
+
+            // Search bar for past bookings
+            _buildPastBookingsSearchBar(),
+            SizedBox(height: 10),
+
+            // Row for filter options
             Row(
               children: [
-                Expanded(child: _buildPastBookingsSearchBar()),
-                SizedBox(width: 10),
-                _buildSortDropdown(),
+                // Ascending/Descending dropdown
+                Expanded(child: _buildSortDropdown()),
+
+                // Spacer to create space between the dropdown and custom date button
+                SizedBox(width: 0),
+
+                // Spacer between custom date button and clear filter button
+                SizedBox(width: 0),
+
+                // Clear filters button
+                IconButton(
+                  icon: Icon(Icons.clear_all, color: Colors.teal),
+                  onPressed: clearFilters, // Clear filters on button press
+                ),
               ],
             ),
+            SizedBox(height: 10),
             _buildPastBookingsSection(),
           ],
         ),
       ),
     );
   }
+
+
 
   Widget _buildSectionTitle(String title) {
     return Padding(
@@ -183,6 +211,7 @@ class _HomePage1State extends State<HomePage1> {
         );
       },
     );
+
   }
 
   Widget _buildPastBookingsSearchBar() {
@@ -208,59 +237,102 @@ class _HomePage1State extends State<HomePage1> {
   }
 
   Widget _buildSortDropdown() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: Colors.grey.shade300, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: Offset(0, 3),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // Sort dropdown
+        Expanded(
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 10.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(color: Colors.grey.shade300, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.3),
+                  spreadRadius: 1,
+                  blurRadius: 5,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _sortOrder,
+                icon: Icon(Icons.filter_list, color: Colors.teal),
+                style: TextStyle(color: Colors.black),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _sortOrder = newValue!;
+                  });
+                },
+                items: [
+                  DropdownMenuItem<String>(
+                    value: 'Ascending',
+                    child: Container(
+                      width: 100, // Set a fixed width for the dropdown item
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          Icon(Icons.arrow_upward, color: Colors.teal),
+                          SizedBox(width: 5),
+                          Text('old to new'), // Add text for clarity
+                        ],
+                      ),
+                    ),
+                  ),
+                  DropdownMenuItem<String>(
+                    value: 'Descending',
+                    child: Container(
+                      width: 100, // Set a fixed width for the dropdown item
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          Icon(Icons.arrow_downward, color: Colors.teal),
+                          SizedBox(width: 1),
+                          Text('new to old'), // Add text for clarity
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                dropdownColor: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
           ),
-        ],
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _sortOrder,
-          icon: Icon(Icons.filter_list, color: Colors.teal),
-          style: TextStyle(color: Colors.black),
-          onChanged: (String? newValue) {
-            setState(() {
-              _sortOrder = newValue!;
-            });
-          },
-          items: [
-            DropdownMenuItem<String>(
-              value: 'Ascending',
-              child: Row(
-                children: [
-                  Icon(Icons.arrow_upward, color: Colors.teal),
-                  SizedBox(width: 5),
-                  Text('', style: TextStyle(color: Colors.black)),
-                ],
-              ),
-            ),
-            DropdownMenuItem<String>(
-              value: 'Descending',
-              child: Row(
-                children: [
-                  Icon(Icons.arrow_downward, color: Colors.teal),
-                  SizedBox(width: 5),
-                  Text('', style: TextStyle(color: Colors.black)),
-                ],
-              ),
-            ),
-          ],
-          dropdownColor: Colors.white,
-          borderRadius: BorderRadius.circular(18),
         ),
-      ),
+        SizedBox(width: 10), // Space between dropdown and button
+        // Custom date button
+        ElevatedButton.icon(
+          onPressed: () async {
+            DateTime? selectedDate = await showDatePicker(
+              context: context,
+              initialDate: DateTime.now(),
+              firstDate: DateTime(2000),
+              lastDate: DateTime(2100),
+            );
+            if (selectedDate != null) {
+              setState(() {
+                _customDate = selectedDate; // Set the selected custom date
+              });
+            }
+          },
+          icon: Icon(Icons.calendar_today, color: Colors.white),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(25),
+            ),
+          ),
+          label: Text(''), // Add label to the button
+        ),
+      ],
     );
   }
+
+
 
   Widget _buildPastBookingsSection() {
     return StreamBuilder<List<DocumentSnapshot>>(
@@ -285,9 +357,14 @@ class _HomePage1State extends State<HomePage1> {
               .contains(_pastBookingSearchText.toLowerCase());
         }).toList();
 
-        // Debugging: Check the number of filtered bookings
-        print('Filtered Bookings Count: ${widget.user?.uid}');
-        print('Past Booking Search Text: $_pastBookingSearchText');
+        // Filter based on custom date
+        if (_customDate != null) {
+          filteredBookings = filteredBookings.where((booking) {
+            var bookingData = booking.data() as Map<String, dynamic>;
+            var bookingDate = DateTime.parse(bookingData['bookingDate']);
+            return bookingDate.isAtSameMomentAs(_customDate!);
+          }).toList();
+        }
 
         if (_sortOrder == 'Ascending') {
           filteredBookings.sort((a, b) {
@@ -325,8 +402,7 @@ class _HomePage1State extends State<HomePage1> {
                     MaterialPageRoute(
                       builder: (context) => BookingDetailsPage1(
                         bookingData: bookingData,
-                      ),
-                    ),
+                      ),                    ),
                   );
                 },
               ),
@@ -337,3 +413,4 @@ class _HomePage1State extends State<HomePage1> {
     );
   }
 }
+
