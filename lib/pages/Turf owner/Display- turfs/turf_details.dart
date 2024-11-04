@@ -119,11 +119,15 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 8),
-                    ...List.generate(
-                      turfData['facilities']?.length ?? 0,
-                          (index) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4.0),
-                        child: Text('• ${turfData['facilities'][index] ?? 'No Facility'}', style: TextStyle(fontSize: 16)),
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 4.0,
+                      children: List.generate(
+                        turfData['facilities']?.length ?? 0,
+                            (index) => Chip(
+                          label: Text(turfData['facilities'][index] ?? 'No Facility'),
+                          avatar: Icon(Icons.check_circle, size: 16, color: Colors.green),
+                        ),
                       ),
                     ),
                     SizedBox(height: 16),
@@ -132,17 +136,40 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 8),
-                    ...List.generate(
-                      turfData['availableGrounds']?.length ?? 0,
-                          (index) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4.0),
-                        child: Text('• ${turfData['availableGrounds'][index] ?? 'No Ground'}', style: TextStyle(fontSize: 16)),
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 4.0,
+                      children: List.generate(
+                        turfData['availableGrounds']?.length ?? 0,
+                            (index) => Chip(
+                          label: Text(turfData['availableGrounds'][index] ?? 'No Ground'),
+                          avatar: Icon(Icons.sports_soccer, size: 16, color: Colors.blue),
+                        ),
                       ),
                     ),
                     SizedBox(height: 16),
-                    Text(
-                      'Current Status: ${turfData['status'] ?? 'Opened'}',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    // Enhanced Current Status section
+                    Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: turfData['status'] == 'Open' ? Colors.green[100] : Colors.red[100],
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: turfData['status'] == 'Open' ? Colors.green : Colors.red, width: 2),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Current Status: ${turfData['status'] ?? 'Opened'}',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: turfData['status'] == 'Open' ? Colors.green : Colors.red),
+                          ),
+                          Icon(
+                            turfData['status'] == 'Open' ? Icons.check_circle : Icons.cancel,
+                            color: turfData['status'] == 'Open' ? Colors.green : Colors.red,
+                            size: 30,
+                          ),
+                        ],
+                      ),
                     ),
                     SizedBox(height: 16),
                     Row(
@@ -183,6 +210,7 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
       },
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -215,7 +243,7 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
         children: [
           _buildTurfDetails(context),
           BookingDetailsPage(turfId: widget.turfId, bookingData: {}), // Existing booking details page
-          Turfstats(turfId: widget.turfId)// Updated to use _buildTurfStats
+          Turfstats(turfId: widget.turfId) // Updated to use Turfstats
         ],
       ),
     );
