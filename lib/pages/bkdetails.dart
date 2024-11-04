@@ -15,7 +15,7 @@ class BookingDetailsPage1 extends StatelessWidget {
         elevation: 4,
         backgroundColor: Colors.teal,
       ),
-      body: Padding(
+      body: SingleChildScrollView( // Added SingleChildScrollView
         padding: const EdgeInsets.all(16.0),
         child: Card(
           elevation: 6,
@@ -33,12 +33,9 @@ class BookingDetailsPage1 extends StatelessWidget {
                 _buildDetailRow('Date', bookingData['bookingDate'] ?? 'N/A'),
                 _buildDetailRow('Amount', '₹${bookingData['amount'] ?? 0}'),
                 _buildDetailRow('Total Hours', '${bookingData['totalHours'] ?? 0}'),
-                _buildDetailRow(
-                  'Booked Time Slots',
-                  bookingData['bookingSlots']?.join(', ') ?? 'N/A',
-                ),
                 _buildDetailRow('Selected Ground', bookingData['selectedGround'] ?? 'N/A'),
-                _buildDetailRow('User', bookingData['userName'] ?? 'Unknown User'),
+                _buildDetailRow('Name', bookingData['userName'] ?? 'Unknown User'),
+                _buildBookedTimeSlots(), // Moved to the end
               ],
             ),
           ),
@@ -72,11 +69,11 @@ class BookingDetailsPage1 extends StatelessWidget {
         return ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            height: 250, // Set height to fit larger images
+            height: 250,
             width: double.infinity,
             child: Image.network(
               snapshot.data!,
-              fit: BoxFit.cover, // This maintains the aspect ratio and fills the space
+              fit: BoxFit.cover,
             ),
           ),
         );
@@ -123,6 +120,41 @@ class BookingDetailsPage1 extends StatelessWidget {
               ),
               textAlign: TextAlign.end,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBookedTimeSlots() {
+    List<String> bookingSlots = List<String>.from(bookingData['bookingSlots'] ?? []);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Booked Time Slots',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.teal,
+            ),
+          ),
+          SizedBox(height: 8),
+          Wrap(
+            spacing: 8.0,
+            runSpacing: 4.0,
+            children: bookingSlots.map((slot) {
+              return Chip(
+                label: Text(
+                  slot,
+                  style: TextStyle(color: Colors.white),
+                ),
+                backgroundColor: Colors.teal,
+              );
+            }).toList(),
           ),
         ],
       ),
