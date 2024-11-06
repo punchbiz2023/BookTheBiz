@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:odp/pages/Turf%20owner/Display-%20turfs/turfstats.dart';
+import '../Main Func/editturf.dart';
 import 'booking_details.dart';
 
 class TurfDetails extends StatefulWidget {
@@ -83,20 +84,26 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Image section
-                    Container(
-                      width: double.infinity,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        image: DecorationImage(
-                          image: NetworkImage(turfData['imageUrl'] ?? ''),
-                          fit: BoxFit.cover,
+                    // Row for Image and Edit Icon
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          width: MediaQuery.of(context).size.width - 80, // Adjust the width
+                          height: 200,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            image: DecorationImage(
+                              image: NetworkImage(turfData['imageUrl'] ?? ''),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          child: turfData['imageUrl'] == null
+                              ? Center(child: Icon(Icons.image, size: 100, color: Colors.grey))
+                              : null,
                         ),
-                      ),
-                      child: turfData['imageUrl'] == null
-                          ? Center(child: Icon(Icons.image, size: 100, color: Colors.grey))
-                          : null,
+                        // Edit Icon
+                      ],
                     ),
                     SizedBox(height: 16),
                     Text(
@@ -148,7 +155,6 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                       ),
                     ),
                     SizedBox(height: 16),
-                    // Enhanced Current Status section
                     Container(
                       padding: EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -219,6 +225,19 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
           'Turf Details',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.edit, color: Colors.black),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EditTurfPage(turfId: widget.turfId),
+                ),
+              );
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: Size.fromHeight(48.0),
           child: Container(
@@ -243,7 +262,7 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
         children: [
           _buildTurfDetails(context),
           BookingDetailsPage(turfId: widget.turfId, bookingData: {}), // Existing booking details page
-          Turfstats(turfId: widget.turfId) // Updated to use Turfstats
+          Turfstats(turfId: widget.turfId), // Updated to use Turfstats widget
         ],
       ),
     );
