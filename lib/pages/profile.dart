@@ -28,6 +28,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  
   Future<void> _logout() async {
     try {
       await FirebaseAuth.instance.signOut();
