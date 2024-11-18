@@ -207,59 +207,103 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
           return Center(child: Text('No bookings available.'));
         }
 
+        // Get the current date for comparison
+        final currentDate = DateTime.now();
+
         // Filter bookings based on the search query and selected date
         var filteredBookings = bookingSnapshot.data!.docs.where((doc) {
           var bookingData = doc.data() as Map<String, dynamic>;
-          final bookingDate = bookingData['bookingDate'] as String;
+          final bookingDate = DateTime.parse(bookingData['bookingDate']);
           bool matchesSearch = bookingData['userName']?.toLowerCase().contains(_searchQuery) ?? false;
 
           if (_selectedDate != null) {
-            return matchesSearch && bookingDate.startsWith(_selectedDate!.split('T')[0]);
+            return matchesSearch && bookingData['bookingDate'].startsWith(_selectedDate!.split('T')[0]);
           }
           return matchesSearch;
         }).toList();
 
-        return ListView.builder(
-          itemCount: filteredBookings.length,
-          itemBuilder: (context, index) {
-            var bookingData = filteredBookings[index].data() as Map<String, dynamic>;
-            return Card(
-              margin: EdgeInsets.symmetric(vertical: 8.0),
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.0),
+        // Separate bookings into past and active
+        var pastBookings = filteredBookings.where((doc) {
+          var bookingData = doc.data() as Map<String, dynamic>;
+          final bookingDate = DateTime.parse(bookingData['bookingDate']);
+          return bookingDate.isBefore(currentDate);
+        }).toList();
+
+        var activeBookings = filteredBookings.where((doc) {
+          var bookingData = doc.data() as Map<String, dynamic>;
+          final bookingDate = DateTime.parse(bookingData['bookingDate']);
+          return bookingDate.isAfter(currentDate) || bookingDate.isAtSameMomentAs(currentDate);
+        }).toList();
+
+        return ListView(
+          children: [
+            if (activeBookings.isNotEmpty) ...[
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.0),
+                child: Text(
+                  'Active Bookings',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20,color:Colors.teal),
+                ),
               ),
-              child: ListTile(
-                contentPadding: EdgeInsets.all(16.0),
-                title: Text(
-                  bookingData['userName'] ?? 'Unknown User',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ...activeBookings.map((doc) {
+                var bookingData = doc.data() as Map<String, dynamic>;
+                return _buildBookingCard(bookingData, doc.id);
+              }).toList(),
+            ],
+            if (pastBookings.isNotEmpty) ...[
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.0),
+                child: Text(
+                  'Past Bookings',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20,color: Colors.teal),
                 ),
-                subtitle: Text(
-                  'Date: ${bookingData['bookingDate']}\n',
-                  style: TextStyle(color: Colors.black54),
-                ),
-                trailing: Text(
-                  '₹${bookingData['amount']?.toStringAsFixed(2) ?? '0.00'}',
-                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => bkUserDetails(
-                        bookingId: filteredBookings[index].id,
-                        userId: bookingData['userId'],
-                        turfId: widget.turfId,
-                      ),
-                    ),
-                  );
-                },
               ),
-            );
-          },
+              ...pastBookings.map((doc) {
+                var bookingData = doc.data() as Map<String, dynamic>;
+                return _buildBookingCard(bookingData, doc.id);
+              }).toList(),
+            ],
+          ],
         );
       },
     );
   }
+
+  Widget _buildBookingCard(Map<String, dynamic> bookingData, String bookingId) {
+    return Card(
+      margin: EdgeInsets.symmetric(vertical: 8.0),
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      child: ListTile(
+        contentPadding: EdgeInsets.all(16.0),
+        title: Text(
+          bookingData['userName'] ?? 'Unknown User',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        subtitle: Text(
+          'Date: ${bookingData['bookingDate']}\n',
+          style: TextStyle(color: Colors.black54),
+        ),
+        trailing: Text(
+          '₹${bookingData['amount']?.toStringAsFixed(2) ?? '0.00'}',
+          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => bkUserDetails(
+                bookingId: bookingId,
+                userId: bookingData['userId'],
+                turfId: widget.turfId,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
 }

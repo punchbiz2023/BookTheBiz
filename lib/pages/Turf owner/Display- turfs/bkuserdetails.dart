@@ -27,17 +27,29 @@ class bkUserDetails extends StatelessWidget {
 
           // Show error message if there's an error
           if (snapshot.hasError) {
-            return Center(child: Text('Error fetching details.', style: TextStyle(color: Colors.red, fontSize: 18)));
+            return Center(
+              child: Text(
+                'Error fetching details.',
+                style: TextStyle(color: Colors.red, fontSize: 18),
+              ),
+            );
           }
 
           // Show message if no data is available
           if (!snapshot.hasData) {
-            return Center(child: Text('No data available.', style: TextStyle(fontSize: 18)));
+            return Center(
+              child: Text(
+                'No data available.',
+                style: TextStyle(fontSize: 18),
+              ),
+            );
           }
 
           // Extract user and booking data from snapshot
           var userData = snapshot.data!['userData'] as Map<String, dynamic>;
           var bookingData = snapshot.data!['bookingData'] as Map<String, dynamic>;
+
+          // Check if the booking status is available
 
           // Display user and booking details in a card wrapped in a SingleChildScrollView
           return SingleChildScrollView(
@@ -68,7 +80,9 @@ class bkUserDetails extends StatelessWidget {
                     SizedBox(height: 10),
                     _buildBookingDataTable(bookingData),
                     SizedBox(height: 20),
-                    _buildBookingSlotsChips(bookingData['bookingSlots'] ?? []), // Added Chip view for booking slots
+                    _buildBookingSlotsSection(bookingData['bookingSlots'] ?? []),
+                    SizedBox(height: 20),
+                    _buildBookingStatus(bookingData['bookingStatus']??[])
                   ],
                 ),
               ),
@@ -135,8 +149,8 @@ class bkUserDetails extends StatelessWidget {
     );
   }
 
-  // Method to build a Chip view for booking slots using Wrap instead of horizontal scrolling
-  Widget _buildBookingSlotsChips(List<dynamic> bookingSlots) {
+  // Method to build the Booking Slots section with a Confirm button
+  Widget _buildBookingSlotsSection(List<dynamic> bookingSlots) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -145,8 +159,12 @@ class bkUserDetails extends StatelessWidget {
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green[700]),
         ),
         SizedBox(height: 10),
-        // Use Wrap for booking slots
-        Wrap(
+        bookingSlots.isEmpty
+            ? Chip(
+          label: Text('All Booking Cancelled ☹️'),
+          backgroundColor: Colors.red[100],
+        )
+            : Wrap(
           spacing: 8.0, // Space between chips
           runSpacing: 4.0, // Space between rows
           children: bookingSlots.map<Widget>((slot) {
@@ -159,39 +177,74 @@ class bkUserDetails extends StatelessWidget {
       ],
     );
   }
+  Widget _buildBookingStatus(List<dynamic> bookingSlots) {
+    return bookingSlots.isEmpty
+        ? Container() // Return an empty container if bookingSlots is empty
+        : Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Cancelled Slots',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red[700]),
+        ),
+        SizedBox(height: 10),
+        Wrap(
+          spacing: 8.0, // Space between chips
+          runSpacing: 4.0, // Space between rows
+          children: bookingSlots.map<Widget>((slot) {
+            return Chip(
+              label: Text(slot.toString()),
+              backgroundColor: Colors.red[100],
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+
+
+
 
   // Fetch user and booking details from Firestore
   Future<Map<String, dynamic>> _fetchUserAndBookingDetails(String userId, String bookingId, String turfId) async {
-    // Fetch user details from Firestore
-    var userSnapshot = await FirebaseFirestore.instance.collection('users').doc(userId).get();
-    var userData = userSnapshot.data();
+    try {
+      // Fetch user details from Firestore
+      var userSnapshot = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      var userData = userSnapshot.data();
 
-    // Fetch booking details using turfId and bookingId
-    var bookingSnapshot = await FirebaseFirestore.instance.collection('turfs')
-        .doc(turfId) // Use turfId to access the correct document
-        .collection('bookings')
-        .doc(bookingId)
-        .get();
+      // Fetch booking details using turfId and bookingId
+      var bookingSnapshot = await FirebaseFirestore.instance
+          .collection('turfs')
+          .doc(turfId) // Use turfId to access the correct document
+          .collection('bookings')
+          .doc(bookingId)
+          .get();
 
-    var bookingData = bookingSnapshot.data();
+      var bookingData = bookingSnapshot.data();
 
-    // Return a map containing both user and booking data
-    return {
-      'userData': {
-        'userId': userId,
-        'name': userData?['name'] ?? 'N/A',
-        'email': userData?['email'] ?? 'N/A',
-        'mobile': userData?['mobile'] ?? 'N/A',
-      },
-      'bookingData': {
-        'amount': bookingData?['amount'] ?? 0,
-        'bookingDate': bookingData?['bookingDate'] ?? 'N/A',
-        'bookingSlots': bookingData?['bookingSlots'] ?? [],
-        'selectedGround': bookingData?['selectedGround'] ?? 'N/A',
-        'totalHours': bookingData?['totalHours'] ?? 0,
-        'turfId': turfId,
-        'turfName': bookingData?['turfName'] ?? 'N/A',
-      },
-    };
+
+      // Return a map containing both user and booking data
+      return {
+        'userData': {
+          'userId': userId,
+          'name': userData?['name'] ?? 'N/A',
+          'email': userData?['email'] ?? 'N/A',
+          'mobile': userData?['mobile'] ?? 'N/A',
+        },
+        'bookingData': {
+          'amount': bookingData?['amount'] ?? 0,
+          'bookingDate': bookingData?['bookingDate'] ?? 'N/A',
+          'bookingSlots': bookingData?['bookingSlots'] ?? [],
+          'bookingStatus': bookingData?['bookingStatus']??[],
+          'selectedGround': bookingData?['selectedGround'] ?? 'N/A',
+          'totalHours': bookingData?['totalHours'] ?? 0,
+          'turfId': turfId,
+          'turfName': bookingData?['turfName'] ?? 'N/A',
+        },
+      };
+    } catch (e) {
+      throw Exception('Error fetching details: $e');
+    }
   }
 }
