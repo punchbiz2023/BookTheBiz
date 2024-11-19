@@ -16,9 +16,10 @@ class HomePage1 extends StatefulWidget {
   _HomePage1State createState() => _HomePage1State();
 }
 
-class _HomePage1State extends State<HomePage1> {
+class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Position? _currentPosition;
+  String selectedTab = 'active'; // Default tab is Active
   String _searchText = '';
   String _pastBookingSearchText = '';
   String _sortOrder = 'Ascending';
@@ -33,6 +34,19 @@ class _HomePage1State extends State<HomePage1> {
       _sortOrder = 'Ascending';
       _customDate = null; // Reset custom date
     });
+  }
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this); // 3 tabs
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   void _navigateToProfile() {
@@ -55,7 +69,7 @@ class _HomePage1State extends State<HomePage1> {
         .snapshots()
         .map((snapshot) => snapshot.docs);
   }
-
+  // Start with the first tab
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
@@ -120,9 +134,6 @@ class _HomePage1State extends State<HomePage1> {
                 // Ascending/Descending dropdown
                 Expanded(child: _buildSortDropdown()),
 
-                // Spacer to create space between the dropdown and custom date button
-                SizedBox(width: 0),
-
                 // Spacer between custom date button and clear filter button
                 SizedBox(width: 0),
 
@@ -134,7 +145,72 @@ class _HomePage1State extends State<HomePage1> {
               ],
             ),
             SizedBox(height: 10),
-            _buildPastBookingsSection(),
+
+            // Tab Controller for Active, Past, and Cancelled bookings
+            DefaultTabController(
+              length: 3,
+              child: Column(
+                children: [
+                  TabBar(
+                    // Set colors based on selected tab
+                    indicatorColor: selectedTab == 'active'
+                        ? Colors.teal
+                        : selectedTab == 'past'
+                        ? Colors.blue
+                        : Colors.red,
+                    labelColor: selectedTab == 'active'
+                        ? Colors.teal
+                        : selectedTab == 'past'
+                        ? Colors.blue
+                        : Colors.red,
+                    unselectedLabelColor: Colors.grey,
+                    tabs: [
+                      Tab(
+                        text: 'Active',
+                      ),
+                      Tab(
+                        text: 'Past',
+                      ),
+                      Tab(
+                        text: 'Cancelled',
+                      ),
+                    ],
+                    onTap: (index) {
+                      setState(() {
+                        // Update selectedTab with a string value based on the tab
+                        if (index == 0) {
+                          selectedTab = 'active';
+                        } else if (index == 1) {
+                          selectedTab = 'past';
+                        } else {
+                          selectedTab = 'cancelled';
+                        }
+                      });
+                    },
+                  ),
+                  SizedBox(height: 10),
+                  // Booking sections based on selected tab with custom colors
+                  IndexedStack(
+                    index: selectedTab == 'active'
+                        ? 0
+                        : selectedTab == 'past'
+                        ? 1
+                        : 2,
+                    children: [
+                      Container(
+                        child: _buildPastBookingsSection('active'),
+                      ),
+                      Container(
+                        child: _buildPastBookingsSection('past'),
+                      ),
+                      Container(
+                        child: _buildPastBookingsSection('cancelled'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -337,7 +413,7 @@ class _HomePage1State extends State<HomePage1> {
 
 
 
-  Widget _buildPastBookingsSection() {
+  Widget _buildPastBookingsSection(String state) {
     return StreamBuilder<List<DocumentSnapshot>>(
       stream: _fetchPastBookings(),
       builder: (context, snapshot) {
@@ -350,9 +426,7 @@ class _HomePage1State extends State<HomePage1> {
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Center(child: Text('No past bookings found'));
         }
-
         var pastBookings = snapshot.data!;
-
         // Filter bookings based on user and search text
         var filteredBookings = pastBookings.where((booking) {
           var bookingData = booking.data() as Map<String, dynamic>;
@@ -412,151 +486,179 @@ class _HomePage1State extends State<HomePage1> {
         }
 
         // Function to check if booking is cancelled
-        bool _isBookingCancelled(Map<String, dynamic> bookingData) {
-          var bookingSlots = bookingData['bookingSlots'] as List<dynamic>;
-          var bookingStatus = (bookingData['bookingStatus'] as List<dynamic>?) ?? ['defaultStatus'];
-          // Ensure bookingStatus is not greater than bookingSlots
-          if (bookingStatus.length > bookingSlots.length) {
-            return true; // Treat as cancelled if bookingStatus exceeds bookingSlots
-          }
-
-          // Check if the lengths of bookingSlots and bookingStatus match
-          if (bookingSlots.length != bookingStatus.length) {
-            return false; // If they don't match, the booking is active
-          }
-
-          // Compare each slot with its corresponding cancelled status
-          for (int i = 0; i < bookingSlots.length; i++) {
-            var slot = bookingSlots[i];
-            var status = bookingStatus[i];
-
-            if (status['status'] == 'Cancelled') {
-              // Check if the slot time matches with the cancellation time range
-              if (slot == "${status['startTime']} - ${status['endTime']}") {
-                return true; // If the status is "Cancelled" and times match, it's cancelled
-              }
-            }
-          }
-
-          return false; // If no cancellation found, return false
-        }
-
-        // Returning the list view with two sections: Active and Past bookings
         return Column(
           children: [
             // Active Bookings Section
-            if (activeBookings.isEmpty)
+            if (selectedTab == 'active') ...[
+              if (activeBookings.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      'No new bookings.',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ListView.builder(
+                  itemCount: activeBookings.length,
+                  shrinkWrap: true,
+                  physics: NeverScrollableScrollPhysics(),
+                  itemBuilder: (context, index) {
+                    var bookingData = activeBookings[index].data() as Map<String, dynamic>;
+                    bookingData['bookID'] = activeBookings[index].id;
+
+                    if (bookingData['bookingSlots'] == null || bookingData['bookingSlots'].isEmpty) {
+                      return SizedBox();
+                    }
+                    return GestureDetector(
+                      child: Card(
+                        elevation: 2,
+                        margin: EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ListTile(
+                          title: Text(
+                            bookingData['turfName'] ?? 'No Turf Name',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(bookingData['bookingDate'] ?? 'No Booking Date'),
+                          trailing: Text(
+                            '${bookingData['amount']} INR',
+                            style: TextStyle(color: Colors.teal),
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => BookingDetailsPage1(
+                                  bookingData: bookingData,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+            ],
+            if (selectedTab == 'cancelled') ...[
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(14.0),
+                child: Text(
+                'Long Press on the turf to select & delete',
+                style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+                ),
+                ),
+                ),
+              ),
+              ListView.builder(
+                itemCount: activeBookings.length,
+                shrinkWrap: true,
+                physics: NeverScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  var bookingData = activeBookings[index].data() as Map<String, dynamic>;
+                  bookingData['bookID'] = activeBookings[index].id;
+
+                  if (bookingData['bookingSlots'] == null || bookingData['bookingSlots'].isEmpty) {
+                    return GestureDetector(
+                      onLongPress: () => _enableSelectionMode(bookingData, 'cancelled'),
+                      child: Card(
+                        elevation: 2,
+                        margin: EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ListTile(
+                          title: Text(
+                            bookingData['turfName'] ?? 'No Turf Name',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                          ),
+                          subtitle: Text(bookingData['bookingDate'] ?? 'No Booking Date'),
+                          trailing: selectionMode && selectedBookings.any((selectedBooking) {
+                            bool allFieldsMatch = true;
+                            List<String> fieldsToCheck = ['turfId', 'bookingDate', 'bookingSlots', 'userId'];
+                            for (String key in fieldsToCheck) {
+                              if (key == 'bookingSlots') {
+                                if (selectedBooking['data'][key] is List &&
+                                    bookingData[key] is List) {
+                                  if (selectedBooking['data'][key].length != bookingData[key].length) {
+                                    allFieldsMatch = false;
+                                    break;
+                                  }
+                                }
+                              } else if (selectedBooking['data'][key] != bookingData[key]) {
+                                allFieldsMatch = false;
+                                break;
+                              }
+                            }
+                            return allFieldsMatch;
+                          })
+                              ? CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Colors.red,
+                            child: Icon(Icons.check, color: Colors.white, size: 16),
+                          )
+                              : Text(
+                            '${bookingData['amount']} INR',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                          onTap: () {
+                            if (!selectionMode) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => BookingDetailsPage1(
+                                    bookingData: bookingData,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                    );
+                  } else {
+                    return SizedBox();
+                  }
+                },
+              ),
+            ],
+            // Past Bookings Section
+            if (selectedTab == 'past') ...[
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(14.0),
                   child: Text(
-                    'No new bookings.',
+                    'Long Press on the turf to select & delete',
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: Colors.grey,
                     ),
                   ),
                 ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'Active Bookings..! ',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal,
-                  ),
-                ),
               ),
-            ListView.builder(
-              itemCount: activeBookings.length,
-              shrinkWrap: true,
-              physics: NeverScrollableScrollPhysics(),
-              itemBuilder: (context, index) {
-                var bookingData = activeBookings[index].data() as Map<String, dynamic>;
-                bookingData['bookID'] = activeBookings[index].id;
-
-                // Check if bookingSlots is empty to treat it as cancelled
-                if (bookingData['bookingSlots'] == null ||
-                    bookingData['bookingSlots'].isEmpty) {
-                  return SizedBox();
-                }
-
-                return GestureDetector(
-                  child: Card(
-                    elevation: 2,
-                    margin: EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: ListTile(
-                      title: Text(
-                        bookingData['turfName'] ?? 'No Turf Name',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(bookingData['bookingDate'] ?? 'No Booking Date'),
-                      trailing: selectionMode && selectedBookings.contains(bookingData)
-                          ? CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Colors.teal,
-                        child: Icon(Icons.check, color: Colors.white, size: 16),
-                      )
-                          : Text(
-                        '${bookingData['amount']} INR',
-                        style: TextStyle(color: Colors.teal),
-                      ),
-                      onTap: () {
-                        if (!selectionMode) {
-                          // Navigate if not in selection mode
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => BookingDetailsPage1(
-                                bookingData: bookingData,
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            // Cancelled Bookings Section
-            if (activeBookings.any((booking) {
-              var bookingData = booking.data() as Map<String, dynamic>;
-              return bookingData['bookingSlots'] == null ||
-                  bookingData['bookingSlots'].isEmpty;
-            }))
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'Cancelled Bookings!',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red,
-                  ),
-                ),
-              ),
-            ListView.builder(
-              itemCount: activeBookings.length,
-              shrinkWrap: true,
-              physics: NeverScrollableScrollPhysics(),
-              itemBuilder: (context, index) {
-                var bookingData = activeBookings[index].data() as Map<String, dynamic>;
-                bookingData['bookID'] = activeBookings[index].id;
-
-                // Treat bookings with empty slots as canceled
-                if (bookingData['bookingSlots'] == null ||
-                    bookingData['bookingSlots'].isEmpty) {
+              ListView.builder(
+                itemCount: pastBookingsList.length,
+                shrinkWrap: true,
+                physics: NeverScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  var bookingData = pastBookingsList[index].data() as Map<String, dynamic>;
+                  bookingData['bookID'] = pastBookingsList[index].id;
                   return GestureDetector(
-                    onLongPress: () => _enableSelectionMode(bookingData, 'cancelled'),
+                    onLongPress: () => _enableSelectionMode(bookingData, 'past'),
                     child: Card(
                       elevation: 2,
                       margin: EdgeInsets.symmetric(vertical: 8),
@@ -565,10 +667,10 @@ class _HomePage1State extends State<HomePage1> {
                       ),
                       child: ListTile(
                         title: Text(
-                          bookingData['turfName'] ?? 'No Turf Name',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                          bookingData['turfName'],
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade600),
                         ),
-                        subtitle: Text(bookingData['bookingDate'] ?? 'No Booking Date'),
+                        subtitle: Text(bookingData['bookingDate']),
                         trailing: selectionMode && selectedBookings.any((selectedBooking) {
                           bool allFieldsMatch = true;
                           List<String> fieldsToCheck = ['turfId', 'bookingDate', 'bookingSlots', 'userId'];
@@ -576,8 +678,7 @@ class _HomePage1State extends State<HomePage1> {
                             if (key == 'bookingSlots') {
                               if (selectedBooking['data'][key] is List &&
                                   bookingData[key] is List) {
-                                if (selectedBooking['data'][key].length !=
-                                    bookingData[key].length) {
+                                if (selectedBooking['data'][key].length != bookingData[key].length) {
                                   allFieldsMatch = false;
                                   break;
                                 }
@@ -591,171 +692,65 @@ class _HomePage1State extends State<HomePage1> {
                         })
                             ? CircleAvatar(
                           radius: 12,
-                          backgroundColor: Colors.red,
+                          backgroundColor: Colors.teal,
                           child: Icon(Icons.check, color: Colors.white, size: 16),
                         )
                             : Text(
                           '${bookingData['amount']} INR',
-                          style: TextStyle(color: Colors.red),
+                          style: TextStyle(color: Colors.teal),
                         ),
                         onTap: () {
-                          if (!selectionMode) {
-                            // Navigate to details
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => BookingDetailsPage1(
-                                  bookingData: bookingData,
-                                ),
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => BookingDetailsPage1(
+                                bookingData: bookingData,
                               ),
-                            );
-                          }
+                            ),
+                          );
                         },
                       ),
                     ),
                   );
-                } else {
-                  return SizedBox();
-                }
-              },
-            ),
-
-            if (pastBookingsList.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'Past Bookings..! ',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal,
-                  ),
-                ),
+                },
               ),
-            ListView.builder(
-              itemCount: pastBookingsList.length,
-              shrinkWrap: true,
-              physics: NeverScrollableScrollPhysics(),
-              itemBuilder: (context, index) {
-                var bookingData = pastBookingsList[index].data() as Map<String, dynamic>;
-                bookingData['bookID'] = pastBookingsList[index].id;
-                return GestureDetector(
-                  onLongPress: () => _enableSelectionMode(bookingData, 'past'),
-                  child: Card(
-                    elevation: 2,
-                    margin: EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: ListTile(
-                      title: Text(
-                        bookingData['turfName'],
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade600),
-                      ),
-                      subtitle: Text(bookingData['bookingDate']),
-                      trailing: selectionMode && selectedBookings.any((selectedBooking) {
-                        // Initialize the flag to track if the selected fields match
-                        bool allFieldsMatch = true;
-                        List<String> fieldsToCheck = ['turfId', 'bookingDate', 'bookingSlots', 'userId'];
-
-                        for (String key in fieldsToCheck) {
-
-                          if (key == 'bookingSlots') {
-                            // Compare 'bookingSlots' list
-                            if (selectedBooking['data'][key] is List && bookingData[key] is List) {
-                              if (selectedBooking['data'][key].length != bookingData[key].length) {
-                                allFieldsMatch = false;
-                                break;
-                              } else {
-                                // Compare each item in the list
-                                for (int i = 0; i < selectedBooking['data'][key].length; i++) {
-                                  if (selectedBooking['data'][key][i] != bookingData[key][i]) {
-                                    allFieldsMatch = false;
-                                    break;
-                                  }
-                                }
-                              }
-                            }
-                          } else {
-                            // Basic comparison for other fields
-                            if (selectedBooking['data'][key] != bookingData[key]) {
-                              allFieldsMatch = false;
-                              break; // Exit as soon as a mismatch is found
-                            }
-                          }
-                        }
-
-                        // Return whether all fields match
-                        return allFieldsMatch;
-                      })
-                          ? CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Colors.teal,
-                        child: Icon(Icons.check, color: Colors.white, size: 16),
-                      )
-                          : Text(
-                        '${bookingData['amount']} INR',
-                        style: TextStyle(color: Colors.teal),
-                      ),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => BookingDetailsPage1(
-                              bookingData: bookingData,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
+            ],
             if (selectionMode)
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween, // Distribute buttons
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Cancel Button
                     ElevatedButton(
                       onPressed: () {
-                        _resetSelectedBookings(); // Reset the selected bookings
+                        _resetSelectedBookings();
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey, // Grey background for cancel button
+                        backgroundColor: Colors.grey,
                         padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8), // Rounded corners
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
                       child: const Text(
                         "Cancel",
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800), // White text color
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                       ),
                     ),
-
-                    // Delete Button
                     ElevatedButton.icon(
                       onPressed: () {
                         _deleteSelectedBookings();
                       },
-                      icon: const Icon(
-                        Icons.delete,
-                        color: Colors.white, // Icon color
-                      ),
+                      icon: const Icon(Icons.delete, color: Colors.white),
                       label: const Text(
                         "Delete Selected Bookings",
-                        style: TextStyle(
-                          color: Colors.white, // Text color
-                        ),
+                        style: TextStyle(color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red, // Red background for delete button
+                        backgroundColor: Colors.red,
                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8), // Rounded corners
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
                     ),
@@ -767,7 +762,6 @@ class _HomePage1State extends State<HomePage1> {
       },
     );
   }
-// Check for mismatch between bookingStatus and bookingSlots
   void _enableSelectionMode(Map<String, dynamic> bookingData, String bookingType) {
     setState(() {
       selectionMode = true;
