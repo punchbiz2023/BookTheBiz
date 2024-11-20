@@ -6,7 +6,6 @@ import 'package:odp/pages/profile.dart';
 import 'package:odp/widgets/firebaseimagecard.dart';
 import 'bkdetails.dart';
 import 'package:collection/collection.dart';
-
 class HomePage1 extends StatefulWidget {
   final User? user;
 
@@ -18,7 +17,6 @@ class HomePage1 extends StatefulWidget {
 
 class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  Position? _currentPosition;
   String selectedTab = 'active'; // Default tab is Active
   String _searchText = '';
   String _pastBookingSearchText = '';
@@ -780,23 +778,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       selectedBookings.clear();  // Clear the selected bookings list
       selectionMode = false;  // Optionally reset the selection mode
     });
-  }
-
-
-  // Check if the booking status is mismatched (for cancelled bookings)
-  bool _hasStatusMismatch(Map<String, dynamic> bookingData) {
-    if (bookingData['bookingStatus'] != null && bookingData['bookingSlots'] != null) {
-      var bookingStatus = bookingData['bookingStatus'] as List;
-      var bookingSlots = bookingData['bookingSlots'] as List;
-
-      // Compare the values in bookingStatus and bookingSlots
-      for (int i = 0; i < bookingStatus.length; i++) {
-        if (bookingStatus[i] != bookingSlots[i]) {
-          return true; // Mismatch found
-        }
-      }
-    }
-    return false; // No mismatch
   }
 
   // Delete selected bookings
