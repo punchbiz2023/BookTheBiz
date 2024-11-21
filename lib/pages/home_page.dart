@@ -8,9 +8,7 @@ import 'bkdetails.dart';
 import 'package:collection/collection.dart';
 class HomePage1 extends StatefulWidget {
   final User? user;
-
   const HomePage1({Key? key, this.user}) : super(key: key);
-
   @override
   _HomePage1State createState() => _HomePage1State();
 }
@@ -24,6 +22,7 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
   DateTime? _customDate; // Added custom date variable
   bool selectionMode = false; // Define the variable here
   List<Map<String, dynamic>> selectedBookings = [];
+  List<String> _selectedGrounds = [];
   final _currentUserId = FirebaseAuth.instance.currentUser?.uid;
   void clearFilters() {
     setState(() {
@@ -34,19 +33,16 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
     });
   }
   late TabController _tabController;
-
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this); // 3 tabs
   }
-
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
   }
-
   void _navigateToProfile() {
     Navigator.push(
       context,
@@ -55,17 +51,54 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       ),
     );
   }
-
   Stream<List<DocumentSnapshot>> _fetchTurfs() {
     return FirebaseFirestore.instance.collection('turfs').snapshots().map((snapshot) => snapshot.docs);
   }
-
   Stream<List<DocumentSnapshot>> _fetchPastBookings() {
     return FirebaseFirestore.instance
         .collection('bookings')
         .where('userId', isEqualTo: _currentUserId)
         .snapshots()
         .map((snapshot) => snapshot.docs);
+  }
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.teal,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  Widget _buildPastBookingsSearchBar() {
+    return TextFormField(
+      onChanged: (value) {
+        setState(() {
+          _pastBookingSearchText = value;
+        });
+      },
+      style: TextStyle(color: Colors.black),
+      decoration: InputDecoration(
+        hintText: 'Search bookings...',
+        hintStyle: TextStyle(color: Colors.black54),
+        filled: true,
+        fillColor: Colors.grey[200],
+        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: BorderSide(color: Colors.black54),
+        ),
+      ),
+    );
   }
   // Start with the first tab
   Widget build(BuildContext context) {
@@ -117,7 +150,36 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionTitle('Turfs'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween, // Aligns title and button at both ends
+                children: [
+                  _buildSectionTitle('Turfs'),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      _showFilterDialog(); // Open the filter dialog
+                    },
+                    icon: Icon(Icons.filter_list, color: Colors.teal),
+                    label: _selectedGrounds.isEmpty
+                        ? Text(
+                      'Select Your Play', // Display this text when no grounds are selected
+                      style: TextStyle(color: Colors.teal),
+                    )
+                        : SizedBox.shrink(), // Hide the label when grounds are selected
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.teal),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: _selectedGrounds.isEmpty
+                          ? EdgeInsets.symmetric(horizontal: 16) // Padding for the text
+                          : EdgeInsets.symmetric(horizontal: 24), // Extra padding to center the icon
+                    ),
+                  ),
+                ],
+              ),
+            ),
             _buildTurfsSection(),
             SizedBox(height: 20),
             _buildSectionTitle('Bookings'),
@@ -131,11 +193,7 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
               children: [
                 // Ascending/Descending dropdown
                 Expanded(child: _buildSortDropdown()),
-
-                // Spacer between custom date button and clear filter button
                 SizedBox(width: 0),
-
-                // Clear filters button
                 IconButton(
                   icon: Icon(Icons.clear_all, color: Colors.teal),
                   onPressed: clearFilters, // Clear filters on button press
@@ -215,20 +273,115 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
     );
   }
 
-
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: Colors.teal,
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+  void _showFilterDialog() async {
+    // List of available ground types
+    final List<String> groundOptions = [
+      'Volleyball Court',
+      'Swimming Pool',
+      'Cricket Ground',
+      'Shuttlecock',
+      'Football Field',
+      'Basketball Court',
+      'Tennis Court',
+      'Badminton Court',
+    ];
+    final List<String> tempSelectedGrounds = List.from(_selectedGrounds);
+    final List<String>? selectedGrounds = await showDialog<List<String>>(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              title: Center(
+                child: Text(
+                  'Select Your Play',
+                  style: TextStyle(
+                    color: Colors.teal,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              content: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.8,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: groundOptions.map((ground) {
+                      final isSelected = tempSelectedGrounds.contains(ground);
+                      return CheckboxListTile(
+                        title: Text(
+                          ground,
+                          style: TextStyle(
+                            color: isSelected ? Colors.teal : Colors.black,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        value: isSelected,
+                        activeColor: Colors.teal,
+                        onChanged: (bool? isChecked) {
+                          setState(() {
+                            if (isChecked == true) {
+                              tempSelectedGrounds.add(ground);
+                            } else {
+                              tempSelectedGrounds.remove(ground);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              actions: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween, // Use space between the buttons
+                  children: [
+                    // Clear All Button
+                    TextButton(
+                      onPressed: () {
+                        // Reset the selected grounds to an empty list
+                        setState(() {
+                          tempSelectedGrounds.clear(); // Clear all selections
+                        });
+                      },
+                      child: Text(
+                        'Clear All',
+                        style: TextStyle(
+                          color: Colors.red,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        // Return selected grounds (ensure it's a List<String>)
+                        Navigator.of(context).pop(List<String>.from(tempSelectedGrounds)); // Pop the selected grounds as a List<String>
+                      },
+                      child: Text('OK'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.teal,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
+    // Once the dialog is closed, update the state with the selected grounds if any
+    if (selectedGrounds != null) {
+      setState(() {
+        _selectedGrounds = selectedGrounds; // Update the selectedGrounds list with the result
+      });
+    }
   }
 
   Widget _buildTurfsSection() {
@@ -248,21 +401,34 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
         var turfs = snapshot.data!;
         var filteredTurfs = turfs.where((turf) {
           var turfData = turf.data() as Map<String, dynamic>;
-          return turfData['name']
+
+          // Filter by search text (name)
+          bool matchesSearch = turfData['name']
               .toString()
               .toLowerCase()
               .contains(_searchText.toLowerCase());
+
+          // Filter by selected grounds (_selectedGrounds)
+          bool matchesGrounds = _selectedGrounds.isEmpty ||
+              _selectedGrounds.any((selectedGround) =>
+                  turfData['availableGrounds'].contains(selectedGround));
+          // Return true if both conditions are met
+          return matchesSearch && matchesGrounds;
         }).toList();
 
+// Filter out turfs with empty or null image URLs
         filteredTurfs = filteredTurfs.where((turf) {
           var turfData = turf.data() as Map<String, dynamic>;
           return turfData['imageUrl'] != null && turfData['imageUrl'].isNotEmpty;
         }).toList();
 
+// If no turfs match the search or selected grounds, show a message
         if (filteredTurfs.isEmpty) {
-          return Center(child: Text('No turfs match your search'));
+          return Center(child: Text('No turfs match your search or selected grounds'));
         }
 
+
+        // Step 4: Display filtered turfs in a horizontal ListView
         return Container(
           height: 250,
           child: ListView.builder(
@@ -288,30 +454,8 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
         );
       },
     );
-
   }
 
-  Widget _buildPastBookingsSearchBar() {
-    return TextFormField(
-      onChanged: (value) {
-        setState(() {
-          _pastBookingSearchText = value;
-        });
-      },
-      style: TextStyle(color: Colors.black),
-      decoration: InputDecoration(
-        hintText: 'Search bookings...',
-        hintStyle: TextStyle(color: Colors.black54),
-        filled: true,
-        fillColor: Colors.grey[200],
-        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(30),
-          borderSide: BorderSide(color: Colors.black54),
-        ),
-      ),
-    );
-  }
 
   Widget _buildSortDropdown() {
     return Row(
@@ -408,8 +552,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       ],
     );
   }
-
-
 
   Widget _buildPastBookingsSection(String state) {
     return StreamBuilder<List<DocumentSnapshot>>(
@@ -818,6 +960,3 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
     });
   }
 }
-
-
-

@@ -383,11 +383,12 @@ class _BookingPageState extends State<BookingPage> {
                     return null;
                   },
                   selectedBuilder: (context, day, focusedDay) {
-                    Color selectedDayColor = _getColorForSelectedDay();
+                    Color? selectedDayColor = _getColorForSelectedDay();
                     return Container(
                       decoration: BoxDecoration(
                         color: selectedDayColor, // Use dynamically updated color
-                        shape: BoxShape.circle,
+                        shape: BoxShape.rectangle,
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       margin: const EdgeInsets.all(6.0),
                       alignment: Alignment.center,
@@ -418,7 +419,7 @@ class _BookingPageState extends State<BookingPage> {
   }
 
 // Function to determine the color of the selected day based on the booking status
-  Color _getColorForSelectedDay() {
+  Color? _getColorForSelectedDay() {
     const int maxSlotsPerDay = 10;
     if (selectedDate == null) {
       return Colors.grey; // Default color if no date is selected
@@ -432,7 +433,7 @@ class _BookingPageState extends State<BookingPage> {
     } else if (bookingPercentage >= 50) {
       return Colors.orange;
     } else {
-      return Colors.yellow;
+      return Colors.teal;
     }
   }
 
@@ -442,7 +443,7 @@ class _BookingPageState extends State<BookingPage> {
     if (bookedSlots <= 2) {
       return Colors.green; // 0-2 slots booked
     } else if (bookedSlots <= 5) {
-      return Colors.yellow; // 3-5 slots booked
+      return Colors.teal; // 3-5 slots booked
     } else if (bookedSlots <= 9) {
       return Colors.orange; // 6-9 slots booked
     } else {
@@ -472,7 +473,7 @@ class _BookingPageState extends State<BookingPage> {
       statusText =
       "Partially Booked ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
     } else {
-      statusColor = Colors.yellow;
+      statusColor = Colors.teal;
       statusText =
       "Available ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
     }
