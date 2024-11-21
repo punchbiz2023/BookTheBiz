@@ -407,28 +407,18 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
               .toString()
               .toLowerCase()
               .contains(_searchText.toLowerCase());
-
-          // Filter by selected grounds (_selectedGrounds)
           bool matchesGrounds = _selectedGrounds.isEmpty ||
               _selectedGrounds.any((selectedGround) =>
                   turfData['availableGrounds'].contains(selectedGround));
-          // Return true if both conditions are met
           return matchesSearch && matchesGrounds;
         }).toList();
-
-// Filter out turfs with empty or null image URLs
         filteredTurfs = filteredTurfs.where((turf) {
           var turfData = turf.data() as Map<String, dynamic>;
           return turfData['imageUrl'] != null && turfData['imageUrl'].isNotEmpty;
         }).toList();
-
-// If no turfs match the search or selected grounds, show a message
         if (filteredTurfs.isEmpty) {
           return Center(child: Text('No turfs match your search or selected grounds'));
         }
-
-
-        // Step 4: Display filtered turfs in a horizontal ListView
         return Container(
           height: 250,
           child: ListView.builder(
@@ -455,7 +445,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       },
     );
   }
-
 
   Widget _buildSortDropdown() {
     return Row(

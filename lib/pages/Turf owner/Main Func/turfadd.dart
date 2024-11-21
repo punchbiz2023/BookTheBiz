@@ -15,6 +15,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
   final TextEditingController _priceController = TextEditingController(); // Price controller
   File? _imageFile;
   bool _isLoading = false;
+  final Map<String, double> _selectedGroundPrices = {};
   final ImagePicker _picker = ImagePicker();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _firebaseStorage = FirebaseStorage.instance;
@@ -110,12 +111,10 @@ class _AddTurfPageState extends State<AddTurfPage> {
     }
   }
 
-  // Function to submit the turf details
   Future<void> _submitTurf() async {
     if (_nameController.text.isEmpty ||
         _descriptionController.text.isEmpty ||
         _imageFile == null ||
-        _priceController.text.isEmpty || // Check if price is empty
         _selectedFacilities.isEmpty ||
         _selectedAvailableGrounds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,23 +128,26 @@ class _AddTurfPageState extends State<AddTurfPage> {
     });
 
     try {
+      // Upload the image and get the URL
       String imageUrl = await _uploadImage(_imageFile!);
       String userId = _auth.currentUser!.uid; // Get the current user UID
-      DocumentReference turfRef = _firestore.collection('turfs')
-          .doc(); // Create a reference to a new document
+      DocumentReference turfRef = _firestore.collection('turfs').doc(); // Create a new document reference
       String turfId = turfRef.id; // Use the document ID as turfId
 
-      // Add the document with the turfId as the document ID
-      await turfRef.set({
+      // Prepare the data to be saved in Firestore
+      Map<String, dynamic> turfData = {
         'turfId': turfId,
         'name': _nameController.text,
         'description': _descriptionController.text,
-        'price': double.parse(_priceController.text), // Add price to Firestore
+        'price': _selectedGroundPrices,
         'imageUrl': imageUrl,
         'facilities': _selectedFacilities,
         'availableGrounds': _selectedAvailableGrounds,
-        'ownerId': userId, // Add ownerId to Firestore
-      });
+        'ownerId': userId,
+      };
+
+      // Add the document with the turfId as the document ID
+      await turfRef.set(turfData);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Turf added successfully!')),
@@ -171,7 +173,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
         slivers: [
           SliverAppBar(
             backgroundColor: Colors.transparent,
-            title: Text('Add Turf', style: TextStyle(color: Colors.grey[700])),
+            title: Text('Add Turf', style: TextStyle(color: Colors.grey[700],fontWeight: FontWeight.bold)),
             centerTitle: true,
             floating: true,
             // Show and hide the app bar based on scrolling
@@ -201,19 +203,12 @@ class _AddTurfPageState extends State<AddTurfPage> {
                         maxLines: 3,
                       ),
                       SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _priceController,
-                        label: 'Price',
-                        keyboardType: TextInputType.number,
-                      ),
+                      _buildTopicTitle('Available Grounds'),
+                      _buildAvailableGroundsChips(),
+
                       SizedBox(height: 16),
                       _buildTopicTitle('Facilities'),
                       _buildFacilitiesChips(),
-                      // Facilities chip selector
-                      SizedBox(height: 16),
-                      _buildTopicTitle('Available Grounds'),
-                      _buildAvailableGroundsChips(),
-                      // Available grounds chip selector
                       SizedBox(height: 24),
                       _isLoading
                           ? Center(child: CircularProgressIndicator())
@@ -309,25 +304,25 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
   Widget _buildAvailableGroundsChips() {
     return Wrap(
-      spacing: 8,
+      spacing: 8.0,
       children: _availableGrounds.map((ground) {
         return ChoiceChip(
           label: Text(ground),
           selected: _selectedAvailableGrounds.contains(ground),
-          onSelected: (isSelected) {
-            setState(() {
-              if (isSelected) {
-                _selectedAvailableGrounds.add(ground);
-              } else {
+          onSelected: (bool selected) async {
+            if (selected) {
+              await _fetchPriceForGround(ground);
+            } else {
+              setState(() {
                 _selectedAvailableGrounds.remove(ground);
-              }
-            });
+                _selectedGroundPrices.remove(ground);
+              });
+            }
           },
         );
       }).toList(),
     );
   }
-
   Widget _buildTopicTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
@@ -337,10 +332,33 @@ class _AddTurfPageState extends State<AddTurfPage> {
       ),
     );
   }
+  Future<void> _fetchPriceForGround(String ground) async {
+    double? price = await showDialog<double>(
+      context: context,
+      builder: (context) => _PriceInputDialog(
+        groundName: ground,
+        previousPrice: _selectedGroundPrices.isNotEmpty
+            ? _selectedGroundPrices.values.last
+            : null,
+      ),
+    );
 
+    if (price != null) {
+      setState(() {
+        _selectedAvailableGrounds.add(ground);
+        _selectedGroundPrices[ground] = price;
+      });
+    }
+  }
   Widget _buildSubmitButton() {
     return ElevatedButton(
-      onPressed: _submitTurf,
+      onPressed: () {
+        print('Selected Ground Prices:');
+        _selectedGroundPrices.forEach((ground, price) {
+          print('Ground: $ground, Price: \$${price.toStringAsFixed(2)}');
+        });
+        _submitTurf(); // Proceed with the submission logic
+      },
       child: Text('Submit'),
       style: ElevatedButton.styleFrom(
         padding: EdgeInsets.symmetric(vertical: 16),
@@ -348,3 +366,118 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 }
+class _PriceInputDialog extends StatelessWidget {
+  final String groundName;
+  final double? previousPrice;
+
+  _PriceInputDialog({required this.groundName, this.previousPrice});
+
+  @override
+  Widget build(BuildContext context) {
+    final TextEditingController _priceController = TextEditingController();
+    bool _isChecked = false;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Set Price for $groundName',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.teal,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          content: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _priceController,
+                  keyboardType: TextInputType.number,
+                  style: TextStyle(fontSize: 16),
+                  decoration: InputDecoration(
+                    labelText: 'Enter Price',
+                    labelStyle: TextStyle(color: Colors.grey[600]),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.teal),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.teal, width: 2),
+                    ),
+                  ),
+                ),
+                if (previousPrice != null)
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _isChecked,
+                        onChanged: (value) {
+                          setState(() {
+                            _isChecked = value ?? false;
+                            if (_isChecked) {
+                              _priceController.text =
+                                  previousPrice!.toStringAsFixed(2);
+                            } else {
+                              _priceController.clear();
+                            }
+                          });
+                        },
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Same as ${previousPrice!.toStringAsFixed(2)}',
+                          style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, null);
+              },
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                double? price = double.tryParse(_priceController.text);
+                if (price != null) {
+                  Navigator.pop(context, price);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: Text(
+                previousPrice == null ? 'Next' : 'Finish',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+
+
+
+

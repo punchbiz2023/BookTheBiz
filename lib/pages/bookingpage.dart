@@ -161,18 +161,40 @@ class _BookingPageState extends State<BookingPage> {
 
     // Calculate total amount and total hours
     double totalAmount = 0.0;
-    totalHours = 0.0;
-    //price = _fetchDetails() as double;
+    double totalHours = 0.0;
+
+// Fetch turf details
     DocumentSnapshot turfSnapshot = await FirebaseFirestore.instance
         .collection('turfs')
         .doc(widget.documentId)
         .get();
-    price = turfSnapshot['price'];
+
+// Get the price and handle different possible types (List, String, Map, or double)
+    var price = turfSnapshot['price'] ?? 0.0; // Default to 0.0 if price is null
+
+    if (price is Map) {
+      // If price is a Map, try to match with the selectedGround key
+      price = price[selectedGround] ?? 0.0; // Use selectedGround as the key
+    } else if (price is List) {
+      // If price is a List, handle it (this logic can be adjusted as needed)
+      price = (price.isNotEmpty) ? price.first : 0.0;
+    } else if (price is String) {
+      // If price is a String, try parsing it as a double
+      price = double.tryParse(price) ?? 0.0;
+    } else if (price is double) {
+      // If price is already a double, do nothing
+      price = price;
+    }
+
+// Calculate totalAmount based on selectedSlots
     for (String slot in selectedSlots) {
       double hours = _getHoursForSlot(slot);
-      totalHours = (totalHours ?? 0) + hours;
-      totalAmount += hours * price;
+      totalHours += hours; // Accumulate total hours
+      totalAmount += hours * price; // Accumulate total amount
     }
+
+// Now you have the totalAmount and totalHours calculated with the correct price
+
 
     // Show the confirmation dialog
     showDialog(
@@ -202,66 +224,66 @@ class _BookingPageState extends State<BookingPage> {
               },
             ),
             TextButton(
-              child: Text('Confirm Booking', style: TextStyle(color: Colors.green)),
-              onPressed: () async {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => BookingSuccessPage(),
-                  ),
-                );// Close the dialog
-        print(selectedDate);
-        // Store the booking in Firestore under the specific turf's bookings subcollection
-        Map<String, dynamic> bookingData = {
-        'userId': currentUser?.uid ?? '',
-        'userName': userName,
-        'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-        'bookingSlots': selectedSlots, // Store selected slots as a list
-        'totalHours': totalHours,
-        'amount': totalAmount,
-        'turfId': widget.documentId,
-        'turfName': widget.documentname,
-          'selectedGround': selectedGround,
-        };
+                child: Text('Confirm Booking', style: TextStyle(color: Colors.green)),
+                onPressed: () async {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => BookingSuccessPage(),
+                    ),
+                  );// Close the dialog
+                  print(selectedDate);
+                  // Store the booking in Firestore under the specific turf's bookings subcollection
+                  Map<String, dynamic> bookingData = {
+                    'userId': currentUser?.uid ?? '',
+                    'userName': userName,
+                    'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                    'bookingSlots': selectedSlots, // Store selected slots as a list
+                    'totalHours': totalHours,
+                    'amount': totalAmount,
+                    'turfId': widget.documentId,
+                    'turfName': widget.documentname,
+                    'selectedGround': selectedGround,
+                  };
 
-        try {
-        // Change the path to store booking in the turf document's bookings subcollection
-        await _firestore.collection('turfs')
-            .doc(widget.documentId)
-            .collection('bookings') // Create or reference the 'bookings' subcollection
-            .add(bookingData);
+                  try {
+                    // Change the path to store booking in the turf document's bookings subcollection
+                    await _firestore.collection('turfs')
+                        .doc(widget.documentId)
+                        .collection('bookings') // Create or reference the 'bookings' subcollection
+                        .add(bookingData);
 
-        // Also store the booking in the top-level 'bookings' collection
-        await _firestore.collection('bookings') // Add to the top-level bookings collection
-            .add(bookingData);
+                    // Also store the booking in the top-level 'bookings' collection
+                    await _firestore.collection('bookings') // Add to the top-level bookings collection
+                        .add(bookingData);
 
-        setState(() {
-        timeSlotBooked = true;
+                    setState(() {
+                      timeSlotBooked = true;
 
-        });
+                    });
 
-        // Show success message
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                  content: Text('Booking confirmed successfully!'),
-                  backgroundColor: Colors.green, // Set background color to green
-                  ),
-                );
+                    // Show success message
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Booking confirmed successfully!'),
+                        backgroundColor: Colors.green, // Set background color to green
+                      ),
+                    );
 
-        // Navigate to the home screen after a short delay
-                  Future.delayed(Duration(seconds: 2), () {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (context) => BookingSuccessPage()), // Replace HomeScreen with your home screen widget
-                    (Route<dynamic> route) => false, // Remove all previous routes
-                  );
-                  });
-                    } catch (e) {
-                      print('Error booking: $e');
-                      ScaffoldMessenger.of(context).showSnackBar(
+                    // Navigate to the home screen after a short delay
+                    Future.delayed(Duration(seconds: 2), () {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (context) => BookingSuccessPage()), // Replace HomeScreen with your home screen widget
+                            (Route<dynamic> route) => false, // Remove all previous routes
+                      );
+                    });
+                  } catch (e) {
+                    print('Error booking: $e');
+                    ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Failed to confirm booking')),
-                  );
+                    );
+                  }
                 }
-              }
             ),
           ],
         );
@@ -307,7 +329,7 @@ class _BookingPageState extends State<BookingPage> {
     }
     return bookingCounts;
   }
-   // Track booked slots for the selected day
+  // Track booked slots for the selected day
 
   Widget _buildCalendar() {
     return FutureBuilder(
