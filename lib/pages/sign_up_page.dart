@@ -23,7 +23,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
-
+  final TextEditingController _upiController = TextEditingController();
   bool _loading = false;
   String _userType = 'User'; // Default user type
 
@@ -109,6 +109,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     _emailController.dispose();
     _passwordController.dispose();
     _mobileController.dispose();
+    _upiController.dispose();
     super.dispose();
   }
   //
@@ -119,8 +120,8 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     });
 
     try {
-      UserCredential userCredential =
-      await _auth.createUserWithEmailAndPassword(
+      // Create user with email and password
+      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: _emailController.text,
         password: _passwordController.text,
       );
@@ -128,25 +129,36 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       // Send email verification
       await userCredential.user!.sendEmailVerification();
 
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+      // Prepare user data for Firestore
+      Map<String, dynamic> userData = {
         'name': _nameController.text,
         'email': _emailController.text,
         'mobile': _mobileController.text,
         'userType': _userType, // Add userType to Firestore
-      });
+      };
+
+      // If user is a Turf Owner, include the UPI ID
+      if (_userType == 'Turf Owner') {
+        userData['upiId'] = _upiController.text; // Add UPI ID for Turf Owner
+      }
+
+      // Store the user data in Firestore
+      await _firestore.collection('users').doc(userCredential.user!.uid).set(userData);
 
       // Show a toast message to inform the user to verify their email
       Fluttertoast.showToast(msg: 'Verification email sent. Please check your inbox.');
 
-      // Optionally navigate to a different page or show a dialog
-      // For now, let's just clear the fields
+      // Clear the text fields after signup
       _nameController.clear();
       _emailController.clear();
       _passwordController.clear();
       _mobileController.clear();
+      if (_userType == 'Turf Owner') {
+        _upiController.clear(); // Clear UPI controller for Turf Owners
+      }
 
-      // You might want to add a way to navigate to a different page after email verification
-      // For example, you could navigate to a login page or a message page instructing them to verify their email
+      // Optionally navigate to a different page or show a dialog
+      // You could navigate to a login page or a message page instructing them to verify their email
     } catch (e) {
       Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
     } finally {
@@ -155,6 +167,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       });
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -279,19 +292,29 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                   ),
                 ),
 
-                const SizedBox(height: 10),
-                component1(Icons.person_outline, 'Name...', false, false,
-                    _nameController),
-                const SizedBox(height: 10),
-                component1(Icons.email_outlined, 'Email...', false, true,
-                    _emailController),
-                const SizedBox(height: 10),
-                component1(Icons.lock_outline, 'Password...', true, false,
-                    _passwordController),
-                const SizedBox(height: 10),
-                component1(Icons.phone_outlined, 'Mobile Number...', false,
-                    false, _mobileController),
-                const SizedBox(height: 10),
+                SizedBox(
+                  height: 10,
+                ),
+                component1(Icons.person_outline, 'Name...', false, false, _nameController),
+                SizedBox(
+                  height: 10,
+                ),
+                component1(Icons.email_outlined, 'Email...', false, true, _emailController),
+                SizedBox(
+                  height: 10,
+                ),
+                component1(Icons.lock_outline, 'Password...', true, false, _passwordController),
+                SizedBox(
+                  height: 10,
+                ),
+                component1(Icons.phone_outlined, 'Mobile Number...', false, false, _mobileController),
+                SizedBox(
+                  height: 10,
+                ),
+// Conditional widget rendering based on user type
+                if (_userType == 'Turf Owner')
+                  component1(Icons.account_balance_wallet_outlined, 'Enter UPI ID...', false, false, _upiController),
+                  SizedBox(height: 5),
                 ElevatedButton(
                   onPressed: _loading ? null : _signup,
                   style: ElevatedButton.styleFrom(

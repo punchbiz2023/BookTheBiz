@@ -1,9 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:easy_upi_payment/easy_upi_payment.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:odp/pages/BookingFailedPage.dart';
 import 'package:odp/pages/home_page.dart';
+import 'package:upi_india/upi_india.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'BookingSuccessPage.dart';
 import 'BookingFailedPage.dart';
@@ -154,7 +157,7 @@ class _BookingPageState extends State<BookingPage> {
 
     if (selectedDate == null || selectedSlots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('These slots has been already booked try for new slots')),
+        SnackBar(content: Text('These slots have already been booked. Try new slots')),
       );
       return;
     }
@@ -163,40 +166,30 @@ class _BookingPageState extends State<BookingPage> {
     double totalAmount = 0.0;
     double totalHours = 0.0;
 
-// Fetch turf details
+    // Fetch turf details
     DocumentSnapshot turfSnapshot = await FirebaseFirestore.instance
         .collection('turfs')
         .doc(widget.documentId)
         .get();
 
-// Get the price and handle different possible types (List, String, Map, or double)
-    var price = turfSnapshot['price'] ?? 0.0; // Default to 0.0 if price is null
+    var price = turfSnapshot['price'] ?? 0.0;
 
     if (price is Map) {
-      // If price is a Map, try to match with the selectedGround key
-      price = price[selectedGround] ?? 0.0; // Use selectedGround as the key
+      price = price[selectedGround] ?? 0.0;
     } else if (price is List) {
-      // If price is a List, handle it (this logic can be adjusted as needed)
       price = (price.isNotEmpty) ? price.first : 0.0;
     } else if (price is String) {
-      // If price is a String, try parsing it as a double
       price = double.tryParse(price) ?? 0.0;
     } else if (price is double) {
-      // If price is already a double, do nothing
       price = price;
     }
 
-// Calculate totalAmount based on selectedSlots
     for (String slot in selectedSlots) {
       double hours = _getHoursForSlot(slot);
-      totalHours += hours; // Accumulate total hours
-      totalAmount += hours * price; // Accumulate total amount
+      totalHours += hours;
+      totalAmount += hours * price;
     }
 
-// Now you have the totalAmount and totalHours calculated with the correct price
-
-
-    // Show the confirmation dialog
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -210,7 +203,7 @@ class _BookingPageState extends State<BookingPage> {
               SizedBox(height: 10),
               Text('Slots: ${selectedSlots.join(", ")}'),
               SizedBox(height: 10),
-              Text('Total Hours: ${totalHours!.toStringAsFixed(0)} hours'),
+              Text('Total Hours: ${totalHours.toStringAsFixed(0)} hours'),
               SizedBox(height: 10),
               Text('Total Amount: ₹${totalAmount.toStringAsFixed(2)}'),
             ],
@@ -219,77 +212,133 @@ class _BookingPageState extends State<BookingPage> {
             TextButton(
               child: Text('Leave', style: TextStyle(color: Colors.red)),
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                _showCancellationDialog(); // Show the cancellation dialog
+                Navigator.of(context).pop();
+                _showCancellationDialog();
               },
             ),
             TextButton(
-                child: Text('Confirm Booking', style: TextStyle(color: Colors.green)),
-                onPressed: () async {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => BookingSuccessPage(),
-                    ),
-                  );// Close the dialog
-                  print(selectedDate);
-                  // Store the booking in Firestore under the specific turf's bookings subcollection
-                  Map<String, dynamic> bookingData = {
-                    'userId': currentUser?.uid ?? '',
-                    'userName': userName,
-                    'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                    'bookingSlots': selectedSlots, // Store selected slots as a list
-                    'totalHours': totalHours,
-                    'amount': totalAmount,
-                    'turfId': widget.documentId,
-                    'turfName': widget.documentname,
-                    'selectedGround': selectedGround,
-                  };
+              child: Text('Confirm Booking', style: TextStyle(color: Colors.green)),
+              onPressed: () async {
+                try {
+                  // Fetch the owner's details
+                  DocumentSnapshot turfDoc = await _firestore.collection('turfs').doc(widget.documentId).get();
+                  if (!turfDoc.exists) {
+                    throw Exception("Turf details not found");
+                  }
 
-                  try {
-                    // Change the path to store booking in the turf document's bookings subcollection
-                    await _firestore.collection('turfs')
+                  String ownerId = turfDoc['ownerId'] ?? '';
+                  if (ownerId.isEmpty) {
+                    throw Exception("Owner ID not found");
+                  }
+
+                  // Fetch the owner's document
+                  DocumentSnapshot ownerDoc = await _firestore.collection('users').doc(ownerId).get();
+                  if (!ownerDoc.exists) {
+                    throw Exception("Owner details not found");
+                  }
+
+                  // Retrieve UPI ID directly from the owner's details
+                  String upiId = ownerDoc['upiId'] ?? '';
+                  if (upiId.isEmpty) {
+                    throw Exception("UPI ID not found for the owner");
+                  }
+
+                  // Validate UPI ID format
+                  if (!RegExp(r'^[a-zA-Z0-9]+@[a-zA-Z0-9]+$').hasMatch(upiId)) {
+                    throw Exception("Invalid UPI ID format for the owner.");
+                  }
+
+                  // Proceed with UPI payment, using the owner's UPI ID
+                  UpiIndia upi = UpiIndia();
+                  List<UpiApp> apps = await upi.getAllUpiApps();
+
+                  if (apps.isEmpty) {
+                    throw Exception("No UPI apps available on this device.");
+                  }
+
+                  print('Initiating UPI payment with UPI ID: $upiId');
+
+                  // Initiate UPI payment using the first available UPI app
+                  UpiResponse response = await upi.startTransaction(
+                    app: apps.first, // Using the first available UPI app
+                    receiverUpiId: upiId, // Use the UPI ID directly from the owner's details
+                    receiverName: widget.documentname,
+                    transactionRefId: widget.documentId,
+                    transactionNote: 'Booking for ${widget.documentname}',
+                    amount: totalAmount,
+                  );
+
+                  // Handle UPI payment status
+                  if (response.status?.toLowerCase() == "success") {
+                    // Store booking data in Firestore
+                    Map<String, dynamic> bookingData = {
+                      'userId': currentUser?.uid ?? '',
+                      'userName': userName,
+                      'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                      'bookingSlots': selectedSlots,
+                      'totalHours': totalHours,
+                      'amount': totalAmount,
+                      'turfId': widget.documentId,
+                      'turfName': widget.documentname,
+                      'selectedGround': selectedGround,
+                    };
+
+                    await _firestore
+                        .collection('turfs')
                         .doc(widget.documentId)
-                        .collection('bookings') // Create or reference the 'bookings' subcollection
+                        .collection('bookings')
                         .add(bookingData);
 
-                    // Also store the booking in the top-level 'bookings' collection
-                    await _firestore.collection('bookings') // Add to the top-level bookings collection
-                        .add(bookingData);
+                    await _firestore.collection('bookings').add(bookingData);
 
-                    setState(() {
-                      timeSlotBooked = true;
-
-                    });
-
-                    // Show success message
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Booking confirmed successfully!'),
-                        backgroundColor: Colors.green, // Set background color to green
+                        backgroundColor: Colors.green,
                       ),
                     );
 
-                    // Navigate to the home screen after a short delay
-                    Future.delayed(Duration(seconds: 2), () {
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (context) => BookingSuccessPage()), // Replace HomeScreen with your home screen widget
-                            (Route<dynamic> route) => false, // Remove all previous routes
-                      );
-                    });
-                  } catch (e) {
-                    print('Error booking: $e');
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => BookingSuccessPage()),
+                          (Route<dynamic> route) => false,
+                    );
+                  } else if (response.status?.toLowerCase() == "failure") {
+                    throw Exception("Payment failed. Please try again.");
+                  } else if (response.status?.toLowerCase() == "submitted") {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to confirm booking')),
+                      SnackBar(
+                        content: Text('Payment submitted, awaiting confirmation.'),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                  } else {
+                    // Assume any other status means cancelled
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Payment cancelled by user.'),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                   }
+                } catch (e) {
+                  print('Error booking: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to confirm booking: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                 }
+              },
             ),
           ],
         );
       },
     );
   }
+
+
+
   // Fetch booked slots per date from Firestore for the given turf
   Future<Map<DateTime, int>> getBookedSlotsPerDate(String turfId) async {
     Map<DateTime, int> bookingCounts = {};
