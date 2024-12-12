@@ -72,6 +72,8 @@ dependencies {
     // Add Firebase Analytics (optional, can help with performance data)
     implementation 'com.google.firebase:firebase-analytics'
 
+    implementation "dev.shreyaspatil.EasyUpiPayment:EasyUpiPayment:3.0.3"
+
     // Your other dependencies
 }
 
