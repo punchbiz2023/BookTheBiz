@@ -246,7 +246,8 @@ class _BookingPageState extends State<BookingPage> {
                   }
 
                   // Validate UPI ID format (correct pattern for UPI ID)
-                  final upiPattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$';
+                  // Validate UPI ID format (correct pattern for UPI ID)
+                  final upiPattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z]+$';
                   if (!RegExp(upiPattern).hasMatch(upiId)) {
                     throw Exception("Invalid UPI ID format for the owner.");
                   }
