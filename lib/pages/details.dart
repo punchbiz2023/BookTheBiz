@@ -34,7 +34,19 @@ class _DetailsPageState extends State<DetailsPage> {
               .get();
 
       if (documentSnapshot.exists) {
-        price = documentSnapshot.data()?['price'] ?? 0.0;
+        if (documentSnapshot.data()?['price'] is List<dynamic>) {
+          price = (documentSnapshot.data()?['price'] as List<dynamic>).first ?? 0.0;
+        }
+        else if (documentSnapshot.data()?['price'] is Map<String, dynamic>) {
+          var entry = (documentSnapshot.data()?['price'] as Map<String, dynamic>).entries.first;
+          price = entry.value ?? 0.0;
+        }
+        else {
+          price = documentSnapshot.data()?['price'] ?? 0.0;
+        }
+
+// Now, you have `price` as a double value, ready to be used
+
         return documentSnapshot.data();
       } else {
         print('Document does not exist');
