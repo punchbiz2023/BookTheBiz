@@ -2,11 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:easy_upi_payment/easy_upi_payment.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:odp/pages/BookingFailedPage.dart';
 import 'package:odp/pages/home_page.dart';
-import 'package:upi_india/upi_india.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'BookingSuccessPage.dart';
 import 'BookingFailedPage.dart';
@@ -146,6 +144,7 @@ class _BookingPageState extends State<BookingPage> {
     String userName = 'Anonymous';
     User? currentUser = FirebaseAuth.instance.currentUser;
 
+    // Check if the user is logged in
     if (currentUser != null) {
       userName = await _fetchUserName(currentUser.uid);
     } else {
@@ -155,6 +154,7 @@ class _BookingPageState extends State<BookingPage> {
       return; // Exit if the user is not logged in
     }
 
+    // Check if a date and slots have been selected
     if (selectedDate == null || selectedSlots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('These slots have already been booked. Try new slots')),
@@ -174,6 +174,7 @@ class _BookingPageState extends State<BookingPage> {
 
     var price = turfSnapshot['price'] ?? 0.0;
 
+    // Handle different formats for price (Map, List, String, etc.)
     if (price is Map) {
       price = price[selectedGround] ?? 0.0;
     } else if (price is List) {
@@ -184,6 +185,7 @@ class _BookingPageState extends State<BookingPage> {
       price = price;
     }
 
+    // Calculate total amount and hours based on selected slots
     for (String slot in selectedSlots) {
       double hours = _getHoursForSlot(slot);
       totalHours += hours;
@@ -223,108 +225,87 @@ class _BookingPageState extends State<BookingPage> {
                   // Fetch the owner's details
                   DocumentSnapshot turfDoc = await _firestore.collection('turfs').doc(widget.documentId).get();
                   if (!turfDoc.exists) {
-                    throw Exception("Turf details not found");
+                    throw Exception("Turf details not found.");
                   }
 
                   String ownerId = turfDoc['ownerId'] ?? '';
                   if (ownerId.isEmpty) {
-                    throw Exception("Owner ID not found");
+                    throw Exception("Owner ID not found.");
                   }
 
                   // Fetch the owner's document
                   DocumentSnapshot ownerDoc = await _firestore.collection('users').doc(ownerId).get();
                   if (!ownerDoc.exists) {
-                    throw Exception("Owner details not found");
+                    throw Exception("Owner details not found.");
                   }
 
                   // Retrieve UPI ID directly from the owner's details
                   String upiId = ownerDoc['upiId'] ?? '';
                   if (upiId.isEmpty) {
-                    throw Exception("UPI ID not found for the owner");
+                    throw Exception("UPI ID not found for the owner.");
                   }
 
-                  // Validate UPI ID format
-                  if (!RegExp(r'^[a-zA-Z0-9]+@[a-zA-Z0-9]+$').hasMatch(upiId)) {
+                  // Validate UPI ID format (correct pattern for UPI ID)
+                  // Validate UPI ID format (correct pattern for UPI ID)
+                  final upiPattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z]+$';
+                  if (!RegExp(upiPattern).hasMatch(upiId)) {
                     throw Exception("Invalid UPI ID format for the owner.");
                   }
 
-                  // Proceed with UPI payment, using the owner's UPI ID
-                  UpiIndia upi = UpiIndia();
-                  List<UpiApp> apps = await upi.getAllUpiApps();
+                  // Parameters required by easy_upi_payment method
+                  String amount = totalAmount.toStringAsFixed(2);
 
-                  if (apps.isEmpty) {
-                    throw Exception("No UPI apps available on this device.");
-                  }
-
-                  print('Initiating UPI payment with UPI ID: $upiId');
-
-                  // Initiate UPI payment using the first available UPI app
-                  UpiResponse response = await upi.startTransaction(
-                    app: apps.first, // Using the first available UPI app
-                    receiverUpiId: upiId, // Use the UPI ID directly from the owner's details
-                    receiverName: widget.documentname,
-                    transactionRefId: widget.documentId,
-                    transactionNote: 'Booking for ${widget.documentname}',
-                    amount: totalAmount,
+                  // Initiate UPI transaction using easy_upi_payment
+                  final res = await EasyUpiPaymentPlatform.instance.startPayment(
+                    EasyUpiPaymentModel(
+                      payeeVpa: upiId,  // UPI ID of the owner
+                      payeeName: 'Turf Owner',  // Name of the owner
+                      amount: double.parse(amount),
+                      description: 'Booking payment for ${widget.documentname}',
+                    ),
                   );
 
-                  // Handle UPI payment status
-                  if (response.status?.toLowerCase() == "success") {
-                    // Store booking data in Firestore
-                    Map<String, dynamic> bookingData = {
-                      'userId': currentUser?.uid ?? '',
-                      'userName': userName,
-                      'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                      'bookingSlots': selectedSlots,
-                      'totalHours': totalHours,
-                      'amount': totalAmount,
-                      'turfId': widget.documentId,
-                      'turfName': widget.documentname,
-                      'selectedGround': selectedGround,
-                    };
+                  // Print the response object to check its structure
+                  print("Payment Response: $res");
+                  // Payment was successful, store booking data
+                  Map<String, dynamic> bookingData = {
+                    'userId': currentUser.uid,
+                    'userName': userName,
+                    'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                    'bookingSlots': selectedSlots,
+                    'totalHours': totalHours,
+                    'amount': totalAmount,
+                    'turfId': widget.documentId,
+                    'turfName': widget.documentname,
+                    'selectedGround': selectedGround,
+                  };
 
-                    await _firestore
-                        .collection('turfs')
-                        .doc(widget.documentId)
-                        .collection('bookings')
-                        .add(bookingData);
+                  // Add booking data to Firestore under the turf's bookings collection
+                  await _firestore
+                      .collection('turfs')
+                      .doc(widget.documentId)
+                      .collection('bookings')
+                      .add(bookingData);
 
-                    await _firestore.collection('bookings').add(bookingData);
+                  // Add booking data to global bookings collection
+                  await _firestore.collection('bookings').add(bookingData);
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Booking confirmed successfully!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => BookingSuccessPage()),
-                          (Route<dynamic> route) => false,
-                    );
-                  } else if (response.status?.toLowerCase() == "failure") {
-                    throw Exception("Payment failed. Please try again.");
-                  } else if (response.status?.toLowerCase() == "submitted") {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Payment submitted, awaiting confirmation.'),
-                        backgroundColor: Colors.orange,
-                      ),
-                    );
-                  } else {
-                    // Assume any other status means cancelled
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Payment cancelled by user.'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  print('Error booking: $e');
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Failed to confirm booking: ${e.toString()}'),
+                      content: Text('Booking confirmed successfully!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+
+                  // Navigate to booking success page
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => BookingSuccessPage()),
+                        (Route<dynamic> route) => false,
+                  );
+                } on EasyUpiPaymentException {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to confirm booking'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -336,8 +317,6 @@ class _BookingPageState extends State<BookingPage> {
       },
     );
   }
-
-
 
   // Fetch booked slots per date from Firestore for the given turf
   Future<Map<DateTime, int>> getBookedSlotsPerDate(String turfId) async {

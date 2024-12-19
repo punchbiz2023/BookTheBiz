@@ -120,8 +120,8 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     });
 
     try {
-      // Create user with email and password
-      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+      UserCredential userCredential =
+      await _auth.createUserWithEmailAndPassword(
         email: _emailController.text,
         password: _passwordController.text,
       );
@@ -129,7 +129,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       // Send email verification
       await userCredential.user!.sendEmailVerification();
 
-      // Prepare user data for Firestore
+      // Define the userData map before using it in the .set() method
       Map<String, dynamic> userData = {
         'name': _nameController.text,
         'email': _emailController.text,
@@ -137,18 +137,19 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         'userType': _userType, // Add userType to Firestore
       };
 
-      // If user is a Turf Owner, include the UPI ID
+// Add UPI ID if the userType is 'Turf Owner'
       if (_userType == 'Turf Owner') {
         userData['upiId'] = _upiController.text; // Add UPI ID for Turf Owner
       }
 
-      // Store the user data in Firestore
+// Set the user data to Firestore
       await _firestore.collection('users').doc(userCredential.user!.uid).set(userData);
 
       // Show a toast message to inform the user to verify their email
       Fluttertoast.showToast(msg: 'Verification email sent. Please check your inbox.');
 
-      // Clear the text fields after signup
+      // Optionally navigate to a different page or show a dialog
+      // For now, let's just clear the fields
       _nameController.clear();
       _emailController.clear();
       _passwordController.clear();
@@ -157,8 +158,8 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         _upiController.clear(); // Clear UPI controller for Turf Owners
       }
 
-      // Optionally navigate to a different page or show a dialog
-      // You could navigate to a login page or a message page instructing them to verify their email
+      // You might want to add a way to navigate to a different page after email verification
+      // For example, you could navigate to a login page or a message page instructing them to verify their email
     } catch (e) {
       Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
     } finally {
@@ -167,7 +168,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       });
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -314,7 +314,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
 // Conditional widget rendering based on user type
                 if (_userType == 'Turf Owner')
                   component1(Icons.account_balance_wallet_outlined, 'Enter UPI ID...', false, false, _upiController),
-                  SizedBox(height: 5),
+                SizedBox(height: 5),
                 ElevatedButton(
                   onPressed: _loading ? null : _signup,
                   style: ElevatedButton.styleFrom(
