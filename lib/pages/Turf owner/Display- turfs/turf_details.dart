@@ -116,9 +116,47 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                       style: TextStyle(fontSize: 16, color: Colors.black54),
                     ),
                     SizedBox(height: 16),
-                    Text(
-                      'Price: ₹${turfData['price']?.toStringAsFixed(2) ?? '0.00'}',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Check if price is a List
+                        if (turfData['price'] is List<dynamic>)
+                          ...(turfData['price'] as List<dynamic>).map<Widget>((price) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: Chip(
+                                backgroundColor: Colors.green[100],
+                                label: Text(
+                                  'Price ₹${price.toStringAsFixed(2)}',
+                                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        // Check if price is a Map<String, dynamic>
+                        if (turfData['price'] is Map<String, dynamic>)
+                          ...(turfData['price'] as Map<String, dynamic>).entries.map<Widget>((entry) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: Chip(
+                                backgroundColor: Colors.green[100],
+                                label: Text(
+                                  '${entry.key}: ₹${entry.value.toStringAsFixed(2)}',
+                                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        // Fallback if price is a single value
+                        if (!(turfData['price'] is List) && !(turfData['price'] is Map))
+                          Chip(
+                            backgroundColor: Colors.green[100],
+                            label: Text(
+                              'Price ₹${turfData['price']?.toStringAsFixed(2) ?? '0.00'}',
+                              style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                      ],
                     ),
                     SizedBox(height: 16),
                     Text(
