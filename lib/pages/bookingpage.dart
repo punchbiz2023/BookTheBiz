@@ -234,9 +234,6 @@ class _BookingPageState extends State<BookingPage> {
                     throw Exception("Owner details not found.");
                   }
 
-                  // Remove the UPI ID retrieval and validation process
-                  // (no need to fetch or validate UPI ID)
-
                   String amount = totalAmount.toStringAsFixed(2);
 
                   Map<String, dynamic> bookingData = {
