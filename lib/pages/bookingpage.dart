@@ -1,13 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:easy_upi_payment/easy_upi_payment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:odp/pages/BookingFailedPage.dart';
-import 'package:odp/pages/home_page.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'BookingSuccessPage.dart';
-import 'BookingFailedPage.dart';
 class BookingPage extends StatefulWidget {
   final String documentId;
   final String documentname;
@@ -69,8 +66,6 @@ class _BookingPageState extends State<BookingPage> {
       return {};
     }
   }
-
-
 
   Future<String> _fetchUserName(String userId) async {
     try {
@@ -239,35 +234,11 @@ class _BookingPageState extends State<BookingPage> {
                     throw Exception("Owner details not found.");
                   }
 
-                  // Retrieve UPI ID directly from the owner's details
-                  String upiId = ownerDoc['upiId'] ?? '';
-                  if (upiId.isEmpty) {
-                    throw Exception("UPI ID not found for the owner.");
-                  }
+                  // Remove the UPI ID retrieval and validation process
+                  // (no need to fetch or validate UPI ID)
 
-                  // Validate UPI ID format (correct pattern for UPI ID)
-                  // Validate UPI ID format (correct pattern for UPI ID)
-                  final upiPattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z]+$';
-                  if (!RegExp(upiPattern).hasMatch(upiId)) {
-                    throw Exception("Invalid UPI ID format for the owner.");
-                  }
-
-                  // Parameters required by easy_upi_payment method
                   String amount = totalAmount.toStringAsFixed(2);
 
-                  // Initiate UPI transaction using easy_upi_payment
-                  final res = await EasyUpiPaymentPlatform.instance.startPayment(
-                    EasyUpiPaymentModel(
-                      payeeVpa: upiId,  // UPI ID of the owner
-                      payeeName: 'Turf Owner',  // Name of the owner
-                      amount: double.parse(amount),
-                      description: 'Booking payment for ${widget.documentname}',
-                    ),
-                  );
-
-                  // Print the response object to check its structure
-                  print("Payment Response: $res");
-                  // Payment was successful, store booking data
                   Map<String, dynamic> bookingData = {
                     'userId': currentUser.uid,
                     'userName': userName,
@@ -302,23 +273,23 @@ class _BookingPageState extends State<BookingPage> {
                     MaterialPageRoute(builder: (context) => BookingSuccessPage()),
                         (Route<dynamic> route) => false,
                   );
-                } on EasyUpiPaymentException {
+                } on Exception catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Failed to confirm booking'),
+                      content: Text('Failed to confirm booking: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );
                 }
               },
             ),
+
           ],
         );
       },
     );
-  }
+  }// Fetch booked slots per date from Firestore for the given turf
 
-  // Fetch booked slots per date from Firestore for the given turf
   Future<Map<DateTime, int>> getBookedSlotsPerDate(String turfId) async {
     Map<DateTime, int> bookingCounts = {};
     try {
@@ -356,8 +327,7 @@ class _BookingPageState extends State<BookingPage> {
       print('Error fetching bookings: $e');
     }
     return bookingCounts;
-  }
-  // Track booked slots for the selected day
+  }// Track booked slots for the selected day
 
   Widget _buildCalendar() {
     return FutureBuilder(
@@ -487,7 +457,6 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
-
 // Function to determine color based on booked slots
   Color _getColorForBookingSlots(int bookedSlots) {
     if (bookedSlots <= 2) {
@@ -578,7 +547,6 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-
   Column _buildSlotSelectionColumn(List<String> bookedSlots) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,7 +599,6 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-
   Widget _buildGroundSelector() {
     return FutureBuilder<List<String>>(
       future: _fetchAvailableGrounds(),
@@ -644,7 +611,6 @@ class _BookingPageState extends State<BookingPage> {
           return Text('No grounds available');
         } else {
           List<String> availableGrounds = snapshot.data!;
-
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -695,6 +661,7 @@ class _BookingPageState extends State<BookingPage> {
                   ),
                 ),
               ),
+
               if (selectedGround != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 20),
@@ -729,7 +696,6 @@ class _BookingPageState extends State<BookingPage> {
 
     return grounds;
   }
-
 
   Widget _buildSlotChips(String title, String subtitle, List<String> slots, List<String> bookedSlots) {
     return Column(
