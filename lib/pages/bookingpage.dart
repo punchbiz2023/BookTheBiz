@@ -261,7 +261,14 @@ class _BookingPageState extends State<BookingPage> {
                   },
                   'theme': {
                     'color': '#00FF00',  // Customize theme color
-                  }
+                  },
+                  // 'transfer': [
+                  //   {
+                  //     'account': 'acc_PT5ZBxEb5cHGw2', // Turf Owner's Razorpay Account ID
+                  //     'amount': (totalAmount -10) * 100, // Amount to be transferred to the turf owner
+                  //     'currency': 'INR'
+                  //   }
+                  // ]
                 };
 
                 // Add Razorpay event listeners for success, failure, and cancel
