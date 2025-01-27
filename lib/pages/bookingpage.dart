@@ -1,30 +1,35 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:easy_upi_payment/easy_upi_payment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:odp/pages/BookingFailedPage.dart';
-import 'package:odp/pages/home_page.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'BookingSuccessPage.dart';
-import 'BookingFailedPage.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+
 class BookingPage extends StatefulWidget {
   final String documentId;
   final String documentname;
   final String userId;
 
+
   const BookingPage({
-    Key? key,
+    super.key,
     required this.documentId,
     required this.documentname,
     required this.userId,
-  }) : super(key: key);
+  });
 
   @override
   _BookingPageState createState() => _BookingPageState();
+
+
 }
 
+
+
 class _BookingPageState extends State<BookingPage> {
+  late Razorpay _razorpay;
   DateTime? selectedDate;
   List<String> selectedSlots = [];
   bool timeSlotBooked = false;
@@ -34,6 +39,32 @@ class _BookingPageState extends State<BookingPage> {
   String? selectedGround;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   int bookingSlotsForSelectedDay = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _razorpay = Razorpay();
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _razorpay.clear();
+  }
+
+  void _handlePaymentSuccess(PaymentSuccessResponse response) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment successful!')));
+    // You can handle your post-payment actions here (e.g., confirm booking)
+  }
+
+  // Handle payment failure
+  void _handlePaymentError(PaymentFailureResponse response) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment failed!')));
+  }
+
 
   Future<Map<String, List<String>>> _fetchBookedSlots() async {
     try {
@@ -69,8 +100,6 @@ class _BookingPageState extends State<BookingPage> {
       return {};
     }
   }
-
-
 
   Future<String> _fetchUserName(String userId) async {
     try {
@@ -162,7 +191,7 @@ class _BookingPageState extends State<BookingPage> {
       return;
     }
 
-    // Calculate total amount and total hours
+    // Calculate total F and total hours
     double totalAmount = 0.0;
     double totalHours = 0.0;
 
@@ -221,94 +250,109 @@ class _BookingPageState extends State<BookingPage> {
             TextButton(
               child: Text('Confirm Booking', style: TextStyle(color: Colors.green)),
               onPressed: () async {
-                try {
-                  // Fetch the owner's details
-                  DocumentSnapshot turfDoc = await _firestore.collection('turfs').doc(widget.documentId).get();
-                  if (!turfDoc.exists) {
-                    throw Exception("Turf details not found.");
+                var options = {
+                  'key': 'rzp_test_RmOLs985IPNRVq',  // Your Razorpay key from the Razorpay Dashboard
+                  'amount': (totalAmount * 100).toInt(),  // Razorpay expects the amount in paise
+                  'name': 'Turf Booking',
+                  'description': 'Booking fee for your selected slots',
+                  'prefill': {
+                    'contact': 'test',  // User's contact
+                    'email': 'test',  // User's email
+                  },
+                  'theme': {
+                    'color': '#00FF00',  // Customize theme color
+                  },
+                  // 'transfer': [
+                  //   {
+                  //     'account': 'acc_PT5ZBxEb5cHGw2', // Turf Owner's Razorpay Account ID
+                  //     'amount': (totalAmount -10) * 100, // Amount to be transferred to the turf owner
+                  //     'currency': 'INR'
+                  //   }
+                  // ]
+                };
+
+                // Add Razorpay event listeners for success, failure, and cancel
+                _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
+                  // Payment was successful, proceed with Firestore operations
+                  try {
+                    // Fetch the owner's details
+                    DocumentSnapshot turfDoc = await _firestore.collection('turfs').doc(widget.documentId).get();
+                    if (!turfDoc.exists) {
+                      throw Exception("Turf details not found.");
+                    }
+
+                    String ownerId = turfDoc['ownerId'] ?? '';
+                    if (ownerId.isEmpty) {
+                      throw Exception("Owner ID not found.");
+                    }
+
+                    // Fetch the owner's document
+                    DocumentSnapshot ownerDoc = await _firestore.collection('users').doc(ownerId).get();
+                    if (!ownerDoc.exists) {
+                      throw Exception("Owner details not found.");
+                    }
+
+                    Map<String, dynamic> bookingData = {
+                      'userId': currentUser.uid,
+                      'userName': userName,
+                      'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                      'bookingSlots': selectedSlots,
+                      'totalHours': totalHours,
+                      'amount': totalAmount,
+                      'turfId': widget.documentId,
+                      'turfName': widget.documentname,
+                      'selectedGround': selectedGround,
+                    };
+
+                    // Add booking data to Firestore under the turf's bookings collection
+                    await _firestore
+                        .collection('turfs')
+                        .doc(widget.documentId)
+                        .collection('bookings')
+                        .add(bookingData);
+
+                    // Add booking data to global bookings collection
+                    await _firestore.collection('bookings').add(bookingData);
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Booking confirmed successfully!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+
+                    // Navigate to booking success page
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => BookingSuccessPage()),
+                          (Route<dynamic> route) => false,
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to confirm booking: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
                   }
+                });
 
-                  String ownerId = turfDoc['ownerId'] ?? '';
-                  if (ownerId.isEmpty) {
-                    throw Exception("Owner ID not found.");
-                  }
-
-                  // Fetch the owner's document
-                  DocumentSnapshot ownerDoc = await _firestore.collection('users').doc(ownerId).get();
-                  if (!ownerDoc.exists) {
-                    throw Exception("Owner details not found.");
-                  }
-
-                  // Retrieve UPI ID directly from the owner's details
-                  String upiId = ownerDoc['upiId'] ?? '';
-                  if (upiId.isEmpty) {
-                    throw Exception("UPI ID not found for the owner.");
-                  }
-
-                  // Validate UPI ID format (correct pattern for UPI ID)
-                  // Validate UPI ID format (correct pattern for UPI ID)
-                  final upiPattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z]+$';
-                  if (!RegExp(upiPattern).hasMatch(upiId)) {
-                    throw Exception("Invalid UPI ID format for the owner.");
-                  }
-
-                  // Parameters required by easy_upi_payment method
-                  String amount = totalAmount.toStringAsFixed(2);
-
-                  // Initiate UPI transaction using easy_upi_payment
-                  final res = await EasyUpiPaymentPlatform.instance.startPayment(
-                    EasyUpiPaymentModel(
-                      payeeVpa: upiId,  // UPI ID of the owner
-                      payeeName: 'Turf Owner',  // Name of the owner
-                      amount: double.parse(amount),
-                      description: 'Booking payment for ${widget.documentname}',
-                    ),
-                  );
-
-                  // Print the response object to check its structure
-                  print("Payment Response: $res");
-                  // Payment was successful, store booking data
-                  Map<String, dynamic> bookingData = {
-                    'userId': currentUser.uid,
-                    'userName': userName,
-                    'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                    'bookingSlots': selectedSlots,
-                    'totalHours': totalHours,
-                    'amount': totalAmount,
-                    'turfId': widget.documentId,
-                    'turfName': widget.documentname,
-                    'selectedGround': selectedGround,
-                  };
-
-                  // Add booking data to Firestore under the turf's bookings collection
-                  await _firestore
-                      .collection('turfs')
-                      .doc(widget.documentId)
-                      .collection('bookings')
-                      .add(bookingData);
-
-                  // Add booking data to global bookings collection
-                  await _firestore.collection('bookings').add(bookingData);
-
+                // Add failure handler
+                _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Booking confirmed successfully!'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-
-                  // Navigate to booking success page
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (context) => BookingSuccessPage()),
-                        (Route<dynamic> route) => false,
-                  );
-                } on EasyUpiPaymentException {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to confirm booking'),
+                      content: Text('Payment failed: ${response.message}'),
                       backgroundColor: Colors.red,
                     ),
                   );
+                });
+
+                // Add cancel handler
+
+
+                try {
+                  _razorpay.open(options);
+                } catch (e) {
+                  print("Error: $e");
                 }
               },
             ),
@@ -318,7 +362,6 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-  // Fetch booked slots per date from Firestore for the given turf
   Future<Map<DateTime, int>> getBookedSlotsPerDate(String turfId) async {
     Map<DateTime, int> bookingCounts = {};
     try {
@@ -356,8 +399,7 @@ class _BookingPageState extends State<BookingPage> {
       print('Error fetching bookings: $e');
     }
     return bookingCounts;
-  }
-  // Track booked slots for the selected day
+  }// Track booked slots for the selected day
 
   Widget _buildCalendar() {
     return FutureBuilder(
@@ -487,7 +529,6 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
-
 // Function to determine color based on booked slots
   Color _getColorForBookingSlots(int bookedSlots) {
     if (bookedSlots <= 2) {
@@ -578,7 +619,6 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-
   Column _buildSlotSelectionColumn(List<String> bookedSlots) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,7 +671,6 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-
   Widget _buildGroundSelector() {
     return FutureBuilder<List<String>>(
       future: _fetchAvailableGrounds(),
@@ -644,7 +683,6 @@ class _BookingPageState extends State<BookingPage> {
           return Text('No grounds available');
         } else {
           List<String> availableGrounds = snapshot.data!;
-
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -695,6 +733,7 @@ class _BookingPageState extends State<BookingPage> {
                   ),
                 ),
               ),
+
               if (selectedGround != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 20),
@@ -729,7 +768,6 @@ class _BookingPageState extends State<BookingPage> {
 
     return grounds;
   }
-
 
   Widget _buildSlotChips(String title, String subtitle, List<String> slots, List<String> bookedSlots) {
     return Column(
