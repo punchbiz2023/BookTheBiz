@@ -1,9 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
-
+import 'statusfile.dart';
 import '../../bookingpage.dart';
 import '../../home_page.dart';
 import '../../login.dart';
@@ -124,75 +125,126 @@ class _HomePage2State extends State<HomePage2> {
       backgroundColor: Color(0xff192028),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Add Turf button
-            Center(
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => AddTurfPage()),
-                  );
-                },
-                child: Text('Add Turf'),
-                style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  backgroundColor: Colors.blueAccent,
-                  padding: EdgeInsets.symmetric(horizontal: 140, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+        child: FutureBuilder<DocumentSnapshot>(
+          future: FirebaseFirestore.instance
+              .collection('users')
+              .doc(widget.user?.uid)
+              .get(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(child: CircularProgressIndicator());
+            }
+
+            if (!snapshot.hasData || !snapshot.data!.exists) {
+              return Center(
+                  child: Text(
+                    'User not found',
+                    style: TextStyle(color: Colors.white),
+                  ));
+            }
+
+            final userData = snapshot.data!.data() as Map<String, dynamic>;
+
+            // Check if the user is a Turf Owner and the status
+            final isTurfOwner = userData['userType'] == 'Turf Owner';
+            final status = userData['status'];
+            final isStatusYes = status != null && status == 'yes';
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Add Turf button
+                Center(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (isTurfOwner && isStatusYes) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => AddTurfPage()),
+                        );
+                      } else {
+                        // Show a message if the user is not verified or not a Turf Owner
+                        Fluttertoast.showToast(
+                          msg: "Your ID isn't verified by Admin or you are not a Turf Owner.",
+                          toastLength: Toast.LENGTH_LONG,
+                          gravity: ToastGravity.BOTTOM,
+                          backgroundColor: Colors.red,
+                          textColor: Colors.white,
+                          fontSize: 16.0,
+                        );
+
+                        // Redirect to StatusFile page
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => StatusFilePage()),
+                        );
+                      }
+                    },
+                    child: Text('Add Turf'),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: isTurfOwner && isStatusYes
+                          ? Colors.blueAccent
+                          : Colors.grey, // Gray shade for inactive appearance
+                      padding: EdgeInsets.symmetric(horizontal: 140, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            SizedBox(height: 20), // Space after button
+                SizedBox(height: 20), // Space after button
 
-            // Listed Turfs heading
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: Text(
-                'Listed Turfs',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+                // Listed Turfs heading
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: Text(
+                    'Listed Turfs',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
-            ),
 
-            // Turf Listing
-            StreamBuilder<QuerySnapshot>(
-              stream: _turfsStream, // Use the stream created in initState
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(
-                      child: Text('No turfs available',
-                          style: TextStyle(color: Colors.white)));
-                }
+                // Turf Listing
+                StreamBuilder<QuerySnapshot>(
+                  stream: _turfsStream, // Use the stream created in initState
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return Center(
+                        child: Text(
+                          'No turfs available',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      );
+                    }
 
-                final turfDocs = snapshot.data!.docs;
-                return ListView.builder(
-                  physics: NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  itemCount: turfDocs.length,
-                  itemBuilder: (context, index) {
-                    final turfData =
-                    turfDocs[index].data() as Map<String, dynamic>;
-                    return _buildTurfCard(turfData);
+                    final turfDocs = snapshot.data!.docs;
+                    return ListView.builder(
+                      physics: NeverScrollableScrollPhysics(),
+                      shrinkWrap: true,
+                      itemCount: turfDocs.length,
+                      itemBuilder: (context, index) {
+                        final turfData =
+                        turfDocs[index].data() as Map<String, dynamic>;
+                        return _buildTurfCard(turfData);
+                      },
+                    );
                   },
-                );
-              },
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
+
 
   // Build location widget
   // Widget _buildLocationWidget() {

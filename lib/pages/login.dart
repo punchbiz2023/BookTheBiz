@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:odp/pages/Turf%20owner/Main%20Func/owner_home.dart';
+import 'admincontroller.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/sign_up_page.dart';
 
@@ -114,35 +115,41 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
     });
 
     try {
-      final UserCredential userCredential =
-      await _auth.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim());
+      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
       if (userCredential.user != null) {
-        // Get the user type
-        await Firebase.initializeApp(); // Initialize Firebase
-        final FirebaseFirestore firestore = FirebaseFirestore
-            .instance; // Get a reference to the Firestore database
-        final DocumentReference userRef = firestore.collection('users').doc(
-            userCredential.user!.uid); // Get a reference to the user's document
-        Map<String, dynamic> userData = await userRef
-            .get()
-            .then((DocumentSnapshot ds) => ds.data() as Map<String, dynamic>);
-
-        if (userData['userType'] == 'Turf Owner') {
-          // Navigate to the custom page
+        // Check if the email and password match the admin credentials
+        if (_emailController.text.trim() == 'adminpunchbiz@gmail.com' &&
+            _passwordController.text.trim() == '1234567890') {
+          // Navigate to admin page
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => HomePage2()),
+            MaterialPageRoute(builder: (context) => AdminControllersPage()),
           );
         } else {
-          // Navigate to the other page
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => HomePage1(user: user)),
+          // Get the user type and navigate based on userType
+          await Firebase.initializeApp(); // Initialize Firebase
+          final FirebaseFirestore firestore = FirebaseFirestore.instance;
+          final DocumentReference userRef =
+          firestore.collection('users').doc(userCredential.user!.uid);
+          Map<String, dynamic> userData = await userRef
+              .get()
+              .then((DocumentSnapshot ds) => ds.data() as Map<String, dynamic>);
 
-          );
+          if (userData['userType'] == 'Turf Owner') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => HomePage2()),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => HomePage1(user: user)),
+            );
+          }
         }
         Fluttertoast.showToast(msg: 'Login Successful');
       }
@@ -164,6 +171,7 @@ class _LoginPageState extends State<LoginApp> with TickerProviderStateMixin {
       });
     }
   }
+
 
   Future<void> _forgotPassword() async {
     String email = _emailController.text.trim();

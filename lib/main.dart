@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_performance/firebase_performance.dart';
 import 'package:odp/pages/Turf%20owner/Main%20Func/owner_home.dart';
+import 'package:odp/pages/admincontroller.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/login.dart';
 import 'firebase_options.dart';
@@ -45,6 +46,9 @@ class AuthWrapper extends StatelessWidget {
 
     // If the user is signed in, navigate to the respective home page, else login page
     if (user != null) {
+      if (user.email == 'adminpunchbiz@gmail.com') {
+        return AdminControllersPage(); // Directly go to the admin controller page
+      }
       // User is signed in, retrieve user data
       return FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
