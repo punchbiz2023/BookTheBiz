@@ -14,7 +14,6 @@ class AddTurfPage extends StatefulWidget {
 class _AddTurfPageState extends State<AddTurfPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _priceController = TextEditingController();
   File? _imageFile;
   bool _isLoading = false;
   final Map<String, double> _selectedGroundPrices = {};
