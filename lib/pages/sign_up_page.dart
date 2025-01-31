@@ -109,7 +109,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     _emailController.dispose();
     _passwordController.dispose();
     _mobileController.dispose();
-    _upiController.dispose();
+
     super.dispose();
   }
   //
@@ -137,10 +137,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         'userType': _userType, // Add userType to Firestore
       };
 
-// Add UPI ID if the userType is 'Turf Owner'
-      if (_userType == 'Turf Owner') {
-        userData['upiId'] = _upiController.text; // Add UPI ID for Turf Owner
-      }
 
 // Set the user data to Firestore
       await _firestore.collection('users').doc(userCredential.user!.uid).set(userData);
@@ -154,9 +150,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       _emailController.clear();
       _passwordController.clear();
       _mobileController.clear();
-      if (_userType == 'Turf Owner') {
-        _upiController.clear(); // Clear UPI controller for Turf Owners
-      }
 
       // You might want to add a way to navigate to a different page after email verification
       // For example, you could navigate to a login page or a message page instructing them to verify their email
@@ -312,9 +305,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                   height: 10,
                 ),
 // Conditional widget rendering based on user type
-                if (_userType == 'Turf Owner')
-                  component1(Icons.account_balance_wallet_outlined, 'Enter UPI ID...', false, false, _upiController),
-                SizedBox(height: 5),
+
                 ElevatedButton(
                   onPressed: _loading ? null : _signup,
                   style: ElevatedButton.styleFrom(
