@@ -69,44 +69,44 @@ class _AddTurfPageState extends State<AddTurfPage> {
     }
   }
 
-  IconData _getIconForItem(String item) {
-    switch (item.toLowerCase()) {
-      case 'football field':
-        return Icons.sports_soccer;
-      case 'volleyball court':
-        return Icons.sports_volleyball;
-      case 'cricket ground':
-        return Icons.sports_cricket;
-      case 'basketball court':
-        return Icons.sports_basketball;
-      case 'swimming pool':
-        return Icons.pool;
-      case 'shuttlecock':
-        return Icons.sports_tennis;
-      case 'tennis court':
-        return Icons.sports_tennis;
-      case 'badminton court':
-        return Icons.sports_tennis;
-      case 'parking':
-        return Icons.local_parking;
-      case 'restroom':
-        return Icons.wc;
-      case 'cafeteria':
-        return Icons.restaurant;
-      case 'lighting':
-        return Icons.lightbulb;
-      case 'seating':
-        return Icons.event_seat;
-      case 'shower':
-        return Icons.shower;
-      case 'changing room':
-        return Icons.room_preferences;
-      case 'wi-fi':
-        return Icons.wifi;
-      default:
-        return Icons.help;
-    }
-  }
+  // IconData _getIconForItem(String item) {
+  //   switch (item.toLowerCase()) {
+  //     case 'football field':
+  //       return Icons.sports_soccer;
+  //     case 'volleyball court':
+  //       return Icons.sports_volleyball;
+  //     case 'cricket ground':
+  //       return Icons.sports_cricket;
+  //     case 'basketball court':
+  //       return Icons.sports_basketball;
+  //     case 'swimming pool':
+  //       return Icons.pool;
+  //     case 'shuttlecock':
+  //       return Icons.sports_tennis;
+  //     case 'tennis court':
+  //       return Icons.sports_tennis;
+  //     case 'badminton court':
+  //       return Icons.sports_tennis;
+  //     case 'parking':
+  //       return Icons.local_parking;
+  //     case 'restroom':
+  //       return Icons.wc;
+  //     case 'cafeteria':
+  //       return Icons.restaurant;
+  //     case 'lighting':
+  //       return Icons.lightbulb;
+  //     case 'seating':
+  //       return Icons.event_seat;
+  //     case 'shower':
+  //       return Icons.shower;
+  //     case 'changing room':
+  //       return Icons.room_preferences;
+  //     case 'wi-fi':
+  //       return Icons.wifi;
+  //     default:
+  //       return Icons.help;
+  //   }
+  // }
 
   Future<void> _submitTurf() async {
     if (_nameController.text.isEmpty ||
@@ -161,7 +161,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
   @override
   Widget build(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
     return Scaffold(
       backgroundColor: Colors.white,
       body: CustomScrollView(
