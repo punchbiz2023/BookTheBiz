@@ -49,8 +49,6 @@ class bkUserDetails extends StatelessWidget {
           var userData = snapshot.data!['userData'] as Map<String, dynamic>;
           var bookingData = snapshot.data!['bookingData'] as Map<String, dynamic>;
 
-          // Check if the booking status is available
-
           // Display user and booking details in a card wrapped in a SingleChildScrollView
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
@@ -82,7 +80,7 @@ class bkUserDetails extends StatelessWidget {
                     SizedBox(height: 20),
                     _buildBookingSlotsSection(bookingData['bookingSlots'] ?? []),
                     SizedBox(height: 20),
-                    _buildBookingStatus(bookingData['bookingStatus']??[])
+                    _buildBookingStatus(bookingData['bookingStatus'] ?? []),
                   ],
                 ),
               ),
@@ -145,6 +143,10 @@ class bkUserDetails extends StatelessWidget {
           DataCell(Text('Turf Name')),
           DataCell(Text(bookingData['turfName'] ?? 'N/A')),
         ]),
+        DataRow(cells: [
+          DataCell(Text('Payment Method')),
+          DataCell(Text(bookingData['paymentMethod'] ?? 'N/A')), // Display paymentMethod
+        ]),
       ],
     );
   }
@@ -161,7 +163,7 @@ class bkUserDetails extends StatelessWidget {
         SizedBox(height: 10),
         bookingSlots.isEmpty
             ? Chip(
-          label: Text('All Booking Cancelled ☹️'),
+          label: Text('All Booking Cancelled'),
           backgroundColor: Colors.red[100],
         )
             : Wrap(
@@ -177,6 +179,8 @@ class bkUserDetails extends StatelessWidget {
       ],
     );
   }
+
+  // Method to build the Cancelled Slots section
   Widget _buildBookingStatus(List<dynamic> bookingSlots) {
     return bookingSlots.isEmpty
         ? Container() // Return an empty container if bookingSlots is empty
@@ -202,10 +206,6 @@ class bkUserDetails extends StatelessWidget {
     );
   }
 
-
-
-
-
   // Fetch user and booking details from Firestore
   Future<Map<String, dynamic>> _fetchUserAndBookingDetails(String userId, String bookingId, String turfId) async {
     try {
@@ -223,7 +223,6 @@ class bkUserDetails extends StatelessWidget {
 
       var bookingData = bookingSnapshot.data();
 
-
       // Return a map containing both user and booking data
       return {
         'userData': {
@@ -236,11 +235,12 @@ class bkUserDetails extends StatelessWidget {
           'amount': bookingData?['amount'] ?? 0,
           'bookingDate': bookingData?['bookingDate'] ?? 'N/A',
           'bookingSlots': bookingData?['bookingSlots'] ?? [],
-          'bookingStatus': bookingData?['bookingStatus']??[],
+          'bookingStatus': bookingData?['bookingStatus'] ?? [],
           'selectedGround': bookingData?['selectedGround'] ?? 'N/A',
           'totalHours': bookingData?['totalHours'] ?? 0,
           'turfId': turfId,
           'turfName': bookingData?['turfName'] ?? 'N/A',
+          'paymentMethod': bookingData?['paymentMethod'] ?? 'N/A', // Add paymentMethod
         },
       };
     } catch (e) {
