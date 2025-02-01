@@ -365,7 +365,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
             }
           },
         ),
-        Text('Is OSP'),
+        Text('Accept On Spot Payment'),
       ],
     );
   }
