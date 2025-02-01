@@ -106,7 +106,7 @@ class _HomePage2State extends State<HomePage2> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                icon: Icon(Icons.account_circle, color: Colors.white),
+                icon: Icon(Icons.menu, color: Colors.white),
                 onPressed: () {
                   Navigator.push(
                     context,

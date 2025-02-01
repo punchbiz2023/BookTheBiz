@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Authentication
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,19 +10,19 @@ class AddTurfPage extends StatefulWidget {
   @override
   _AddTurfPageState createState() => _AddTurfPageState();
 }
+
 class _AddTurfPageState extends State<AddTurfPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _priceController = TextEditingController(); // Price controller
   File? _imageFile;
   bool _isLoading = false;
   final Map<String, double> _selectedGroundPrices = {};
   final ImagePicker _picker = ImagePicker();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _firebaseStorage = FirebaseStorage.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance; // Initialize FirebaseAuth
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _isosp = false;
 
-  // Facilities list
   final List<String> _facilities = [
     'Parking',
     'Restroom',
@@ -34,7 +35,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
   ];
   final List<String> _selectedFacilities = [];
 
-  // Available Grounds list (Sports types)
   final List<String> _availableGrounds = [
     'Volleyball Court',
     'Swimming Pool',
@@ -47,7 +47,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
   ];
   final List<String> _selectedAvailableGrounds = [];
 
-  // Function to pick image from gallery
   Future<void> _pickImage() async {
     final pickedImage = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedImage != null) {
@@ -57,7 +56,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     }
   }
 
-  // Function to upload image to Firebase Storage
   Future<String> _uploadImage(File image) async {
     try {
       Reference storageRef = _firebaseStorage
@@ -71,45 +69,44 @@ class _AddTurfPageState extends State<AddTurfPage> {
     }
   }
 
-  // Helper function to return specific icons based on the item name
-  IconData _getIconForItem(String item) {
-    switch (item.toLowerCase()) {
-      case 'football field':
-        return Icons.sports_soccer;
-      case 'volleyball court':
-        return Icons.sports_volleyball;
-      case 'cricket ground':
-        return Icons.sports_cricket;
-      case 'basketball court':
-        return Icons.sports_basketball;
-      case 'swimming pool':
-        return Icons.pool;
-      case 'shuttlecock':
-        return Icons.sports_tennis;
-      case 'tennis court':
-        return Icons.sports_tennis;
-      case 'badminton court':
-        return Icons.sports_tennis;
-      case 'parking':
-        return Icons.local_parking;
-      case 'restroom':
-        return Icons.wc;
-      case 'cafeteria':
-        return Icons.restaurant;
-      case 'lighting':
-        return Icons.lightbulb;
-      case 'seating':
-        return Icons.event_seat;
-      case 'shower':
-        return Icons.shower;
-      case 'changing room':
-        return Icons.room_preferences;
-      case 'wi-fi':
-        return Icons.wifi;
-      default:
-        return Icons.help; // Fallback for unrecognized items
-    }
-  }
+  // IconData _getIconForItem(String item) {
+  //   switch (item.toLowerCase()) {
+  //     case 'football field':
+  //       return Icons.sports_soccer;
+  //     case 'volleyball court':
+  //       return Icons.sports_volleyball;
+  //     case 'cricket ground':
+  //       return Icons.sports_cricket;
+  //     case 'basketball court':
+  //       return Icons.sports_basketball;
+  //     case 'swimming pool':
+  //       return Icons.pool;
+  //     case 'shuttlecock':
+  //       return Icons.sports_tennis;
+  //     case 'tennis court':
+  //       return Icons.sports_tennis;
+  //     case 'badminton court':
+  //       return Icons.sports_tennis;
+  //     case 'parking':
+  //       return Icons.local_parking;
+  //     case 'restroom':
+  //       return Icons.wc;
+  //     case 'cafeteria':
+  //       return Icons.restaurant;
+  //     case 'lighting':
+  //       return Icons.lightbulb;
+  //     case 'seating':
+  //       return Icons.event_seat;
+  //     case 'shower':
+  //       return Icons.shower;
+  //     case 'changing room':
+  //       return Icons.room_preferences;
+  //     case 'wi-fi':
+  //       return Icons.wifi;
+  //     default:
+  //       return Icons.help;
+  //   }
+  // }
 
   Future<void> _submitTurf() async {
     if (_nameController.text.isEmpty ||
@@ -128,13 +125,11 @@ class _AddTurfPageState extends State<AddTurfPage> {
     });
 
     try {
-      // Upload the image and get the URL
       String imageUrl = await _uploadImage(_imageFile!);
-      String userId = _auth.currentUser!.uid; // Get the current user UID
-      DocumentReference turfRef = _firestore.collection('turfs').doc(); // Create a new document reference
-      String turfId = turfRef.id; // Use the document ID as turfId
+      String userId = _auth.currentUser!.uid;
+      DocumentReference turfRef = _firestore.collection('turfs').doc();
+      String turfId = turfRef.id;
 
-      // Prepare the data to be saved in Firestore
       Map<String, dynamic> turfData = {
         'turfId': turfId,
         'name': _nameController.text,
@@ -144,9 +139,9 @@ class _AddTurfPageState extends State<AddTurfPage> {
         'facilities': _selectedFacilities,
         'availableGrounds': _selectedAvailableGrounds,
         'ownerId': userId,
+        'isosp': _isosp
       };
 
-      // Add the document with the turfId as the document ID
       await turfRef.set(turfData);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -164,19 +159,17 @@ class _AddTurfPageState extends State<AddTurfPage> {
     }
   }
 
-    @override
+  @override
   Widget build(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
     return Scaffold(
-      backgroundColor: Colors.white, // Background color for white theme
+      backgroundColor: Colors.white,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             backgroundColor: Colors.transparent,
-            title: Text('Add Turf', style: TextStyle(color: Colors.grey[700],fontWeight: FontWeight.bold)),
+            title: Text('Add Turf', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold)),
             centerTitle: true,
             floating: true,
-            // Show and hide the app bar based on scrolling
             flexibleSpace: FlexibleSpaceBar(
               collapseMode: CollapseMode.parallax,
             ),
@@ -190,7 +183,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildImagePicker(),
-                      // Image selector at the top
                       SizedBox(height: 16),
                       _buildTextField(
                         controller: _nameController,
@@ -205,10 +197,11 @@ class _AddTurfPageState extends State<AddTurfPage> {
                       SizedBox(height: 16),
                       _buildTopicTitle('Available Grounds'),
                       _buildAvailableGroundsChips(),
-
                       SizedBox(height: 16),
                       _buildTopicTitle('Facilities'),
                       _buildFacilitiesChips(),
+                      SizedBox(height: 16),
+                      _buildIsospCheckbox(),
                       SizedBox(height: 24),
                       _isLoading
                           ? Center(child: CircularProgressIndicator())
@@ -239,7 +232,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
         labelText: label,
         labelStyle: TextStyle(color: Colors.black54),
         fillColor: Colors.grey[200],
-        // Light background color for white theme
         filled: true,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -323,6 +315,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
       }).toList(),
     );
   }
+
   Widget _buildTopicTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
@@ -332,6 +325,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
       ),
     );
   }
+
   Future<void> _fetchPriceForGround(String ground) async {
     double? price = await showDialog<double>(
       context: context,
@@ -350,15 +344,126 @@ class _AddTurfPageState extends State<AddTurfPage> {
       });
     }
   }
+
+  Widget _buildIsospCheckbox() {
+    return Row(
+      children: [
+        Checkbox(
+          value: _isosp,
+          onChanged: (value) async {
+            if (value == true) {
+              bool acknowledged = await _showIsospWarning();
+              if (acknowledged) {
+                setState(() {
+                  _isosp = true;
+                });
+              }
+            } else {
+              setState(() {
+                _isosp = false;
+              });
+            }
+          },
+        ),
+        Text('Accept On Spot Payment'),
+      ],
+    );
+  }
+
+  Future<bool> _showIsospWarning() async {
+    Completer<bool> completer = Completer();
+    bool acknowledged = false;
+    int countdown = 5; // Initial countdown value
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent dismissing the dialog by tapping outside
+      builder: (context) {
+        // Timer to update the countdown every second
+        Timer.periodic(Duration(seconds: 1), (timer) {
+          if (countdown > 0) {
+            setState(() {
+              countdown--;
+            });
+          } else {
+            timer.cancel(); // Stop the timer when countdown reaches 0
+          }
+        });
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: Colors.red[50], // Light red background
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.red, width: 2), // Red border
+              ),
+              title: Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.red), // Warning icon
+                  SizedBox(width: 8),
+                  Text(
+                    'Warning',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(height: 16),
+                  if (countdown > 0)
+                    Text(
+                      'By enabling On-the-Spot Payment (OSP), you acknowledge that if a user books a turf using OSP and fails to show up, you are fully responsible for any losses or inconveniences caused. ',
+                      style: TextStyle(
+                        color: Colors.red[800],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close the dialog
+                    completer.complete(false); // Return false for cancellation
+                  },
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+                TextButton(
+                  onPressed: countdown == 5
+                      ? () {
+                    acknowledged = true;
+                    Navigator.of(context).pop(); // Close the dialog
+                    completer.complete(true); // Return true for acknowledgment
+                  }
+                      : null, // Disable the button if countdown > 0
+                  child: Text(
+                    'Acknowledge',
+                    style: TextStyle(
+                      color: Colors.green, // Green when enabled, grey when disabled
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    return completer.future.then((value) => acknowledged);
+  }
+
   Widget _buildSubmitButton() {
     return ElevatedButton(
-      onPressed: () {
-        print('Selected Ground Prices:');
-        _selectedGroundPrices.forEach((ground, price) {
-          print('Ground: $ground, Price: \$${price.toStringAsFixed(2)}');
-        });
-        _submitTurf(); // Proceed with the submission logic
-      },
+      onPressed: _submitTurf,
       child: Text('Submit'),
       style: ElevatedButton.styleFrom(
         padding: EdgeInsets.symmetric(vertical: 16),
@@ -366,6 +471,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 }
+
 class _PriceInputDialog extends StatelessWidget {
   final String groundName;
   final double? previousPrice;
@@ -423,8 +529,7 @@ class _PriceInputDialog extends StatelessWidget {
                           setState(() {
                             _isChecked = value ?? false;
                             if (_isChecked) {
-                              _priceController.text =
-                                  previousPrice!.toStringAsFixed(2);
+                              _priceController.text = previousPrice!.toStringAsFixed(2);
                             } else {
                               _priceController.clear();
                             }
@@ -476,8 +581,3 @@ class _PriceInputDialog extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

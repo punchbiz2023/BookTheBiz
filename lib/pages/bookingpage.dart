@@ -12,7 +12,6 @@ class BookingPage extends StatefulWidget {
   final String documentname;
   final String userId;
 
-
   const BookingPage({
     super.key,
     required this.documentId,
@@ -22,11 +21,7 @@ class BookingPage extends StatefulWidget {
 
   @override
   _BookingPageState createState() => _BookingPageState();
-
-
 }
-
-
 
 class _BookingPageState extends State<BookingPage> {
   late Razorpay _razorpay;
@@ -39,6 +34,7 @@ class _BookingPageState extends State<BookingPage> {
   String? selectedGround;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   int bookingSlotsForSelectedDay = 0;
+  bool isosp = false; // Track on-spot payment status
 
   @override
   void initState() {
@@ -46,7 +42,7 @@ class _BookingPageState extends State<BookingPage> {
     _razorpay = Razorpay();
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
-
+    _fetchTurfDetails(); // Fetch turf details including isosp
   }
 
   @override
@@ -57,18 +53,31 @@ class _BookingPageState extends State<BookingPage> {
 
   void _handlePaymentSuccess(PaymentSuccessResponse response) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment successful!')));
-    // You can handle your post-payment actions here (e.g., confirm booking)
   }
 
-  // Handle payment failure
   void _handlePaymentError(PaymentFailureResponse response) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment failed!')));
   }
 
+  Future<void> _fetchTurfDetails() async {
+    try {
+      DocumentSnapshot turfSnapshot = await FirebaseFirestore.instance
+          .collection('turfs')
+          .doc(widget.documentId)
+          .get();
+
+      if (turfSnapshot.exists) {
+        setState(() {
+          isosp = turfSnapshot['isosp'] ?? false; // Fetch isosp from Firestore
+        });
+      }
+    } catch (e) {
+      print('Error fetching turf details: $e');
+    }
+  }
 
   Future<Map<String, List<String>>> _fetchBookedSlots() async {
     try {
-      // Fetch the booking documents for the selected date
       QuerySnapshot<Map<String, dynamic>> bookingSnapshot = await _firestore
           .collection('turfs')
           .doc(widget.documentId)
@@ -76,21 +85,16 @@ class _BookingPageState extends State<BookingPage> {
           .where('bookingDate', isEqualTo: DateFormat('yyyy-MM-dd').format(selectedDate!))
           .get();
 
-      // Initialize a map to hold the ground names and their corresponding booking slots
       Map<String, List<String>> bookedSlotsMap = {};
 
-      // Iterate through each booking document
       for (var doc in bookingSnapshot.docs) {
-        // Fetch the selected ground and booking slots
-        String selectedGround = doc.data()['selectedGround']; // Adjust this based on your data structure
+        String selectedGround = doc.data()['selectedGround'];
         List<String> slots = List<String>.from(doc.data()['bookingSlots']);
 
-        // If the ground name is not already in the map, initialize it
         if (!bookedSlotsMap.containsKey(selectedGround)) {
           bookedSlotsMap[selectedGround] = [];
         }
 
-        // Add the booking slots to the corresponding ground
         bookedSlotsMap[selectedGround]!.addAll(slots);
       }
 
@@ -126,7 +130,7 @@ class _BookingPageState extends State<BookingPage> {
         backgroundColor: Colors.black,
         elevation: 0,
       ),
-      body: SingleChildScrollView( // Enable scrolling
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Wrap(
           spacing: 16.0,
@@ -134,7 +138,7 @@ class _BookingPageState extends State<BookingPage> {
           children: [
             if (!isBookingConfirmed) _buildCalendar(),
             if (!isBookingConfirmed) _buildSlotSelector(),
-            if (selectedSlots.isNotEmpty) // Check if any slots are selected
+            if (selectedSlots.isNotEmpty)
               Center(
                 child: ElevatedButton(
                   onPressed: () {
@@ -143,7 +147,6 @@ class _BookingPageState extends State<BookingPage> {
                         isBookingConfirmed = true;
                       });
                       _showBookingDialog();
-
                     } else {
                       _showErrorDialog(context);
                     }
@@ -173,17 +176,15 @@ class _BookingPageState extends State<BookingPage> {
     String userName = 'Anonymous';
     User? currentUser = FirebaseAuth.instance.currentUser;
 
-    // Check if the user is logged in
     if (currentUser != null) {
       userName = await _fetchUserName(currentUser.uid);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('User not logged in')),
       );
-      return; // Exit if the user is not logged in
+      return;
     }
 
-    // Check if a date and slots have been selected
     if (selectedDate == null || selectedSlots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('These slots have already been booked. Try new slots')),
@@ -191,11 +192,9 @@ class _BookingPageState extends State<BookingPage> {
       return;
     }
 
-    // Calculate total F and total hours
     double totalAmount = 0.0;
     double totalHours = 0.0;
 
-    // Fetch turf details
     DocumentSnapshot turfSnapshot = await FirebaseFirestore.instance
         .collection('turfs')
         .doc(widget.documentId)
@@ -203,7 +202,6 @@ class _BookingPageState extends State<BookingPage> {
 
     var price = turfSnapshot['price'] ?? 0.0;
 
-    // Handle different formats for price (Map, List, String, etc.)
     if (price is Map) {
       price = price[selectedGround] ?? 0.0;
     } else if (price is List) {
@@ -214,7 +212,6 @@ class _BookingPageState extends State<BookingPage> {
       price = price;
     }
 
-    // Calculate total amount and hours based on selected slots
     for (String slot in selectedSlots) {
       double hours = _getHoursForSlot(slot);
       totalHours += hours;
@@ -247,51 +244,15 @@ class _BookingPageState extends State<BookingPage> {
                 _showCancellationDialog();
               },
             ),
-            TextButton(
-              child: Text('Confirm Booking', style: TextStyle(color: Colors.green)),
-              onPressed: () async {
-                var options = {
-                  'key': 'rzp_test_RmOLs985IPNRVq',  // Your Razorpay key from the Razorpay Dashboard
-                  'amount': (totalAmount * 100).toInt(),  // Razorpay expects the amount in paise
-                  'name': 'Turf Booking',
-                  'description': 'Booking fee for your selected slots',
-                  'prefill': {
-                    'contact': 'test',  // User's contact
-                    'email': 'test',  // User's email
-                  },
-                  'theme': {
-                    'color': '#00FF00',  // Customize theme color
-                  },
-                  // 'transfer': [
-                  //   {
-                  //     'account': 'acc_PT5ZBxEb5cHGw2', // Turf Owner's Razorpay Account ID
-                  //     'amount': (totalAmount -10) * 100, // Amount to be transferred to the turf owner
-                  //     'currency': 'INR'
-                  //   }
-                  // ]
-                };
+            if (isosp) // Show "Pay On Spot" button only if isosp is true
+              TextButton(
+                child: Text('Pay On Spot', style: TextStyle(color: Colors.green)),
+                onPressed: () async {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('On-spot payment selected')),
+                  );
 
-                // Add Razorpay event listeners for success, failure, and cancel
-                _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
-                  // Payment was successful, proceed with Firestore operations
                   try {
-                    // Fetch the owner's details
-                    DocumentSnapshot turfDoc = await _firestore.collection('turfs').doc(widget.documentId).get();
-                    if (!turfDoc.exists) {
-                      throw Exception("Turf details not found.");
-                    }
-
-                    String ownerId = turfDoc['ownerId'] ?? '';
-                    if (ownerId.isEmpty) {
-                      throw Exception("Owner ID not found.");
-                    }
-
-                    // Fetch the owner's document
-                    DocumentSnapshot ownerDoc = await _firestore.collection('users').doc(ownerId).get();
-                    if (!ownerDoc.exists) {
-                      throw Exception("Owner details not found.");
-                    }
-
                     Map<String, dynamic> bookingData = {
                       'userId': currentUser.uid,
                       'userName': userName,
@@ -302,16 +263,15 @@ class _BookingPageState extends State<BookingPage> {
                       'turfId': widget.documentId,
                       'turfName': widget.documentname,
                       'selectedGround': selectedGround,
+                      'paymentMethod': 'On Spot',
                     };
 
-                    // Add booking data to Firestore under the turf's bookings collection
                     await _firestore
                         .collection('turfs')
                         .doc(widget.documentId)
                         .collection('bookings')
                         .add(bookingData);
 
-                    // Add booking data to global bookings collection
                     await _firestore.collection('bookings').add(bookingData);
 
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -321,7 +281,67 @@ class _BookingPageState extends State<BookingPage> {
                       ),
                     );
 
-                    // Navigate to booking success page
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => BookingSuccessPage()),
+                          (Route<dynamic> route) => false,
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to confirm booking: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+              ),
+            TextButton(
+              child: Text('Confirm Booking', style: TextStyle(color: Colors.green)),
+              onPressed: () async {
+                var options = {
+                  'key': 'rzp_test_RmOLs985IPNRVq',
+                  'amount': (totalAmount * 100).toInt(),
+                  'name': 'Turf Booking',
+                  'description': 'Booking fee for your selected slots',
+                  'prefill': {
+                    'contact': 'test',
+                    'email': 'test',
+                  },
+                  'theme': {
+                    'color': '#00FF00',
+                  },
+                };
+
+                _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
+                  try {
+                    Map<String, dynamic> bookingData = {
+                      'userId': currentUser.uid,
+                      'userName': userName,
+                      'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                      'bookingSlots': selectedSlots,
+                      'totalHours': totalHours,
+                      'amount': totalAmount,
+                      'turfId': widget.documentId,
+                      'turfName': widget.documentname,
+                      'selectedGround': selectedGround,
+                      'paymentMethod': 'Online',
+                    };
+
+                    await _firestore
+                        .collection('turfs')
+                        .doc(widget.documentId)
+                        .collection('bookings')
+                        .add(bookingData);
+
+                    await _firestore.collection('bookings').add(bookingData);
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Booking confirmed successfully!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(builder: (context) => BookingSuccessPage()),
                           (Route<dynamic> route) => false,
@@ -336,7 +356,6 @@ class _BookingPageState extends State<BookingPage> {
                   }
                 });
 
-                // Add failure handler
                 _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -345,9 +364,6 @@ class _BookingPageState extends State<BookingPage> {
                     ),
                   );
                 });
-
-                // Add cancel handler
-
 
                 try {
                   _razorpay.open(options);
@@ -384,11 +400,9 @@ class _BookingPageState extends State<BookingPage> {
           continue;
         }
 
-        // Count the number of booked slots (length of bookingSlots array)
         List<dynamic> bookingSlotsRaw = bookingDoc['bookingSlots'] ?? [];
         int bookingSlotsCount = bookingSlotsRaw.length;
 
-        // Accumulate the booking slots for the same date
         if (bookingCounts.containsKey(bookingDate)) {
           bookingCounts[bookingDate] = (bookingCounts[bookingDate]! + bookingSlotsCount).clamp(0, 10);
         } else {
@@ -399,7 +413,7 @@ class _BookingPageState extends State<BookingPage> {
       print('Error fetching bookings: $e');
     }
     return bookingCounts;
-  }// Track booked slots for the selected day
+  }
 
   Widget _buildCalendar() {
     return FutureBuilder(
@@ -478,7 +492,7 @@ class _BookingPageState extends State<BookingPage> {
                     Color? selectedDayColor = _getColorForSelectedDay();
                     return Container(
                       decoration: BoxDecoration(
-                        color: selectedDayColor, // Use dynamically updated color
+                        color: selectedDayColor,
                         shape: BoxShape.rectangle,
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -510,11 +524,10 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-// Function to determine the color of the selected day based on the booking status
   Color? _getColorForSelectedDay() {
     const int maxSlotsPerDay = 10;
     if (selectedDate == null) {
-      return Colors.grey; // Default color if no date is selected
+      return Colors.grey;
     }
     double bookingPercentage = (bookingSlotsForSelectedDay / maxSlotsPerDay) * 100;
 
@@ -529,21 +542,20 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
-// Function to determine color based on booked slots
   Color _getColorForBookingSlots(int bookedSlots) {
     if (bookedSlots <= 2) {
-      return Colors.green; // 0-2 slots booked
+      return Colors.green;
     } else if (bookedSlots <= 5) {
-      return Colors.teal; // 3-5 slots booked
+      return Colors.teal;
     } else if (bookedSlots <= 9) {
-      return Colors.orange; // 6-9 slots booked
+      return Colors.orange;
     } else {
-      return Colors.red; // 10 or more slots booked
+      return Colors.red;
     }
   }
 
   Widget _buildBookingStatus() {
-    const int maxSlotsPerDay = 10; // Maximum slots per day
+    const int maxSlotsPerDay = 10;
 
     if (selectedDate == null) {
       return Text("Select a date to see booking status");
@@ -552,7 +564,6 @@ class _BookingPageState extends State<BookingPage> {
     Color statusColor;
     String statusText;
 
-    // Determine the booking status based on number of booked slots
     if (bookingSlotsForSelectedDay == 0) {
       statusColor = Colors.green;
       statusText = "Available (0/$maxSlotsPerDay slots booked)";
@@ -608,10 +619,8 @@ class _BookingPageState extends State<BookingPage> {
         } else if (snapshot.hasError) {
           return Center(child: Text('Error fetching booked slots: ${snapshot.error}'));
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          // When no data is available
           return _buildSlotSelectionColumn([]);
         } else {
-          // When data is successfully fetched
           final bookedSlotsMap = snapshot.data!;
           return _buildSlotSelectionColumn(bookedSlotsMap[selectedGround] ?? []);
         }
@@ -623,14 +632,13 @@ class _BookingPageState extends State<BookingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildGroundSelector(), // Add ground selector
+        _buildGroundSelector(),
         SizedBox(height: 20),
         Text(
           'Select Slots:',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
         ),
         SizedBox(height: 10),
-        // Early Morning Slot
         _buildSlotChips('Early Morning', '12 AM - 5 AM', [
           '12:00 AM - 1:00 AM',
           '1:00 AM - 2:00 AM',
@@ -639,7 +647,6 @@ class _BookingPageState extends State<BookingPage> {
           '4:00 AM - 5:00 AM',
         ], bookedSlots),
         SizedBox(height: 10),
-        // Morning Slot
         _buildSlotChips('Morning', '5 AM - 11 AM', [
           '5:00 AM - 6:00 AM',
           '6:00 AM - 7:00 AM',
@@ -649,7 +656,6 @@ class _BookingPageState extends State<BookingPage> {
           '10:00 AM - 11:00 AM',
         ], bookedSlots),
         SizedBox(height: 10),
-        // Afternoon Slot
         _buildSlotChips('Afternoon', '12 PM - 5 PM', [
           '12:00 PM - 1:00 PM',
           '1:00 PM - 2:00 PM',
@@ -658,7 +664,6 @@ class _BookingPageState extends State<BookingPage> {
           '4:00 PM - 5:00 PM',
         ], bookedSlots),
         SizedBox(height: 10),
-        // Evening Slot
         _buildSlotChips('Evening', '5 PM - 11 PM', [
           '5:00 PM - 6:00 PM',
           '6:00 PM - 7:00 PM',
@@ -692,7 +697,7 @@ class _BookingPageState extends State<BookingPage> {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w600,
-                  color: Colors.indigo,  // Changed to a more vibrant color
+                  color: Colors.indigo,
                 ),
               ),
               SizedBox(height: 15),
@@ -702,32 +707,32 @@ class _BookingPageState extends State<BookingPage> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Colors.indigo,  // Border color to match the text color
+                    color: Colors.indigo,
                     width: 1.5,
                   ),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: selectedGround,  // Display the selected ground in the dropdown
-                    dropdownColor: Colors.indigo.shade50,  // Background color for the dropdown
+                    value: selectedGround,
+                    dropdownColor: Colors.indigo.shade50,
                     hint: Text(
                       'Select your ground',
                       style: TextStyle(color: Colors.grey.shade600),
                     ),
                     isExpanded: true,
-                    icon: Icon(Icons.arrow_drop_down, color: Colors.indigo),  // Customized the dropdown icon color
+                    icon: Icon(Icons.arrow_drop_down, color: Colors.indigo),
                     items: availableGrounds.map((ground) {
                       return DropdownMenuItem<String>(
                         value: ground,
                         child: Text(
                           ground,
-                          style: TextStyle(fontSize: 18, color: Colors.black87),  // Increased font size and color contrast
+                          style: TextStyle(fontSize: 18, color: Colors.black87),
                         ),
                       );
                     }).toList(),
                     onChanged: (String? newValue) {
                       setState(() {
-                        selectedGround = newValue;  // Set the selected ground when chosen
+                        selectedGround = newValue;
                       });
                     },
                   ),
@@ -738,7 +743,7 @@ class _BookingPageState extends State<BookingPage> {
                 Padding(
                   padding: const EdgeInsets.only(top: 20),
                   child: Text(
-                    'You selected: $selectedGround',  // Feedback text after selection
+                    'You selected: $selectedGround',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w500,
@@ -756,12 +761,11 @@ class _BookingPageState extends State<BookingPage> {
   Future<List<String>> _fetchAvailableGrounds() async {
     DocumentSnapshot snapshot = await FirebaseFirestore.instance
         .collection('turfs')
-        .doc(widget.documentId) // Use turfId to get the specific document
+        .doc(widget.documentId)
         .get();
 
     List<String> grounds = [];
     if (snapshot.exists) {
-      // Get the availableGrounds from the document
       List<dynamic> availableGroundsList = snapshot['availableGrounds'];
       grounds = availableGroundsList.map((ground) => ground.toString()).toList();
     }
@@ -778,14 +782,14 @@ class _BookingPageState extends State<BookingPage> {
         Wrap(
           spacing: 8.0,
           children: slots.map((slot) {
-            bool isBooked = bookedSlots.contains(slot); // Check if slot is booked
+            bool isBooked = bookedSlots.contains(slot);
             return ChoiceChip(
               label: Text(slot),
               selected: selectedSlots.contains(slot),
               selectedColor: isBooked ? Colors.red : Colors.blue,
               disabledColor: Colors.grey,
               onSelected: isBooked
-                  ? null // Disable the chip if it's booked
+                  ? null
                   : (selected) {
                 setState(() {
                   selectedSlots.contains(slot) ? selectedSlots.remove(slot) : selectedSlots.add(slot);
@@ -799,7 +803,6 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   double _getHoursForSlot(String slot) {
-    // Assuming each slot is for 1 hour. You can adjust this if needed.
     return 1.0;
   }
 
