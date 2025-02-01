@@ -19,6 +19,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
   final _priceController = TextEditingController();
   String? _imageUrl;
   File? _newImageFile;
+  bool _isosp = false; // New variable for isosp
 
   // Sample data for facilities and grounds
   List<String> facilities = [
@@ -60,6 +61,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
       _descriptionController.text = turfData['description'] ?? '';
       _priceController.text = turfData['price']?.toString() ?? '';
       _imageUrl = turfData['imageUrl'];
+      _isosp = turfData['isosp'] ?? false; // Load isosp value
 
       // Load selected facilities and grounds from Firestore data
       selectedFacilities = Set<String>.from(turfData['facilities'] ?? []);
@@ -99,6 +101,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
         'price': double.tryParse(_priceController.text) ?? 0.0,
         'facilities': selectedFacilities.toList(),
         'availableGrounds': selectedGrounds.toList(),
+        'isosp': _isosp, // Save isosp value
         if (newImageUrl != null) 'imageUrl': newImageUrl,
       });
 
@@ -116,7 +119,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Edit Turf Details'),
-        backgroundColor: Colors.teal, // Changed to Teal
+        backgroundColor: Colors.teal,
         actions: [
           IconButton(
             icon: Icon(Icons.save),
@@ -169,6 +172,8 @@ class _EditTurfPageState extends State<EditTurfPage> {
               _buildFacilitiesSelection(),
               SizedBox(height: 16),
               _buildGroundsSelection(),
+              SizedBox(height: 16),
+              _buildIsospSwitch(), // Add the Switch for isosp
             ],
           ),
         ),
@@ -194,7 +199,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
       children: [
         Text(
           'Facilities:',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal), // Changed to Teal
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal),
         ),
         Wrap(
           spacing: 8.0,
@@ -213,7 +218,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
                 });
               },
               backgroundColor: Colors.grey[300],
-              selectedColor: Colors.teal, // Changed to Teal
+              selectedColor: Colors.teal,
               labelStyle: TextStyle(color: selectedFacilities.contains(facility) ? Colors.white : Colors.black),
             );
           }).toList(),
@@ -228,7 +233,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
       children: [
         Text(
           'Available Grounds:',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal), // Changed to Teal
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal),
         ),
         Wrap(
           spacing: 8.0,
@@ -247,10 +252,31 @@ class _EditTurfPageState extends State<EditTurfPage> {
                 });
               },
               backgroundColor: Colors.grey[300],
-              selectedColor: Colors.teal, // Changed to Teal
+              selectedColor: Colors.teal,
               labelStyle: TextStyle(color: selectedGrounds.contains(ground) ? Colors.white : Colors.black),
             );
           }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIsospSwitch() {
+    return Row(
+      children: [
+        Text(
+          'Onspot payment:',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal),
+        ),
+        SizedBox(width: 16),
+        Switch(
+          value: _isosp,
+          onChanged: (value) {
+            setState(() {
+              _isosp = value;
+            });
+          },
+          activeColor: Colors.teal,
         ),
       ],
     );
