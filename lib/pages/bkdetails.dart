@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -44,6 +43,7 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
                 _buildDetailRow('Total Hours', '${widget.bookingData['totalHours'] ?? 0}'),
                 _buildDetailRow('Selected Ground', widget.bookingData['selectedGround'] ?? 'N/A'),
                 _buildDetailRow('Name', widget.bookingData['userName'] ?? 'Unknown User'),
+                _buildDetailRow('Payment Method', widget.bookingData['paymentMethod'] ?? 'N/A'), // Add Payment Method
                 _buildBookedTimeSlots(context),
               ],
             ),
@@ -268,9 +268,8 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
       },
     );
   }
-
-
 }
+
 Future<void> _cancelBooking(String bookID, DateTime startTime, DateTime endTime) async {
   try {
     final bookingRef = FirebaseFirestore.instance.collection('bookings');
@@ -340,4 +339,3 @@ Future<void> _cancelBooking(String bookID, DateTime startTime, DateTime endTime)
     print('Error cancelling booking: $e');
   }
 }
-
