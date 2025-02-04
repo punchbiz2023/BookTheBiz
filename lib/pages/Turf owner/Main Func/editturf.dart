@@ -19,9 +19,11 @@ class _EditTurfPageState extends State<EditTurfPage> {
   final _priceController = TextEditingController();
   String? _imageUrl;
   File? _newImageFile;
-  bool _isosp = false; // New variable for isosp
-
-  // Sample data for facilities and grounds
+  bool _isosp = false;
+  bool _isPriceMap = false;
+  // Define price map correctly
+  Map<String, int> _price = {};
+  Map<String, TextEditingController> _priceControllers = {};
   List<String> facilities = [
     'Parking',
     'Restroom',
@@ -32,6 +34,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
     'Wi-Fi',
     'Seating',
   ];
+
   List<String> availableGrounds = [
     'Volleyball Court',
     'Swimming Pool',
@@ -43,7 +46,6 @@ class _EditTurfPageState extends State<EditTurfPage> {
     'Basketball Court',
   ];
 
-  // Selected states
   Set<String> selectedFacilities = {};
   Set<String> selectedGrounds = {};
 
@@ -54,20 +56,44 @@ class _EditTurfPageState extends State<EditTurfPage> {
   }
 
   Future<void> _loadTurfDetails() async {
-    var doc = await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).get();
-    var turfData = doc.data() as Map<String, dynamic>;
-    setState(() {
-      _nameController.text = turfData['name'] ?? '';
-      _descriptionController.text = turfData['description'] ?? '';
-      _priceController.text = turfData['price']?.toString() ?? '';
-      _imageUrl = turfData['imageUrl'];
-      _isosp = turfData['isosp'] ?? false; // Load isosp value
+    try {
+      var doc = await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).get();
+      if (!doc.exists) {
+        return;
+      }
+      var turfData = doc.data() as Map<String, dynamic>;
 
-      // Load selected facilities and grounds from Firestore data
-      selectedFacilities = Set<String>.from(turfData['facilities'] ?? []);
-      selectedGrounds = Set<String>.from(turfData['availableGrounds'] ?? []);
-    });
+      setState(() {
+        _nameController.text = turfData['name'] ?? '';
+        _descriptionController.text = turfData['description'] ?? '';
+
+        // Handling price: If it's a number, use it directly, else parse it as a map
+        var priceData = turfData['price'];
+        if (priceData is num) {
+          _isPriceMap = false;
+          _priceController.text = priceData.toString();
+          _price.clear();
+          _priceControllers.clear(); // Clear the price controllers for single price
+        } else if (priceData is Map<String, dynamic>) {
+          _isPriceMap = true;
+          _price = priceData.map((key, value) => MapEntry(key, (value as num).toInt()));
+          _priceControllers.clear(); // Clear any existing controllers before adding new ones
+          _price.forEach((key, value) {
+            _priceControllers[key] = TextEditingController(text: value.toString());
+          });
+        }
+
+        _imageUrl = turfData['imageUrl'] ?? '';
+        _isosp = turfData['isosp'] ?? false;
+        selectedFacilities = turfData['facilities'] != null ? Set<String>.from(turfData['facilities']) : {};
+        selectedGrounds = turfData['availableGrounds'] != null ? Set<String>.from(turfData['availableGrounds']) : {};
+      });
+    } catch (e) {
+      debugPrint('Error loading turf details: $e');
+    }
   }
+
+
 
   Future<void> _pickImage() async {
     final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
@@ -82,37 +108,47 @@ class _EditTurfPageState extends State<EditTurfPage> {
     try {
       String? newImageUrl;
       if (_newImageFile != null) {
-        // Delete the old image from Firebase Storage
         if (_imageUrl != null) {
           var oldImageRef = FirebaseStorage.instance.refFromURL(_imageUrl!);
           await oldImageRef.delete();
         }
 
-        // Upload the new image to Firebase Storage
         var storageRef = FirebaseStorage.instance.ref().child('turfs/${widget.turfId}/image.jpg');
         await storageRef.putFile(_newImageFile!);
         newImageUrl = await storageRef.getDownloadURL();
       }
 
-      // Update Firestore document
+      // Save price as either a single number or a map of ground prices
+      dynamic priceData;
+      if (_price.isEmpty && _priceController.text.isNotEmpty) {
+        priceData = double.tryParse(_priceController.text) ?? 0.0;
+      } else {
+        priceData = _price; // Store price as a map if multiple prices exist
+      }
+
       await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update({
         'name': _nameController.text,
         'description': _descriptionController.text,
-        'price': double.tryParse(_priceController.text) ?? 0.0,
+        'price': priceData,
         'facilities': selectedFacilities.toList(),
         'availableGrounds': selectedGrounds.toList(),
-        'isosp': _isosp, // Save isosp value
+        'isosp': _isosp,
         if (newImageUrl != null) 'imageUrl': newImageUrl,
       });
 
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Turf details updated successfully!')),
+      );
+
       Navigator.pop(context);
     } catch (e) {
-      // Handle error
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error saving details: $e')),
       );
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -141,6 +177,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
                   width: double.infinity,
                   fit: BoxFit.cover,
                 )
+
                     : _imageUrl != null
                     ? Image.network(
                   _imageUrl!,
@@ -167,7 +204,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
               SizedBox(height: 16),
               _buildTextField(_descriptionController, 'Description'),
               SizedBox(height: 16),
-              _buildTextField(_priceController, 'Price', keyboardType: TextInputType.number),
+              _isPriceMap ? _buildMultiPriceFields() : _buildTextField(_priceController, 'Price'),
               SizedBox(height: 16),
               _buildFacilitiesSelection(),
               SizedBox(height: 16),
@@ -178,6 +215,27 @@ class _EditTurfPageState extends State<EditTurfPage> {
           ),
         ),
       ),
+    );
+  }
+  Widget _buildMultiPriceFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Prices for Different Grounds:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+        ..._priceControllers.entries.map((entry) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: TextFormField(
+              controller: entry.value,
+              decoration: InputDecoration(
+                labelText: '${entry.key} Price',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          );
+        }).toList(),
+      ],
     );
   }
 
@@ -240,26 +298,91 @@ class _EditTurfPageState extends State<EditTurfPage> {
           runSpacing: 8.0,
           children: availableGrounds.map((ground) {
             return ChoiceChip(
-              label: Text(ground),
+              label: Text(
+                '$ground${_price.containsKey(ground) ? '\n(${_price[ground]})' : ''}',
+                textAlign: TextAlign.center,
+              ),
               selected: selectedGrounds.contains(ground),
-              onSelected: (selected) {
-                setState(() {
-                  if (selected) {
-                    selectedGrounds.add(ground);
+              onSelected: (selected) async {
+                if (selected) {
+                  if (!_price.containsKey(ground)) {
+                    int? enteredPrice = await _showPriceDialog(ground);
+                    if (enteredPrice != null) {
+                      setState(() {
+                        _price[ground] = enteredPrice;
+                        selectedGrounds.add(ground);
+                      });
+                    }
                   } else {
-                    selectedGrounds.remove(ground);
+                    setState(() {
+                      selectedGrounds.add(ground);
+                    });
                   }
-                });
+                } else {
+                  setState(() {
+                    selectedGrounds.remove(ground);
+                    _price.remove(ground);
+                  });
+                }
               },
               backgroundColor: Colors.grey[300],
               selectedColor: Colors.teal,
-              labelStyle: TextStyle(color: selectedGrounds.contains(ground) ? Colors.white : Colors.black),
+              labelStyle: TextStyle(
+                color: selectedGrounds.contains(ground) ? Colors.white : Colors.black,
+              ),
             );
           }).toList(),
         ),
       ],
     );
   }
+
+
+// Retrieve price for a ground
+  int? _getGroundPrice(String ground) {
+    return _price[ground];
+  }
+
+// Show a dialog for entering a new price
+  Future<int?> _showPriceDialog(String ground) async {
+    TextEditingController priceController = TextEditingController();
+
+    return await showDialog<int>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Enter Price for $ground'),
+          content: TextField(
+            controller: priceController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(hintText: 'Enter price'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                int? price = int.tryParse(priceController.text);
+                if (price != null && price > 0) {
+                  Navigator.pop(context, price);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Please enter a valid price')),
+                  );
+                }
+              },
+              child: Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
+
 
   Widget _buildIsospSwitch() {
     return Row(
