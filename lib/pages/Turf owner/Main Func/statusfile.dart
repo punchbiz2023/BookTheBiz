@@ -108,7 +108,11 @@ class _StatusFilePageState extends State<StatusFilePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Please complete all required fields")),
       );
+      Navigator.pushReplacementNamed(context, '/homepage1');
+
+
       return;
+
     }
 
     try {
@@ -138,9 +142,9 @@ class _StatusFilePageState extends State<StatusFilePage> {
         SnackBar(content: Text("Details submitted successfully")),
       );
 
-      setState(() {
-        _statusMessage =
-        "Your details have been submitted and are under review.";
+      // Redirect to the homepage after a short delay.
+      Future.delayed(Duration(seconds: 1), () {
+        Navigator.pushReplacementNamed(context, '/homepage1');
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -378,14 +382,19 @@ class _StatusFilePageState extends State<StatusFilePage> {
                 style: ElevatedButton.styleFrom(
                   foregroundColor: Colors.white,
                   backgroundColor: Colors.teal,
-                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  padding:
+                  EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 child: Text(
                   "Submit Details",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    
+                  ),
                 ),
               ),
             ),
