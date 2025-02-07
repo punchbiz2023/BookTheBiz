@@ -155,42 +155,63 @@ class _HomePage2State extends State<HomePage2> {
               children: [
                 // Add Turf button
                 Center(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (isTurfOwner && isStatusYes) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => AddTurfPage()),
-                        );
-                      } else {
-                        // Show a message if the user is not verified or not a Turf Owner
-                        Fluttertoast.showToast(
-                          msg: "Your ID isn't verified by Admin or you are not a Turf Owner.",
-                          toastLength: Toast.LENGTH_LONG,
-                          gravity: ToastGravity.BOTTOM,
-                          backgroundColor: Colors.red,
-                          textColor: Colors.white,
-                          fontSize: 16.0,
-                        );
+                  child: StreamBuilder<DocumentSnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(widget.user?.uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return CircularProgressIndicator(); // Show loading spinner while fetching data
+                      }
 
-                        // Redirect to StatusFile page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => StatusFilePage()),
+                      if (!snapshot.hasData || !snapshot.data!.exists) {
+                        return Text(
+                          'User data not found',
+                          style: TextStyle(color: Colors.white),
                         );
                       }
+
+                      final userData = snapshot.data!.data() as Map<String, dynamic>;
+                      final isTurfOwner = userData['userType'] == 'Turf Owner';
+                      final isStatusYes = userData['status'] == 'yes';
+
+                      return ElevatedButton(
+                        onPressed: () {
+                          if (isTurfOwner && isStatusYes) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => AddTurfPage()),
+                            );
+                          } else {
+                            Fluttertoast.showToast(
+                              msg: "Your ID isn't verified by Admin or you are not a Turf Owner.",
+                              toastLength: Toast.LENGTH_LONG,
+                              gravity: ToastGravity.BOTTOM,
+                              backgroundColor: Colors.red,
+                              textColor: Colors.white,
+                              fontSize: 16.0,
+                            );
+
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => StatusFilePage()),
+                            );
+                          }
+                        },
+                        child: Text('Add Turf'),
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: isTurfOwner && isStatusYes
+                              ? Colors.blueAccent
+                              : Colors.grey, // Gray shade for inactive appearance
+                          padding: EdgeInsets.symmetric(horizontal: 140, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      );
                     },
-                    child: Text('Add Turf'),
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: isTurfOwner && isStatusYes
-                          ? Colors.blueAccent
-                          : Colors.grey, // Gray shade for inactive appearance
-                      padding: EdgeInsets.symmetric(horizontal: 140, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
                   ),
                 ),
                 SizedBox(height: 20), // Space after button
