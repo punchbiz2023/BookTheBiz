@@ -17,6 +17,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
   // Lists for users with different statuses
   List<Map<String, dynamic>> notConfirmedUsers = [];
   List<Map<String, dynamic>> confirmedUsers = [];
+  bool isLoading = true; // New variable to track loading state
 
   late TabController _tabController;
 
@@ -28,6 +29,10 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
   }
 
   Future<void> fetchUserData() async {
+    setState(() {
+      isLoading = true; // Set loading to true while fetching data
+    });
+
     QuerySnapshot usersSnapshot = await _firestore.collection('users').get();
 
     List<Map<String, dynamic>> tempNotConfirmed = [];
@@ -56,6 +61,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
     setState(() {
       notConfirmedUsers = tempNotConfirmed;
       confirmedUsers = tempConfirmed;
+      isLoading = false; // Set loading to false after data is loaded
     });
   }
 
@@ -69,6 +75,118 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
     return null;
   }
 
+  Widget _buildUserList(List<Map<String, dynamic>> users) {
+    if (isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Colors.teal),
+            SizedBox(height: 20),
+            Text(
+              'Loading Users...',
+              style: TextStyle(fontSize: 18, color: Colors.teal[700], fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (users.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_off, size: 80, color: Colors.blueAccent),
+            SizedBox(height: 20),
+            Text(
+              'No users found',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey[800]),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Please try again later or refresh.',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return ListView.builder(
+        itemCount: users.length,
+        itemBuilder: (context, index) {
+          var userData = users[index];
+          String name = userData['name'] ?? 'Unknown';
+          String email = userData['email'] ?? 'Unknown';
+          String mobile = userData['mobile'] ?? 'Unknown';
+          String gstNumber = userData['gst'] ?? 'Not Provided';
+          bool isConfirmed = userData['status'] == 'yes';
+
+          return Card(
+            margin: EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+            elevation: 6,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Colors.teal[500],
+                    child: Text(
+                      name[0].toUpperCase(),
+                      style: TextStyle(fontSize: 20, color: Colors.white),
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              name,
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87),
+                            ),
+                            if (isConfirmed)
+                              Icon(Icons.check_circle, color: Colors.blue, size: 20),
+                          ],
+                        ),
+                        SizedBox(height: 6),
+                        Text(email, style: TextStyle(fontSize: 14, color: Colors.teal[600])),
+                        SizedBox(height: 6),
+                        Text(mobile, style: TextStyle(fontSize: 14, color: Colors.teal[600])),
+                        SizedBox(height: 6),
+                        Text('GST: $gstNumber', style: TextStyle(fontSize: 14, color: Colors.teal[600])),
+                        if (isConfirmed)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6.0),
+                            child: Text(
+                              'Verified',
+                              style: TextStyle(fontSize: 14, color: Colors.blue, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.remove_red_eye, color: Colors.teal[700], size: 28),
+                    onPressed: () {
+                      _showUserDetails(userData);
+                    },
+                    tooltip: 'View Details',
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+  }
   void _showUserDetails(Map<String, dynamic> userData) {
     String? aadharBase64 = userData['aadhar'];
     String? panBase64 = userData['pan'];
@@ -191,184 +309,17 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
       },
     );
   }
-
-  Widget _buildUserList(List<Map<String, dynamic>> users) {
-    if (users.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blue.withOpacity(0.1),
-              ),
-              padding: EdgeInsets.all(20),
-              child: Icon(
-                Icons.person_off,
-                size: 80,
-                color: Colors.blueAccent,
-              ),
-            ),
-            SizedBox(height: 20),
-            Text(
-              'No users found',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Please try again later or refresh.',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-      );
-    } else {
-      return ListView.builder(
-        itemCount: users.length,
-        itemBuilder: (context, index) {
-          var userData = users[index];
-          String name = userData['name'] ?? 'Unknown';
-          String email = userData['email'] ?? 'Unknown';
-          String mobile = userData['mobile'] ?? 'Unknown';
-          String gstNumber = userData['gst'] ?? 'Not Provided';
-          bool isConfirmed = userData['status'] == 'yes';
-
-          return Card(
-            margin: EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-            elevation: 6,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Colors.teal[500],
-                    child: Text(
-                      name[0].toUpperCase(),
-                      style: TextStyle(fontSize: 20, color: Colors.white),
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              name,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            if (isConfirmed) ...[
-                              SizedBox(width: 8),
-                              Icon(
-                                Icons.check_circle,
-                                color: Colors.blue,
-                                size: 20,
-                              ),
-                            ]
-                          ],
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          email,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.teal[600],
-                          ),
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          mobile,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.teal[600],
-                          ),
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          'GST: $gstNumber',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.teal[600],
-                          ),
-                        ),
-                        if (isConfirmed)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6.0),
-                            child: Text(
-                              'Verified',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.remove_red_eye,
-                      color: Colors.teal[700],
-                      size: 28,
-                    ),
-                    onPressed: () {
-                      _showUserDetails(userData);
-                    },
-                    tooltip: 'View Details',
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    }
-  }
-
   Future<void> _handleLogout(BuildContext context) async {
-    // Perform logout operations, such as clearing user session data
-    // For example, if using Firebase Authentication:
     await FirebaseAuth.instance.signOut();
-
-    // Navigate to the login screen and remove all previous routes
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => LoginApp()),
-    );
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginApp()));
   }
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.teal[600],
-        title: Text(
-          'Admin Dashboard',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-            color: Colors.white,
-          ),
-        ),
+        title: Text('Admin Dashboard', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.white)),
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
@@ -382,24 +333,15 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
           ),
           labelColor: Colors.white,
           unselectedLabelColor: Colors.grey,
-          labelStyle: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-          unselectedLabelStyle: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.normal,
-          ),
+          labelStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          unselectedLabelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
           indicatorSize: TabBarIndicatorSize.tab,
           overlayColor: MaterialStateProperty.all(Colors.transparent),
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.logout),
+            icon: Icon(Icons.logout, color: Colors.red),
             tooltip: 'Logout',
-            style: IconButton.styleFrom(
-              foregroundColor: Colors.red, // Set the icon color to red
-            ),
             onPressed: () {
               _handleLogout(context);
             },
