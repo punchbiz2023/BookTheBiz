@@ -35,14 +35,18 @@ class _DetailsPageState extends State<DetailsPage> {
           .get();
 
       if (documentSnapshot.exists) {
-        // Fetch price
-        if (documentSnapshot.data()?['price'] is List<dynamic>) {
-          price = (documentSnapshot.data()?['price'] as List<dynamic>).first ?? 0.0;
-        } else if (documentSnapshot.data()?['price'] is Map<String, dynamic>) {
-          var entry = (documentSnapshot.data()?['price'] as Map<String, dynamic>).entries.first;
-          price = entry.value ?? 0.0;
+        dynamic rawPrice = documentSnapshot.data()?['price'];
+
+        // Ensure price is always treated as double
+        if (rawPrice is List<dynamic> && rawPrice.isNotEmpty) {
+          price = (rawPrice.first is num) ? (rawPrice.first as num).toDouble() : 0.0;
+        } else if (rawPrice is Map<String, dynamic> && rawPrice.isNotEmpty) {
+          var entry = rawPrice.entries.first;
+          price = (entry.value is num) ? (entry.value as num).toDouble() : 0.0;
+        } else if (rawPrice is num) {
+          price = rawPrice.toDouble();
         } else {
-          price = documentSnapshot.data()?['price'] ?? 0.0;
+          price = 0.0;
         }
 
         // Return all data including isosp
@@ -59,6 +63,7 @@ class _DetailsPageState extends State<DetailsPage> {
       return null;
     }
   }
+
 
   // Get icon for each item
   IconData _getIconForItem(String item) {
