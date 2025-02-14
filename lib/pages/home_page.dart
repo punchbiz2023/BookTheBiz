@@ -6,43 +6,40 @@ import 'package:odp/pages/profile.dart';
 import 'package:odp/widgets/firebaseimagecard.dart';
 import 'bkdetails.dart';
 import 'package:collection/collection.dart';
+
 class HomePage1 extends StatefulWidget {
   final User? user;
   const HomePage1({Key? key, this.user}) : super(key: key);
+
   @override
   _HomePage1State createState() => _HomePage1State();
 }
 
 class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  String selectedTab = 'active'; // Default tab is Active
+  String selectedTab = 'active';
   String _searchText = '';
   String _pastBookingSearchText = '';
   String _sortOrder = 'Ascending';
-  DateTime? _customDate; // Added custom date variable
-  bool selectionMode = false; // Define the variable here
+  DateTime? _customDate;
+  bool selectionMode = false;
   List<Map<String, dynamic>> selectedBookings = [];
   List<String> _selectedGrounds = [];
   final _currentUserId = FirebaseAuth.instance.currentUser?.uid;
-  void clearFilters() {
-    setState(() {
-      _searchText = '';
-      _pastBookingSearchText = '';
-      _sortOrder = 'Ascending';
-      _customDate = null; // Reset custom date
-    });
-  }
   late TabController _tabController;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this); // 3 tabs
+    _tabController = TabController(length: 3, vsync: this);
   }
+
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
   }
+
   void _navigateToProfile() {
     Navigator.push(
       context,
@@ -51,9 +48,11 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       ),
     );
   }
+
   Stream<List<DocumentSnapshot>> _fetchTurfs() {
     return FirebaseFirestore.instance.collection('turfs').snapshots().map((snapshot) => snapshot.docs);
   }
+
   Stream<List<DocumentSnapshot>> _fetchPastBookings() {
     return FirebaseFirestore.instance
         .collection('bookings')
@@ -61,24 +60,243 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
         .snapshots()
         .map((snapshot) => snapshot.docs);
   }
+
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.teal,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.teal,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
+      child: TextFormField(
+        onChanged: (value) {
+          setState(() {
+            _searchText = value;
+          });
+        },
+        style: TextStyle(color: Colors.black),
+        decoration: InputDecoration(
+          hintText: 'Search turfs...',
+          hintStyle: TextStyle(color: Colors.black54),
+          filled: true,
+          fillColor: Colors.grey[200],
+          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(30),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: _scaffoldKey,
+      appBar: AppBar(
+        backgroundColor: Colors.teal,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: IconButton(
+                icon: Icon(Icons.person, color: Colors.teal),
+                onPressed: _navigateToProfile,
+              ),
             ),
           ),
         ],
       ),
+      backgroundColor: Colors.white,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Search Bar
+            _buildSearchBar(),
+
+            // Empty Space for Featured Turf (Mock Data)
+            SizedBox(height: 20),
+            _buildSectionTitle('Featured Turf'),
+            _buildFeaturedTurf(),
+
+            // Popular Turfs Section
+            SizedBox(height: 20),
+            _buildSectionTitle('Popular Turfs'),
+            _buildPopularTurfs(),
+
+            // Bookings Section
+            SizedBox(height: 20),
+            _buildSectionTitle('Bookings'),
+            _buildPastBookingsSearchBar(),
+            SizedBox(height: 10),
+            DefaultTabController(
+              length: 3,
+              child: Column(
+                children: [
+                  TabBar(
+                    indicatorColor: selectedTab == 'active'
+                        ? Colors.teal
+                        : selectedTab == 'past'
+                        ? Colors.blue
+                        : Colors.red,
+                    labelColor: selectedTab == 'active'
+                        ? Colors.teal
+                        : selectedTab == 'past'
+                        ? Colors.blue
+                        : Colors.red,
+                    unselectedLabelColor: Colors.grey,
+                    tabs: [
+                      Tab(text: 'Active'),
+                      Tab(text: 'Past'),
+                      Tab(text: 'Cancelled'),
+                    ],
+                    onTap: (index) {
+                      setState(() {
+                        if (index == 0) {
+                          selectedTab = 'active';
+                        } else if (index == 1) {
+                          selectedTab = 'past';
+                        } else {
+                          selectedTab = 'cancelled';
+                        }
+                      });
+                    },
+                  ),
+                  SizedBox(height: 10),
+                  IndexedStack(
+                    index: selectedTab == 'active'
+                        ? 0
+                        : selectedTab == 'past'
+                        ? 1
+                        : 2,
+                    children: [
+                      _buildPastBookingsSection('active'),
+                      _buildPastBookingsSection('past'),
+                      _buildPastBookingsSection('cancelled'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+
+  Widget _buildFeaturedTurf() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Special Offer - 20% Off',
+              style: TextStyle(
+                color: Colors.red,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Green Valley Cricket Ground',
+              style: TextStyle(
+                color: Colors.teal,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: () {},
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: Text('Book Now'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPopularTurfs() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('turfs').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error loading turfs'));
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(child: Text('No turfs available'));
+        }
+
+        final turfs = snapshot.data!.docs;
+
+        return GridView.count(
+          crossAxisCount: 2, // Number of columns
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          childAspectRatio: 0.8, // Adjust the aspect ratio as needed
+          mainAxisSpacing: 10, // Space between rows (vertical spacing)
+          crossAxisSpacing: 10, // Space between columns (horizontal spacing)
+          padding: EdgeInsets.all(10), // Padding around the grid
+          children: turfs.map((doc) {
+            final turfData = doc.data() as Map<String, dynamic>;
+
+            // Extract rating and price correctly
+            final rating = turfData['rating'] is Map<String, dynamic>
+                ? turfData['rating']['value'] ?? 'N/A' // Access nested value
+                : turfData['rating'].toString(); // Fallback to string
+
+            final price = turfData['price'] is Map<String, dynamic>
+                ? turfData['price']['value'] ?? 'N/A' // Access nested value
+                : turfData['price'].toString(); // Fallback to string
+
+            return FirebaseImageCard(
+              imageUrl: turfData['imageUrl'] ?? '',
+              title: turfData['name'] ?? 'Unknown Turf',
+              description: turfData['description'] ?? 'No description available',
+              documentId: doc.id,
+              docname: turfData['name'] ?? 'Unknown Turf',
+              chips: List<String>.from(turfData['availableGrounds'] ?? []),
+              rating: rating,
+              price: price,
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
   Widget _buildPastBookingsSearchBar() {
     return TextFormField(
       onChanged: (value) {
@@ -100,447 +318,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       ),
     );
   }
-  // Start with the first tab
-  Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      appBar: AppBar(
-        backgroundColor: Colors.teal,
-        elevation: 0,
-        flexibleSpace: SafeArea(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: Icon(Icons.person, color: Colors.white),
-                onPressed: _navigateToProfile,
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: TextFormField(
-                    onChanged: (value) {
-                      setState(() {
-                        _searchText = value;
-                      });
-                    },
-                    style: TextStyle(color: Colors.black),
-                    decoration: InputDecoration(
-                      hintText: 'Search turfs...',
-                      hintStyle: TextStyle(color: Colors.black54),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        automaticallyImplyLeading: false,
-      ),
-      backgroundColor: Colors.white,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween, // Aligns title and button at both ends
-                children: [
-                  _buildSectionTitle('Turfs'),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      _showFilterDialog(); // Open the filter dialog
-                    },
-                    icon: Icon(Icons.filter_list, color: Colors.teal),
-                    label: _selectedGrounds.isEmpty
-                        ? Text(
-                      'Select Your Play', // Display this text when no grounds are selected
-                      style: TextStyle(color: Colors.teal),
-                    )
-                        : SizedBox.shrink(), // Hide the label when grounds are selected
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.teal),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: _selectedGrounds.isEmpty
-                          ? EdgeInsets.symmetric(horizontal: 16) // Padding for the text
-                          : EdgeInsets.symmetric(horizontal: 24), // Extra padding to center the icon
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _buildTurfsSection(),
-            SizedBox(height: 20),
-            _buildSectionTitle('Bookings'),
-
-            // Search bar for past bookings
-            _buildPastBookingsSearchBar(),
-            SizedBox(height: 10),
-
-            // Row for filter options
-            Row(
-              children: [
-                // Ascending/Descending dropdown
-                Expanded(child: _buildSortDropdown()),
-                SizedBox(width: 0),
-                IconButton(
-                  icon: Icon(Icons.clear_all, color: Colors.teal),
-                  onPressed: clearFilters, // Clear filters on button press
-                ),
-              ],
-            ),
-            SizedBox(height: 10),
-
-            // Tab Controller for Active, Past, and Cancelled bookings
-            DefaultTabController(
-              length: 3,
-              child: Column(
-                children: [
-                  TabBar(
-                    // Set colors based on selected tab
-                    indicatorColor: selectedTab == 'active'
-                        ? Colors.teal
-                        : selectedTab == 'past'
-                        ? Colors.blue
-                        : Colors.red,
-                    labelColor: selectedTab == 'active'
-                        ? Colors.teal
-                        : selectedTab == 'past'
-                        ? Colors.blue
-                        : Colors.red,
-                    unselectedLabelColor: Colors.grey,
-                    tabs: [
-                      Tab(
-                        text: 'Active',
-                      ),
-                      Tab(
-                        text: 'Past',
-                      ),
-                      Tab(
-                        text: 'Cancelled',
-                      ),
-                    ],
-                    onTap: (index) {
-                      setState(() {
-                        // Update selectedTab with a string value based on the tab
-                        if (index == 0) {
-                          selectedTab = 'active';
-                        } else if (index == 1) {
-                          selectedTab = 'past';
-                        } else {
-                          selectedTab = 'cancelled';
-                        }
-                      });
-                    },
-                  ),
-                  SizedBox(height: 10),
-                  // Booking sections based on selected tab with custom colors
-                  IndexedStack(
-                    index: selectedTab == 'active'
-                        ? 0
-                        : selectedTab == 'past'
-                        ? 1
-                        : 2,
-                    children: [
-                      Container(
-                        child: _buildPastBookingsSection('active'),
-                      ),
-                      Container(
-                        child: _buildPastBookingsSection('past'),
-                      ),
-                      Container(
-                        child: _buildPastBookingsSection('cancelled'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showFilterDialog() async {
-    // List of available ground types
-    final List<String> groundOptions = [
-      'Volleyball Court',
-      'Swimming Pool',
-      'Cricket Ground',
-      'Shuttlecock',
-      'Football Field',
-      'Basketball Court',
-      'Tennis Court',
-      'Badminton Court',
-    ];
-    final List<String> tempSelectedGrounds = List.from(_selectedGrounds);
-    final List<String>? selectedGrounds = await showDialog<List<String>>(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              title: Center(
-                child: Text(
-                  'Select Your Play',
-                  style: TextStyle(
-                    color: Colors.teal,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              content: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.8,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: groundOptions.map((ground) {
-                      final isSelected = tempSelectedGrounds.contains(ground);
-                      return CheckboxListTile(
-                        title: Text(
-                          ground,
-                          style: TextStyle(
-                            color: isSelected ? Colors.teal : Colors.black,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                        ),
-                        value: isSelected,
-                        activeColor: Colors.teal,
-                        onChanged: (bool? isChecked) {
-                          setState(() {
-                            if (isChecked == true) {
-                              tempSelectedGrounds.add(ground);
-                            } else {
-                              tempSelectedGrounds.remove(ground);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-              actions: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween, // Use space between the buttons
-                  children: [
-                    // Clear All Button
-                    TextButton(
-                      onPressed: () {
-                        // Reset the selected grounds to an empty list
-                        setState(() {
-                          tempSelectedGrounds.clear(); // Clear all selections
-                        });
-                      },
-                      child: Text(
-                        'Clear All',
-                        style: TextStyle(
-                          color: Colors.red,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        // Return selected grounds (ensure it's a List<String>)
-                        Navigator.of(context).pop(List<String>.from(tempSelectedGrounds)); // Pop the selected grounds as a List<String>
-                      },
-                      child: Text('OK'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.teal,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    // Once the dialog is closed, update the state with the selected grounds if any
-    if (selectedGrounds != null) {
-      setState(() {
-        _selectedGrounds = selectedGrounds; // Update the selectedGrounds list with the result
-      });
-    }
-  }
-
-  Widget _buildTurfsSection() {
-    return StreamBuilder<List<DocumentSnapshot>>(
-      stream: _fetchTurfs(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Error fetching turfs'));
-        }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(child: Text('No turfs available'));
-        }
-
-        var turfs = snapshot.data!;
-        var filteredTurfs = turfs.where((turf) {
-          var turfData = turf.data() as Map<String, dynamic>;
-
-          // Filter by search text (name)
-          bool matchesSearch = turfData['name']
-              .toString()
-              .toLowerCase()
-              .contains(_searchText.toLowerCase());
-          bool matchesGrounds = _selectedGrounds.isEmpty ||
-              _selectedGrounds.any((selectedGround) =>
-                  turfData['availableGrounds'].contains(selectedGround));
-          return matchesSearch && matchesGrounds;
-        }).toList();
-        filteredTurfs = filteredTurfs.where((turf) {
-          var turfData = turf.data() as Map<String, dynamic>;
-          return turfData['imageUrl'] != null && turfData['imageUrl'].isNotEmpty;
-        }).toList();
-        if (filteredTurfs.isEmpty) {
-          return Center(child: Text('No turfs match your search or selected grounds'));
-        }
-        return Container(
-          height: 250,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: filteredTurfs.length,
-            itemBuilder: (context, index) {
-              var turfData = filteredTurfs[index].data() as Map<String, dynamic>;
-              String imageUrl = turfData['imageUrl'] ?? '';
-              String name = turfData['name'] ?? 'Unknown Turf';
-              String description = turfData['description'] ?? 'No description available';
-              List<String> availableGrounds = List<String>.from(turfData['availableGrounds'] ?? []);
-
-              return FirebaseImageCard(
-                imageUrl: imageUrl,
-                title: name,
-                description: description,
-                documentId: filteredTurfs[index].id,
-                docname: name,
-                chips: availableGrounds,
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSortDropdown() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        // Sort dropdown
-        Expanded(
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 10.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(25),
-              border: Border.all(color: Colors.grey.shade300, width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.3),
-                  spreadRadius: 1,
-                  blurRadius: 5,
-                  offset: Offset(0, 3),
-                ),
-              ],
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _sortOrder,
-                icon: Icon(Icons.filter_list, color: Colors.teal),
-                style: TextStyle(color: Colors.black),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    _sortOrder = newValue!;
-                  });
-                },
-                items: [
-                  DropdownMenuItem<String>(
-                    value: 'Ascending',
-                    child: Container(
-                      width: 100, // Set a fixed width for the dropdown item
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Icon(Icons.arrow_upward, color: Colors.teal),
-                          SizedBox(width: 5),
-                          Text('old to new'), // Add text for clarity
-                        ],
-                      ),
-                    ),
-                  ),
-                  DropdownMenuItem<String>(
-                    value: 'Descending',
-                    child: Container(
-                      width: 100, // Set a fixed width for the dropdown item
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Icon(Icons.arrow_downward, color: Colors.teal),
-                          SizedBox(width: 1),
-                          Text('new to old'), // Add text for clarity
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-                dropdownColor: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-              ),
-            ),
-          ),
-        ),
-        SizedBox(width: 10), // Space between dropdown and button
-        // Custom date button
-        ElevatedButton.icon(
-          onPressed: () async {
-            DateTime? selectedDate = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now(),
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2100),
-            );
-            if (selectedDate != null) {
-              setState(() {
-                _customDate = selectedDate; // Set the selected custom date
-              });
-            }
-          },
-          icon: Icon(Icons.calendar_today, color: Colors.white),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.teal,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(25),
-            ),
-          ),
-          label: Text(''), // Add label to the button
-        ),
-      ],
-    );
-  }
 
   Widget _buildPastBookingsSection(String state) {
     return StreamBuilder<List<DocumentSnapshot>>(
@@ -556,7 +333,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
           return Center(child: Text('No past bookings found'));
         }
         var pastBookings = snapshot.data!;
-        // Filter bookings based on user and search text
         var filteredBookings = pastBookings.where((booking) {
           var bookingData = booking.data() as Map<String, dynamic>;
           return bookingData['userId'] == _currentUserId && bookingData['turfName']
@@ -565,7 +341,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
               .contains(_pastBookingSearchText.toLowerCase());
         }).toList();
 
-        // Filter based on custom date
         if (_customDate != null) {
           filteredBookings = filteredBookings.where((booking) {
             var bookingData = booking.data() as Map<String, dynamic>;
@@ -574,7 +349,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
           }).toList();
         }
 
-        // Separate bookings into active and past bookings
         var activeBookings = filteredBookings.where((booking) {
           var bookingData = booking.data() as Map<String, dynamic>;
           var bookingDate = DateTime.parse(bookingData['bookingDate']);
@@ -587,7 +361,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
           return bookingDate.isBefore(DateTime.now());
         }).toList();
 
-        // Sorting active and past bookings
         if (_sortOrder == 'Ascending') {
           activeBookings.sort((a, b) {
             var dateA = DateTime.parse((a.data() as Map<String, dynamic>)['bookingDate']);
@@ -614,10 +387,8 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
           });
         }
 
-        // Function to check if booking is cancelled
         return Column(
           children: [
-            // Active Bookings Section
             if (selectedTab == 'active') ...[
               if (activeBookings.isEmpty)
                 Center(
@@ -681,15 +452,15 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
             if (selectedTab == 'cancelled') ...[
               Center(
                 child: Padding(
-                padding: const EdgeInsets.all(14.0),
-                child: Text(
-                'Long Press on the turf to select & delete',
-                style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey,
-                ),
-                ),
+                  padding: const EdgeInsets.all(14.0),
+                  child: Text(
+                    'Long Press on the turf to select & delete',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
                 ),
               ),
               ListView.builder(
@@ -764,7 +535,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                 },
               ),
             ],
-            // Past Bookings Section
             if (selectedTab == 'past') ...[
               Center(
                 child: Padding(
@@ -891,41 +661,34 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       },
     );
   }
+
   void _enableSelectionMode(Map<String, dynamic> bookingData, String bookingType) {
     setState(() {
       selectionMode = true;
-
-      // Add booking data with bookID as the key
       selectedBookings.add({
-        'bookID': bookingData['bookID'], // Use bookID as the index
+        'bookID': bookingData['bookID'],
         'data': bookingData,
         'type': bookingType,
       });
-
     });
   }
+
   void _resetSelectedBookings() {
     setState(() {
-      selectedBookings.clear();  // Clear the selected bookings list
-      selectionMode = false;  // Optionally reset the selection mode
+      selectedBookings.clear();
+      selectionMode = false;
     });
   }
 
-  // Delete selected bookings
   void _deleteSelectedBookings() async {
     bool deletionSuccessful = true;
 
     for (var booking in selectedBookings) {
-      // Get the bookID
       String bookID = booking['bookID'];
 
       try {
-        // Reference to the Firestore bookings collection
         var bookingRef = FirebaseFirestore.instance.collection('bookings').doc(bookID);
-
-        // Attempt to delete the document
         await bookingRef.delete();
-
         print('Booking with ID: $bookID has been deleted successfully');
       } catch (e) {
         print('Failed to delete booking with ID: $bookID');

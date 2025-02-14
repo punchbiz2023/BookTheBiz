@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../pages/details.dart';
 
 class FirebaseImageCard extends StatelessWidget {
@@ -9,6 +8,8 @@ class FirebaseImageCard extends StatelessWidget {
   final String documentId;
   final String docname;
   final List<String> chips;
+  final String rating;
+  final String price;
 
   const FirebaseImageCard({
     Key? key,
@@ -18,6 +19,8 @@ class FirebaseImageCard extends StatelessWidget {
     required this.documentId,
     required this.docname,
     required this.chips,
+    required this.rating,
+    required this.price,
   }) : super(key: key);
 
   void _navigateToDetails(BuildContext context) {
@@ -64,16 +67,7 @@ class FirebaseImageCard extends StatelessWidget {
                 ),
               ),
             ),
-            // Chips overlayed on the image
-            Positioned(
-              top: 10,
-              left: 10,
-              child: Wrap(
-                spacing: 6.0,
-                children: chips.map((chip) => _buildChip(chip)).toList(),
-              ),
-            ),
-            // Turf Title and Description at the bottom
+            // Turf Title, Rating, and Price at the bottom
             Positioned(
               bottom: 10,
               left: 10,
@@ -90,14 +84,27 @@ class FirebaseImageCard extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Icon(Icons.star, color: Colors.amber, size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        rating,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Spacer(),
+                      Text(
+                        price,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
