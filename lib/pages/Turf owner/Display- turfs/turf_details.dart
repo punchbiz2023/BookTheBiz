@@ -193,6 +193,25 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                       ),
                     ),
                     SizedBox(height: 16),
+                  if (turfData.containsKey('selectedSlots') && (turfData['selectedSlots']?.isNotEmpty ?? false)) ...[
+            Text(
+            'Selected Slots:',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 8),
+          Wrap(
+            spacing: 8.0,
+            runSpacing: 4.0,
+            children: List.generate(
+              turfData['selectedSlots']?.length ?? 0,
+                  (index) => Chip(
+                label: Text(turfData['selectedSlots'][index] ?? 'No Slot'),
+                avatar: Icon(Icons.access_time, size: 16, color: Colors.green),
+              ),
+            ),
+          ),
+          SizedBox(height: 16),
+                    ],
                     Container(
                       padding: EdgeInsets.all(16),
                       decoration: BoxDecoration(

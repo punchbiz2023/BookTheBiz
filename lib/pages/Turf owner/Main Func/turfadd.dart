@@ -34,7 +34,8 @@ class _AddTurfPageState extends State<AddTurfPage> {
     'Wi-Fi'
   ];
   final List<String> _selectedFacilities = [];
-
+  final List<String> _selectedMorningSlots = [];
+  final List<String> _selectedEveningSlots = [];
   final List<String> _availableGrounds = [
     'Volleyball Court',
     'Swimming Pool',
@@ -45,8 +46,28 @@ class _AddTurfPageState extends State<AddTurfPage> {
     'Tennis Court',
     'Badminton Court'
   ];
-  final List<String> _selectedAvailableGrounds = [];
+  final List<String> _morningSlots = [
+    '6 AM - 7 AM',
+    '7 AM - 8 AM',
+    '8 AM - 9 AM',
+    '9 AM - 10 AM',
+    '10 AM - 11 AM',
+    '11 AM - 12 PM',
+  ];
 
+  final List<String> _eveningSlots = [
+    '4 PM - 5 PM',
+    '5 PM - 6 PM',
+    '6 PM - 7 PM',
+    '7 PM - 8 PM',
+    '8 PM - 9 PM',
+    '9 PM - 10 PM',
+  ];
+
+  final List<String> _customSlots = [];
+
+  final List<String> _selectedAvailableGrounds = [];
+  String _selectedSlotType = 'Morning Slots';
   Future<void> _pickImage() async {
     final pickedImage = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedImage != null) {
@@ -139,8 +160,16 @@ class _AddTurfPageState extends State<AddTurfPage> {
         'facilities': _selectedFacilities,
         'availableGrounds': _selectedAvailableGrounds,
         'ownerId': userId,
-        'isosp': _isosp
+        'isosp': _isosp,
       };
+      List<String> selectedSlots = [];
+      selectedSlots.addAll(_selectedMorningSlots);
+      selectedSlots.addAll(_selectedEveningSlots);
+      selectedSlots.addAll(_customSlots);
+      if (selectedSlots.isNotEmpty) {
+        turfData['selectedSlots'] = selectedSlots;
+      }
+
 
       await turfRef.set(turfData);
 
@@ -201,6 +230,10 @@ class _AddTurfPageState extends State<AddTurfPage> {
                       _buildTopicTitle('Facilities'),
                       _buildFacilitiesChips(),
                       SizedBox(height: 16),
+                      _buildDropdown(),
+                      SizedBox(height: 16),
+                      _buildSlotChips(),
+                      SizedBox(height: 16),
                       _buildIsospCheckbox(),
                       SizedBox(height: 24),
                       _isLoading
@@ -214,6 +247,193 @@ class _AddTurfPageState extends State<AddTurfPage> {
           ),
         ],
       ),
+    );
+  }
+  Widget _buildDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Select Slot Type",
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _selectedSlotType,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          items: ['Morning Slots', 'Evening Slots', 'Custom Slots']
+              .map((type) => DropdownMenuItem(
+            value: type,
+            child: Text(type),
+          ))
+              .toList(),
+          onChanged: (value) {
+            setState(() {
+              _selectedSlotType = value!;
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSlotChips() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _selectedSlotType,
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        SizedBox(height: 8),
+        if (_selectedSlotType == 'Morning Slots')
+          _buildChips(_morningSlots, _selectedMorningSlots)
+        else if (_selectedSlotType == 'Evening Slots')
+          _buildChips(_eveningSlots, _selectedEveningSlots)
+        else
+          _buildCustomSlotSection(),
+      ],
+    );
+  }
+
+  Widget _buildChips(List<String> slots, List<String> selectedSlots) {
+    return Wrap(
+      spacing: 8.0,
+      runSpacing: 4.0,
+      children: slots.map((slot) {
+        return ChoiceChip(
+          label: Text(slot),
+          selected: selectedSlots.contains(slot),
+          shape: StadiumBorder(side: BorderSide(color: Colors.grey.shade400)),
+          onSelected: (bool selected) {
+            setState(() {
+              if (selected) {
+                selectedSlots.add(slot);
+              } else {
+                selectedSlots.remove(slot);
+              }
+            });
+          },
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildCustomSlotSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_customSlots.isNotEmpty)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(height: 8),
+              Wrap(
+                spacing: 8.0,
+                runSpacing: 4.0,
+                children: _customSlots.map((slot) {
+                  return Chip(
+                    label: Text(slot),
+                    deleteIcon: Icon(Icons.close, size: 18),
+                    onDeleted: () {
+                      setState(() {
+                        _customSlots.remove(slot);
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        SizedBox(height: 12),
+        ElevatedButton.icon(
+          onPressed: _showCustomSlotDialog,
+          icon: Icon(Icons.add),
+          label: Text("Add Custom Slot"),
+          style: ElevatedButton.styleFrom(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showCustomSlotDialog() async {
+    TimeOfDay? startTime;
+    TimeOfDay? endTime;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Select Custom Slot"),
+          content: StatefulBuilder(
+            builder: (context, setDialogState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.access_time),
+                    title: Text("Start Time"),
+                    trailing: Text(
+                      startTime != null ? startTime!.format(context) : "Select",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    onTap: () async {
+                      TimeOfDay? picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        setDialogState(() {
+                          startTime = picked;
+                        });
+                      }
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.access_time),
+                    title: Text("End Time"),
+                    trailing: Text(
+                      endTime != null ? endTime!.format(context) : "Select",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    onTap: () async {
+                      TimeOfDay? picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        setDialogState(() {
+                          endTime = picked;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (startTime != null && endTime != null) {
+                  String formattedSlot =
+                      "${startTime!.format(context)} - ${endTime!.format(context)}";
+                  setState(() {
+                    _customSlots.add(formattedSlot);
+                  });
+                }
+                Navigator.pop(context);
+              },
+              child: Text("Add"),
+            ),
+          ],
+        );
+      },
     );
   }
 

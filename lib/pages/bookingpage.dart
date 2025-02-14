@@ -35,7 +35,7 @@ class _BookingPageState extends State<BookingPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   int bookingSlotsForSelectedDay = 0;
   bool isosp = false; // Track on-spot payment status
-
+  List<String> ownerselectedSlots = [];
   @override
   void initState() {
     super.initState();
@@ -199,6 +199,24 @@ class _BookingPageState extends State<BookingPage> {
         .collection('turfs')
         .doc(widget.documentId)
         .get();
+
+// Check if selectedSlots field exists and is a List
+    if (turfSnapshot.exists) {
+      var data = turfSnapshot.data() as Map<String, dynamic>?;
+
+      if (data != null && data.containsKey('selectedSlots')) {
+        var rawSlots = data['selectedSlots'];
+
+        if (rawSlots is List<dynamic>) {
+          // Convert each item to String safely
+          setState(() {  // ✅ This ensures UI updates after fetching
+            ownerselectedSlots = rawSlots.whereType<String>().toList();
+          });
+        }
+      }
+    }
+
+    print('Selected Slots: $ownerselectedSlots');
 
     var price = turfSnapshot['price'] ?? 0.0;
 
@@ -611,67 +629,93 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   Widget _buildSlotSelector() {
-    return FutureBuilder<Map<String, List<String>>>(
-      future: selectedDate != null ? _fetchBookedSlots() : Future.value({}),
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('turfs').doc(widget.documentId).get(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
         } else if (snapshot.hasError) {
-          return Center(child: Text('Error fetching booked slots: ${snapshot.error}'));
-        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return _buildSlotSelectionColumn([]);
+          return Center(child: Text('Error fetching slots: ${snapshot.error}'));
+        } else if (!snapshot.hasData || !snapshot.data!.exists) {
+          return _buildSlotSelectionColumn([], []); // No data, return empty slots
         } else {
-          final bookedSlotsMap = snapshot.data!;
-          return _buildSlotSelectionColumn(bookedSlotsMap[selectedGround] ?? []);
+          var data = snapshot.data!.data() as Map<String, dynamic>?;
+          List<String> ownerSelectedSlots = [];
+
+          if (data != null && data.containsKey('selectedSlots')) {
+            var rawSlots = data['selectedSlots'];
+            if (rawSlots is List<dynamic>) {
+              ownerSelectedSlots = rawSlots.whereType<String>().toList();
+            }
+          }
+
+          var bookedSlotsMap = data?['bookedSlots'] as Map<String, dynamic>? ?? {};
+          List<String> bookedSlots = bookedSlotsMap[selectedGround]?.cast<String>() ?? [];
+
+          return _buildSlotSelectionColumn(bookedSlots, ownerSelectedSlots);
         }
       },
     );
   }
 
-  Column _buildSlotSelectionColumn(List<String> bookedSlots) {
+
+  Column _buildSlotSelectionColumn(List<String> bookedSlots, List<String> ownerSelectedSlots) {
+    // Default slot structure if ownerSelectedSlots is empty
+    final defaultSlots = {
+      'Early Morning': [
+        '12:00 AM - 1:00 AM',
+        '1:00 AM - 2:00 AM',
+        '2:00 AM - 3:00 AM',
+        '3:00 AM - 4:00 AM',
+        '4:00 AM - 5:00 AM',
+      ],
+      'Morning': [
+        '5:00 AM - 6:00 AM',
+        '6:00 AM - 7:00 AM',
+        '7:00 AM - 8:00 AM',
+        '8:00 AM - 9:00 AM',
+        '9:00 AM - 10:00 AM',
+        '10:00 AM - 11:00 AM',
+      ],
+      'Afternoon': [
+        '12:00 PM - 1:00 PM',
+        '1:00 PM - 2:00 PM',
+        '2:00 PM - 3:00 PM',
+        '3:00 PM - 4:00 PM',
+        '4:00 PM - 5:00 PM',
+      ],
+      'Evening': [
+        '5:00 PM - 6:00 PM',
+        '6:00 PM - 7:00 PM',
+        '7:00 PM - 8:00 PM',
+        '8:00 PM - 9:00 PM',
+        '9:00 PM - 10:00 PM',
+        '10:00 PM - 11:00 PM',
+      ],
+    };
+
+    // Use `ownerSelectedSlots` if available; otherwise, use default slots
+    Map<String, List<String>> slots = {};
+    if (ownerSelectedSlots.isNotEmpty) {
+      slots['Choose your best play time'] = ownerSelectedSlots;
+    } else {
+      slots = defaultSlots;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildGroundSelector(),
         SizedBox(height: 20),
         Text(
-          'Select Slots:',
+          'Available Slots',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
         ),
         SizedBox(height: 10),
-        _buildSlotChips('Early Morning', '12 AM - 5 AM', [
-          '12:00 AM - 1:00 AM',
-          '1:00 AM - 2:00 AM',
-          '2:00 AM - 3:00 AM',
-          '3:00 AM - 4:00 AM',
-          '4:00 AM - 5:00 AM',
-        ], bookedSlots),
-        SizedBox(height: 10),
-        _buildSlotChips('Morning', '5 AM - 11 AM', [
-          '5:00 AM - 6:00 AM',
-          '6:00 AM - 7:00 AM',
-          '7:00 AM - 8:00 AM',
-          '8:00 AM - 9:00 AM',
-          '9:00 AM - 10:00 AM',
-          '10:00 AM - 11:00 AM',
-        ], bookedSlots),
-        SizedBox(height: 10),
-        _buildSlotChips('Afternoon', '12 PM - 5 PM', [
-          '12:00 PM - 1:00 PM',
-          '1:00 PM - 2:00 PM',
-          '2:00 PM - 3:00 PM',
-          '3:00 PM - 4:00 PM',
-          '4:00 PM - 5:00 PM',
-        ], bookedSlots),
-        SizedBox(height: 10),
-        _buildSlotChips('Evening', '5 PM - 11 PM', [
-          '5:00 PM - 6:00 PM',
-          '6:00 PM - 7:00 PM',
-          '7:00 PM - 8:00 PM',
-          '8:00 PM - 9:00 PM',
-          '9:00 PM - 10:00 PM',
-          '10:00 PM - 11:00 PM',
-        ], bookedSlots),
+        ...slots.entries.map((entry) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _buildSlotChips(entry.key, '', entry.value, bookedSlots),
+        )),
       ],
     );
   }
