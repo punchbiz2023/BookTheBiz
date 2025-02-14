@@ -1,0 +1,71 @@
+<svg viewBox="0 0 360 800" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="360" height="800" fill="#F5F7FA"/>
+  
+  <!-- Status Bar -->
+  <rect width="360" height="24" fill="#FFFFFF"/>
+  <text x="16" y="16" font-size="10" fill="#666">9:41 AM</text>
+  
+  <!-- App Bar -->
+  <rect y="24" width="360" height="56" fill="#FFFFFF"/>
+  <circle cx="36" cy="52" r="16" fill="#E2E8F0"/>
+  <text x="60" y="56" font-size="12" fill="#666">Profile Menu</text>
+  <rect x="280" y="40" width="56" height="24" rx="12" fill="#059669"/>
+  <text x="288" y="56" font-size="10" fill="#FFFFFF">Chennai</text>
+  
+  <!-- Search Bar -->
+  <rect x="16" y="96" width="328" height="48" rx="24" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <circle cx="44" cy="120" r="12" fill="#94A3B8"/>
+  <text x="68" y="124" font-size="14" fill="#94A3B8">Search for turfs...</text>
+  
+  <!-- Categories Scroll -->
+  <rect x="0" y="160" width="360" height="56" fill="#FFFFFF"/>
+  <rect x="16" y="168" width="80" height="40" rx="20" fill="#059669"/>
+  <text x="41" y="192" font-size="12" fill="#FFFFFF">All Sports</text>
+  <rect x="104" y="168" width="80" height="40" rx="20" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="124" y="192" font-size="12" fill="#666">Cricket</text>
+  <rect x="192" y="168" width="80" height="40" rx="20" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="208" y="192" font-size="12" fill="#666">Football</text>
+  <rect x="280" y="168" width="80" height="40" rx="20" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="292" y="192" font-size="12" fill="#666">Swimming</text>
+  
+  <!-- Featured Card -->
+  <rect x="16" y="232" width="328" height="160" rx="16" fill="#FFFFFF"/>
+  <rect x="16" y="232" width="328" height="100" rx="16" fill="#059669"/>
+  <text x="32" y="268" font-size="18" fill="#FFFFFF">Featured Turf</text>
+  <text x="32" y="288" font-size="12" fill="#FFFFFF">Special Offer - 20% Off</text>
+  <rect x="32" y="348" width="200" height="20" rx="4" fill="#1F2937"/>
+  <text x="32" y="376" font-size="14" fill="#666">Green Valley Cricket Ground</text>
+  <rect x="250" y="348" width="80" height="28" rx="14" fill="#059669"/>
+  <text x="266" y="366" font-size="12" fill="#FFFFFF">Book Now</text>
+  
+  <!-- Section Title -->
+  <text x="16" y="424" font-size="16" font-weight="bold" fill="#1F2937">Popular Turfs</text>
+  
+  <!-- Turf Cards -->
+  <rect x="16" y="448" width="156" height="200" rx="16" fill="#FFFFFF"/>
+  <rect x="16" y="448" width="156" height="120" rx="16" fill="#E2E8F0"/>
+  <text x="32" y="584" font-size="14" fill="#1F2937">Cricket Ground A</text>
+  <text x="32" y="604" font-size="12" fill="#666">⭐ 4.8 • Cricket</text>
+  <text x="32" y="624" font-size="12" fill="#059669">₹800/hr</text>
+  
+  <rect x="188" y="448" width="156" height="200" rx="16" fill="#FFFFFF"/>
+  <rect x="188" y="448" width="156" height="120" rx="16" fill="#E2E8F0"/>
+  <text x="204" y="584" font-size="14" fill="#1F2937">Swimming Pool</text>
+  <text x="204" y="604" font-size="12" fill="#666">⭐ 4.6 • Swimming</text>
+  <text x="204" y="624" font-size="12" fill="#059669">₹400/hr</text>
+  
+  <!-- Bottom Navigation Bar -->
+  <rect y="736" width="360" height="64" fill="#FFFFFF"/>
+  <circle cx="72" cy="768" r="16" fill="#059669"/>
+  <text x="52" y="796" font-size="12" fill="#059669">Explore</text>
+  <circle cx="180" cy="768" r="16" fill="#E2E8F0"/>
+  <text x="156" y="796" font-size="12" fill="#666">Bookings</text>
+  <circle cx="288" cy="768" r="16" fill="#E2E8F0"/>
+  <text x="270" y="796" font-size="12" fill="#666">Profile</text>
+
+  <!-- Navigation Icons -->
+  <path d="M72 768 L72 760 L80 768 L72 776 L72 768" fill="#FFFFFF"/>
+  <path d="M176 764 L184 764 L184 772 L176 772 Z" fill="#666"/>
+  <circle cx="288" cy="768" r="4" fill="#666"/>
+</svg>
