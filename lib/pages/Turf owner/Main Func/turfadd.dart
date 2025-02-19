@@ -191,12 +191,18 @@ class _AddTurfPageState extends State<AddTurfPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.teal.shade50, // Light teal background for contrast
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            backgroundColor: Colors.transparent,
-            title: Text('Add Turf', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.teal.shade700,
+            title: Text(
+              'Add Turf',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             centerTitle: true,
             floating: true,
             flexibleSpace: FlexibleSpaceBar(
@@ -207,35 +213,43 @@ class _AddTurfPageState extends State<AddTurfPage> {
             delegate: SliverChildListDelegate(
               [
                 Padding(
-                  padding: EdgeInsets.all(10),
+                  padding: EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildImagePicker(),
                       SizedBox(height: 16),
-                      _buildTextField(
+
+                      _buildGlassTextField(
                         controller: _nameController,
                         label: 'Turf Name',
                       ),
                       SizedBox(height: 16),
-                      _buildTextField(
+
+                      _buildGlassTextField(
                         controller: _descriptionController,
                         label: 'Description',
                         maxLines: 3,
                       ),
                       SizedBox(height: 16),
+
                       _buildTopicTitle('Available Grounds'),
-                      _buildAvailableGroundsChips(),
+                      _buildGlassContainer(_buildAvailableGroundsChips()),
                       SizedBox(height: 16),
+
                       _buildTopicTitle('Facilities'),
-                      _buildFacilitiesChips(),
+                      _buildGlassContainer(_buildFacilitiesChips()),
                       SizedBox(height: 16),
+
                       _buildDropdown(),
                       SizedBox(height: 16),
-                      _buildSlotChips(),
+
+                      _buildGlassContainer(_buildSlotChips()),
                       SizedBox(height: 16),
+
                       _buildIsospCheckbox(),
                       SizedBox(height: 24),
+
                       _isLoading
                           ? Center(child: CircularProgressIndicator())
                           : _buildSubmitButton(),
@@ -249,6 +263,83 @@ class _AddTurfPageState extends State<AddTurfPage> {
       ),
     );
   }
+
+// 🟢 Glassmorphic Text Field
+  Widget _buildGlassTextField({
+    required TextEditingController controller,
+    required String label,
+    int maxLines = 1,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15), // Glass effect
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.teal.withOpacity(0.5), width: 2), // Stronger border
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal.shade200.withOpacity(0.2), // Darker outer shadow
+            blurRadius: 12,
+            spreadRadius: 2,
+            offset: Offset(4, 4),
+          ),
+          BoxShadow(
+            color: Colors.teal.withOpacity(0.2), // Soft inner glow
+            blurRadius: 10,
+            spreadRadius: 2,
+            offset: Offset(-2, -2),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.9),
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+        ),
+        decoration: InputDecoration(
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          hintText: label,
+          hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15),
+          border: InputBorder.none,
+        ),
+      ),
+    );
+  }
+
+// 🟢 Glassmorphic Container (Reusable for sections)
+  Widget _buildGlassContainer(Widget child) {
+    return Container(
+      padding: EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal.shade900.withOpacity(0.1),
+            blurRadius: 10,
+            spreadRadius: 2,
+            offset: Offset(2, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+// 🟢 Topic Title Styling
+  Widget _buildTopicTitle(String title) {
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        color: Colors.teal.shade700,
+      ),
+    );
+  }
+
   Widget _buildDropdown() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -465,62 +556,133 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
+// 🟢 Enhanced Image Picker with Glassmorphic Effect
   Widget _buildImagePicker() {
     return GestureDetector(
       onTap: _pickImage,
       child: Container(
         height: 180,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(15),
+          color: Colors.white.withOpacity(0.2), // Light glass effect
+          border: Border.all(color: Colors.teal.shade300, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.teal.shade900.withOpacity(0.2),
+              blurRadius: 10,
+              spreadRadius: 2,
+              offset: Offset(2, 4),
+            ),
+          ],
         ),
         child: _imageFile == null
-            ? Center(
-          child: Text(
-            'Pick an Image',
-            style: TextStyle(color: Colors.grey[500]),
-          ),
+            ? Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.image_outlined,
+              size: 50,
+              color: Colors.teal.shade700,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Pick an Image',
+              style: TextStyle(
+                color: Colors.teal.shade700,
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+          ],
         )
             : ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Image.file(
             _imageFile!,
             fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
           ),
         ),
       ),
     );
   }
 
+
+// 🟢 Enhanced Choice Chips with Gradient & Shadow
   Widget _buildFacilitiesChips() {
     return Wrap(
       spacing: 8,
       children: _facilities.map((facility) {
-        return ChoiceChip(
-          label: Text(facility),
-          selected: _selectedFacilities.contains(facility),
-          onSelected: (isSelected) {
+        final isSelected = _selectedFacilities.contains(facility);
+        return GestureDetector(
+          onTap: () {
             setState(() {
               if (isSelected) {
-                _selectedFacilities.add(facility);
-              } else {
                 _selectedFacilities.remove(facility);
+              } else {
+                _selectedFacilities.add(facility);
               }
             });
           },
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            margin: EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? LinearGradient(
+                colors: [Colors.teal.shade600, Colors.teal.shade400],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+                  : null, // Apply gradient only when selected
+              color: isSelected ? null : Colors.white.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.teal.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.teal.withOpacity(0.2),
+                  blurRadius: 6,
+                  spreadRadius: 1,
+                  offset: Offset(2, 4),
+                ),
+              ],
+            ),
+            child: Text(
+              facility,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : Colors.teal.shade700,
+              ),
+            ),
+          ),
         );
       }).toList(),
     );
   }
 
+
+// 🟢 Enhanced Available Grounds Chips with Gradient & Hover Effect
   Widget _buildAvailableGroundsChips() {
     return Wrap(
       spacing: 8.0,
       children: _availableGrounds.map((ground) {
         return ChoiceChip(
-          label: Text(ground),
+          label: Text(
+            ground,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: _selectedAvailableGrounds.contains(ground) ? Colors.white : Colors.teal.shade700,
+            ),
+          ),
           selected: _selectedAvailableGrounds.contains(ground),
+          selectedColor: Colors.teal.shade500,
+          backgroundColor: Colors.white.withOpacity(0.3),
+          elevation: 3,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.teal.shade300),
+          ),
           onSelected: (bool selected) async {
             if (selected) {
               await _fetchPriceForGround(ground);
@@ -536,15 +698,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
-  Widget _buildTopicTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Text(
-        title,
-        style: TextStyle(fontWeight: FontWeight.bold),
-      ),
-    );
-  }
+
 
   Future<void> _fetchPriceForGround(String ground) async {
     double? price = await showDialog<double>(
@@ -682,14 +836,42 @@ class _AddTurfPageState extends State<AddTurfPage> {
   }
 
   Widget _buildSubmitButton() {
-    return ElevatedButton(
-      onPressed: _submitTurf,
-      child: Text('Submit'),
-      style: ElevatedButton.styleFrom(
+    return GestureDetector(
+      onTap: _submitTurf,
+      child: Container(
+        width: double.infinity,
         padding: EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: [Colors.teal.shade700, Colors.teal.shade400],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.teal.shade900.withOpacity(0.3),
+              blurRadius: 10,
+              spreadRadius: 2,
+              offset: Offset(2, 4),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            'Submit',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
       ),
     );
   }
+
 }
 
 class _PriceInputDialog extends StatelessWidget {

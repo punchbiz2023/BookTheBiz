@@ -74,198 +74,195 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
         return SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15), // Softer glass effect
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.3), // Dark teal shadow with transparency
+                    blurRadius: 12,
+                    spreadRadius: 3,
+                    offset: Offset(0, 6), // Slight elevation effect
+                  ),
+                ],
+                border: Border.all(color: Colors.teal.shade700.withOpacity(0.4), width: 1.5), // Subtle dark teal border
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Row for Image and Edit Icon
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          width: MediaQuery.of(context).size.width - 80, // Adjust the width
-                          height: 200,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            image: DecorationImage(
-                              image: NetworkImage(turfData['imageUrl'] ?? ''),
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          child: turfData['imageUrl'] == null
-                              ? Center(child: Icon(Icons.image, size: 100, color: Colors.grey))
-                              : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Turf Image with Gradient Overlay
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                        child: Image.network(
+                          turfData['imageUrl'] ?? '',
+                          height: 220,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
                         ),
-                        // Edit Icon
-                      ],
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      turfData['name'] ?? 'No Name',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blueAccent),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      turfData['description'] ?? 'No Description',
-                      style: TextStyle(fontSize: 16, color: Colors.black54),
-                    ),
-                    SizedBox(height: 16),
-                    Column(
+                      ),
+                      Container(
+                        height: 220,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.black.withOpacity(0.2), Colors.transparent],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Check if price is a List
-                        if (turfData['price'] is List<dynamic>)
-                          ...(turfData['price'] as List<dynamic>).map<Widget>((price) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: Chip(
-                                backgroundColor: Colors.green[100],
-                                label: Text(
-                                  'Price ₹${price.toStringAsFixed(2)}',
-                                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                                ),
-                              ),
+                        // Turf Name
+                        Text(
+                          turfData['name'] ?? 'No Name',
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                        ),
+                        SizedBox(height: 8),
+                        // Description
+                        Text(
+                          turfData['description'] ?? 'No Description',
+                          style: TextStyle(fontSize: 16, color: Colors.black87),
+                        ),
+                        SizedBox(height: 16),
+
+                        // Price Section
+                        Text(
+                          'Pricing:',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8.0,
+                          runSpacing: 4.0,
+                          children: (turfData['price'] is List<dynamic>)
+                              ? (turfData['price'] as List<dynamic>).map<Widget>((price) {
+                            return Chip(
+                              backgroundColor: Colors.green[100],
+                              label: Text('₹${price.toStringAsFixed(2)}', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                             );
-                          }).toList(),
-                        // Check if price is a Map<String, dynamic>
-                        if (turfData['price'] is Map<String, dynamic>)
-                          ...(turfData['price'] as Map<String, dynamic>).entries.map<Widget>((entry) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: Chip(
-                                backgroundColor: Colors.green[100],
-                                label: Text(
-                                  '${entry.key}: ₹${entry.value.toStringAsFixed(2)}',
-                                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                                ),
-                              ),
+                          }).toList()
+                              : (turfData['price'] is Map<String, dynamic>)
+                              ? (turfData['price'] as Map<String, dynamic>).entries.map<Widget>((entry) {
+                            return Chip(
+                              backgroundColor: Colors.green[100],
+                              label: Text('${entry.key}: ₹${entry.value.toStringAsFixed(2)}',
+                                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                             );
-                          }).toList(),
-                        // Fallback if price is a single value
-                        if (!(turfData['price'] is List) && !(turfData['price'] is Map))
-                          Chip(
-                            backgroundColor: Colors.green[100],
-                            label: Text(
-                              'Price ₹${turfData['price']?.toStringAsFixed(2) ?? '0.00'}',
-                              style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                          }).toList()
+                              : [
+                            Chip(
+                              backgroundColor: Colors.green[100],
+                              label: Text('₹${turfData['price']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                             ),
-                          ),
-                      ],
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'Facilities:',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8.0,
-                      runSpacing: 4.0,
-                      children: List.generate(
-                        turfData['facilities']?.length ?? 0,
-                            (index) => Chip(
-                          label: Text(turfData['facilities'][index] ?? 'No Facility'),
-                          avatar: Icon(Icons.check_circle, size: 16, color: Colors.green),
+                          ],
                         ),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'Available Grounds:',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8.0,
-                      runSpacing: 4.0,
-                      children: List.generate(
-                        turfData['availableGrounds']?.length ?? 0,
-                            (index) => Chip(
-                          label: Text(turfData['availableGrounds'][index] ?? 'No Ground'),
-                          avatar: Icon(Icons.sports_soccer, size: 16, color: Colors.blue),
+                        SizedBox(height: 16),
+
+                        // Facilities Section
+                        Text(
+                          'Facilities:',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                  if (turfData.containsKey('selectedSlots') && (turfData['selectedSlots']?.isNotEmpty ?? false)) ...[
-            Text(
-            'Selected Slots:',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 8),
-          Wrap(
-            spacing: 8.0,
-            runSpacing: 4.0,
-            children: List.generate(
-              turfData['selectedSlots']?.length ?? 0,
-                  (index) => Chip(
-                label: Text(turfData['selectedSlots'][index] ?? 'No Slot'),
-                avatar: Icon(Icons.access_time, size: 16, color: Colors.green),
-              ),
-            ),
-          ),
-          SizedBox(height: 16),
-                    ],
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: turfData['status'] == 'Open' ? Colors.green[100] : Colors.red[100],
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: turfData['status'] == 'Open' ? Colors.green : Colors.red, width: 2),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
+                        SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8.0,
+                          runSpacing: 4.0,
+                          children: (turfData['facilities'] as List<dynamic>?)
+                              ?.map((facility) => Chip(
+                            label: Text(facility ?? 'No Facility'),
+                            avatar: Icon(Icons.check_circle, size: 16, color: Colors.green),
+                          ))
+                              .toList() ??
+                              [Text('No facilities available')],
+                        ),
+                        SizedBox(height: 16),
+
+                        // Available Grounds
+                        Text(
+                          'Available Grounds:',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8.0,
+                          runSpacing: 4.0,
+                          children: (turfData['availableGrounds'] as List<dynamic>?)
+                              ?.map((ground) => Chip(
+                            label: Text(ground ?? 'No Ground'),
+                            avatar: Icon(Icons.sports_soccer, size: 16, color: Colors.blue),
+                          ))
+                              .toList() ??
+                              [Text('No grounds available')],
+                        ),
+                        SizedBox(height: 16),
+
+                        // Selected Slots
+                        if (turfData.containsKey('selectedSlots') && (turfData['selectedSlots']?.isNotEmpty ?? false)) ...[
                           Text(
-                            'Current Status: ${turfData['status'] ?? 'Opened'}',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: turfData['status'] == 'Open' ? Colors.green : Colors.red),
+                            'Selected Slots:',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                           ),
-                          Icon(
-                            turfData['status'] == 'Open' ? Icons.check_circle : Icons.cancel,
-                            color: turfData['status'] == 'Open' ? Colors.green : Colors.red,
-                            size: 30,
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton(
-                          onPressed: () => _updateTurfStatus(context, 'Open'),
-                          child: Text('Open'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                            textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(24),
+                          SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8.0,
+                            runSpacing: 4.0,
+                            children: List.generate(
+                              turfData['selectedSlots']?.length ?? 0,
+                                  (index) => Chip(
+                                label: Text(turfData['selectedSlots'][index] ?? 'No Slot'),
+                                avatar: Icon(Icons.access_time, size: 16, color: Colors.green),
+                              ),
                             ),
+                          ),
+                          SizedBox(height: 16),
+                        ],
+
+                        // Status Card
+                        Container(
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: turfData['status'] == 'Open' ? Colors.green[100] : Colors.red[100],
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: turfData['status'] == 'Open' ? Colors.green : Colors.red, width: 2),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Current Status: ${turfData['status'] ?? 'Opened'}',
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: turfData['status'] == 'Open' ? Colors.green : Colors.red),
+                              ),
+                              Icon(
+                                turfData['status'] == 'Open' ? Icons.check_circle : Icons.cancel,
+                                color: turfData['status'] == 'Open' ? Colors.green : Colors.red,
+                                size: 30,
+                              ),
+                            ],
                           ),
                         ),
-                        ElevatedButton(
-                          onPressed: () => _updateTurfStatus(context, 'Closed'),
-                          child: Text('Close'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                            textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                          ),
+                        SizedBox(height: 16),
+
+                        // Open/Close Buttons
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _statusButton(context, 'Open', Colors.green),
+                            _statusButton(context, 'Closed', Colors.red),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -274,17 +271,44 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
     );
   }
 
+// Custom Button for Open/Close
+  Widget _statusButton(BuildContext context, String status, Color color) {
+    return ElevatedButton(
+      onPressed: () => _updateTurfStatus(context, status),
+      child: Text(status),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+        textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.teal.shade50, // Light background for contrast
       appBar: AppBar(
         title: Text(
           'Turf Details',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+            color: Colors.white, // Better readability
+          ),
+        ),
+        backgroundColor: Colors.teal.shade900.withOpacity(0.85), // Subtle transparency
+        elevation: 4,
+        shadowColor: Colors.black26,
+        centerTitle: true,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.edit, color: Colors.black),
+            icon: Icon(Icons.edit, color: Colors.white),
             onPressed: () {
               Navigator.push(
                 context,
@@ -296,32 +320,45 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(48.0),
+          preferredSize: Size.fromHeight(50),
           child: Container(
-            color: Colors.white,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15), // Light glass effect
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
             child: TabBar(
               controller: _tabController,
-              labelColor: Colors.blueAccent,
-              unselectedLabelColor: Colors.grey,
-              indicatorColor: Colors.blueAccent,
-              indicatorWeight: 3.0,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white.withOpacity(0.75),
+
+              indicatorSize: TabBarIndicatorSize.label, // Keeps it tight to text width
+              labelStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              unselectedLabelStyle: TextStyle(fontSize: 16),
               tabs: [
                 Tab(text: 'Details'),
                 Tab(text: 'Bookings'),
-                Tab(text: 'Stats'), // New tab for Stats
+                Tab(text: 'Stats'),
               ],
             ),
           ),
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildTurfDetails(context),
-          BookingDetailsPage(turfId: widget.turfId, bookingData: {}), // Existing booking details page
-          Turfstats(turfId: widget.turfId), // Updated to use Turfstats widget
-        ],
+      body: Container(
+        padding: EdgeInsets.only(top: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildTurfDetails(context),
+            BookingDetailsPage(turfId: widget.turfId, bookingData: {}),
+            Turfstats(turfId: widget.turfId),
+          ],
+        ),
       ),
     );
   }
+
 }
