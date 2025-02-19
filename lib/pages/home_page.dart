@@ -1,11 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:odp/pages/profile.dart';
 import 'package:odp/widgets/firebaseimagecard.dart';
 import 'bkdetails.dart';
-import 'package:collection/collection.dart';
+
 
 class HomePage1 extends StatefulWidget {
   final User? user;
@@ -24,7 +23,7 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
   DateTime? _customDate;
   bool selectionMode = false;
   List<Map<String, dynamic>> selectedBookings = [];
-  List<String> _selectedGrounds = [];
+
   final _currentUserId = FirebaseAuth.instance.currentUser?.uid;
   late TabController _tabController;
 
@@ -49,9 +48,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
     );
   }
 
-  Stream<List<DocumentSnapshot>> _fetchTurfs() {
-    return FirebaseFirestore.instance.collection('turfs').snapshots().map((snapshot) => snapshot.docs);
-  }
 
   Stream<List<DocumentSnapshot>> _fetchPastBookings() {
     return FirebaseFirestore.instance
@@ -110,7 +106,7 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
         automaticallyImplyLeading: false,
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 16.0),
+            padding: const EdgeInsets.only(right: 320),
             child: CircleAvatar(
               backgroundColor: Colors.white,
               child: IconButton(
@@ -130,14 +126,9 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
             // Search Bar
             _buildSearchBar(),
 
-            // Empty Space for Featured Turf (Mock Data)
-            SizedBox(height: 20),
-            _buildSectionTitle('Featured Turf'),
-            _buildFeaturedTurf(),
-
             // Popular Turfs Section
             SizedBox(height: 20),
-            _buildSectionTitle('Popular Turfs'),
+            _buildSectionTitle(' Turfs'),
             _buildPopularTurfs(),
 
             // Bookings Section
@@ -200,50 +191,7 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildFeaturedTurf() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Special Offer - 20% Off',
-              style: TextStyle(
-                color: Colors.red,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Green Valley Cricket Ground',
-              style: TextStyle(
-                color: Colors.teal,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              child: Text('Book Now'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildPopularTurfs() {
     return StreamBuilder<QuerySnapshot>(
@@ -261,25 +209,27 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
 
         final turfs = snapshot.data!.docs;
 
+        // Filter turfs based on search text
+        final filteredTurfs = turfs.where((doc) {
+          final turfData = doc.data() as Map<String, dynamic>;
+          final turfName = turfData['name']?.toString().toLowerCase() ?? '';
+          return turfName.contains(_searchText.toLowerCase());
+        }).toList();
+
         return GridView.count(
-          crossAxisCount: 2, // Number of columns
+          crossAxisCount: 2,
           shrinkWrap: true,
           physics: NeverScrollableScrollPhysics(),
-          childAspectRatio: 0.8, // Adjust the aspect ratio as needed
-          mainAxisSpacing: 10, // Space between rows (vertical spacing)
-          crossAxisSpacing: 10, // Space between columns (horizontal spacing)
-          padding: EdgeInsets.all(10), // Padding around the grid
-          children: turfs.map((doc) {
+          childAspectRatio: 0.72,
+          mainAxisSpacing: 21,
+          crossAxisSpacing: 20,
+          padding: EdgeInsets.all(10),
+          children: filteredTurfs.map((doc) {
             final turfData = doc.data() as Map<String, dynamic>;
 
-            // Extract rating and price correctly
-            final rating = turfData['rating'] is Map<String, dynamic>
-                ? turfData['rating']['value'] ?? 'N/A' // Access nested value
-                : turfData['rating'].toString(); // Fallback to string
-
             final price = turfData['price'] is Map<String, dynamic>
-                ? turfData['price']['value'] ?? 'N/A' // Access nested value
-                : turfData['price'].toString(); // Fallback to string
+                ? turfData['price']['value'] ?? 'N/A'
+                : turfData['price'].toString();
 
             return FirebaseImageCard(
               imageUrl: turfData['imageUrl'] ?? '',
@@ -288,7 +238,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
               documentId: doc.id,
               docname: turfData['name'] ?? 'Unknown Turf',
               chips: List<String>.from(turfData['availableGrounds'] ?? []),
-              rating: rating,
               price: price,
             );
           }).toList(),
@@ -296,7 +245,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       },
     );
   }
-
   Widget _buildPastBookingsSearchBar() {
     return TextFormField(
       onChanged: (value) {
