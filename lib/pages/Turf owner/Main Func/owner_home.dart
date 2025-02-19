@@ -428,7 +428,7 @@ class _HomePage2State extends State<HomePage2> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 20),
               child: _buildSidebarItem(Icons.logout, 'Logout', () {
-                // Handle logout
+                _logout();
               }, color: Colors.redAccent),
             ),
           ],
@@ -436,7 +436,21 @@ class _HomePage2State extends State<HomePage2> {
       ),
     );
   }
-
+  Future<void> _logout() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => LoginApp()),
+            (Route<dynamic> route) => false, // Remove all previous routes
+      );
+    } catch (e) {
+      print('Error logging out: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logout failed. Please try again.')),
+      );
+    }
+  }
 
 // Sidebar Item Helper Function
   Widget _buildSidebarItem(IconData icon, String title, VoidCallback onTap, {Color color = Colors.white}) {
