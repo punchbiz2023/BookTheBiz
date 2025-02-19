@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../pages/details.dart';
 
 class FirebaseImageCard extends StatelessWidget {
@@ -9,6 +8,7 @@ class FirebaseImageCard extends StatelessWidget {
   final String documentId;
   final String docname;
   final List<String> chips;
+  final String price;
 
   const FirebaseImageCard({
     Key? key,
@@ -18,6 +18,7 @@ class FirebaseImageCard extends StatelessWidget {
     required this.documentId,
     required this.docname,
     required this.chips,
+    required this.price,
   }) : super(key: key);
 
   void _navigateToDetails(BuildContext context) {
@@ -37,87 +38,67 @@ class FirebaseImageCard extends StatelessWidget {
     return GestureDetector(
       onTap: () => _navigateToDetails(context),
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.6,
-        margin: EdgeInsets.only(right: 10),
-        child: Stack(
+        width: MediaQuery.of(context).size.width * 0.45,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              blurRadius: 5,
+              spreadRadius: 2,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Background Image
+            // Image Container
             Container(
+              height: 120,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                image: DecorationImage(
-                  image: imageUrl.isNotEmpty
-                      ? NetworkImage(imageUrl)
-                      : AssetImage('assets/placeholder.png') as ImageProvider,
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+                image: imageUrl.isNotEmpty
+                    ? DecorationImage(
+                  image: NetworkImage(imageUrl),
                   fit: BoxFit.cover,
-                ),
+                )
+                    : null,
               ),
             ),
-            // Gradient overlay for better text visibility
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                gradient: LinearGradient(
-                  colors: [Colors.black.withOpacity(0.6), Colors.transparent],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                ),
-              ),
-            ),
-            // Chips overlayed on the image
-            Positioned(
-              top: 10,
-              left: 10,
-              child: Wrap(
-                spacing: 6.0,
-                children: chips.map((chip) => _buildChip(chip)).toList(),
-              ),
-            ),
-            // Turf Title and Description at the bottom
-            Positioned(
-              bottom: 10,
-              left: 10,
-              right: 10,
+            // Content Section
+            Padding(
+              padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
                     ),
                   ),
-                  SizedBox(height: 4),
+                  SizedBox(height: 6),
                   Text(
-                    description,
+                    price,
                     style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // Transparent modern chip design
-  Widget _buildChip(String label) {
-    return Chip(
-      label: Text(
-        label,
-        style: TextStyle(color: Colors.white),
-      ),
-      backgroundColor: Colors.black.withOpacity(0.3),
-      shape: StadiumBorder(
-        side: BorderSide(color: Colors.white.withOpacity(0.5), width: 1),
       ),
     );
   }
