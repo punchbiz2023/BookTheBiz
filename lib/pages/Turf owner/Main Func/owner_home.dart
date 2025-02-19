@@ -23,74 +23,58 @@ class HomePage2 extends StatefulWidget {
 }
 
 class _HomePage2State extends State<HomePage2> {
+  final TextEditingController _searchController = TextEditingController();
+  String searchQuery = '';
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Position? _currentPosition;
   Stream<QuerySnapshot>? _turfsStream;
-
+  int activeTurfs = 0;
   @override
   void initState() {
     super.initState();
-    // _checkAndFetchLocation();
+    _searchController.addListener(() {
+      setState(() {
+        searchQuery = _searchController.text;
+        // Refresh the stream dynamically
+      });
+    });
     _checkCurrentUser();
     _setupTurfStream();
   }
-
-  // Set up Firestore stream
-  void _setupTurfStream() {
-    _turfsStream = FirebaseFirestore.instance
-        .collection('turfs')
-        .where('ownerId', isEqualTo: widget.user?.uid)
-        .snapshots();
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
-  // Fetch the current logged-in user
+  void _setupTurfStream() {
+    setState(() {
+      _turfsStream = (searchQuery.isEmpty)
+          ? FirebaseFirestore.instance
+          .collection('turfs')
+          .where('ownerId', isEqualTo: widget.user?.uid)
+          .snapshots()
+          : FirebaseFirestore.instance
+          .collection('turfs')
+          .where('ownerId', isEqualTo: widget.user?.uid)
+          .where('name', isGreaterThanOrEqualTo: searchQuery)
+          .where('name', isLessThanOrEqualTo: searchQuery + '\uf8ff')
+          .snapshots();
+    });
+
+  }
+
   Future<void> _checkCurrentUser() async {
     User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
-      print('User is logged in: ${currentUser.uid}');
       setState(() {
         widget.user = currentUser;
       });
     } else {
-      print('No user logged in');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => LoginApp()),
       );
-    }
-  }
-
-  // Check and fetch location if permission is granted
-  // Future<void> _checkAndFetchLocation() async {
-  //   if (await Permission.location.request().isGranted) {
-  //     _fetchCurrentLocation();
-  //   } else {
-  //     print('Location permission not granted');
-  //   }
-  // }
-
-  // Future<void> _fetchCurrentLocation() async {
-  //   try {
-  //     Position position = await Geolocator.getCurrentPosition(
-  //         desiredAccuracy: LocationAccuracy.high);
-  //     setState(() {
-  //       _currentPosition = position;
-  //     });
-  //   } catch (e) {
-  //     print('Error fetching location: $e');
-  //   }
-  // }
-
-  // Logout function
-  Future<void> _logout() async {
-    try {
-      await FirebaseAuth.instance.signOut();
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => LoginApp()),
-      );
-    } catch (e) {
-      print('Error logging out: $e');
     }
   }
 
@@ -98,31 +82,28 @@ class _HomePage2State extends State<HomePage2> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
+      drawer: _buildSidebar(),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        flexibleSpace: SafeArea(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: Icon(Icons.menu, color: Colors.white),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ProfilePage(user: widget.user),
-                    ),
-                  );
-                },
-              ),
-              // _buildLocationWidget(),
-            ],
-          ),
+        backgroundColor: Colors.teal,
+        leading: IconButton(
+          icon: Icon(Icons.menu, color: Colors.black87),
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
-        automaticallyImplyLeading: false,
+        title: Row(
+          children: [
+            Text(
+              "Turf Owner ",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+              ),
+            ),
+            Icon(Icons.sports_soccer, color: Colors.white), // Replace with your desired icon
+          ],
+        ),
       ),
-      backgroundColor: Color(0xff192028),
+      backgroundColor: Colors.white,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: FutureBuilder<DocumentSnapshot>(
@@ -134,125 +115,223 @@ class _HomePage2State extends State<HomePage2> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return Center(child: CircularProgressIndicator());
             }
-
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return Center(
-                  child: Text(
-                    'User not found',
-                    style: TextStyle(color: Colors.white),
-                  ));
+              return Center(child: Text('User not found', style: TextStyle(color: Colors.black87)));
             }
 
             final userData = snapshot.data!.data() as Map<String, dynamic>;
-
-            // Check if the user is a Turf Owner and the status
-            final isTurfOwner = userData['userType'] == 'Turf Owner';
-            final status = userData['status'];
-            final isStatusYes = status != null && status == 'yes';
+            final String userName = userData['name'] ?? 'User';
+            final bool isTurfOwner = userData['userType'] == 'Turf Owner';
+            final bool isStatusYes = userData['status'] == 'yes';
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Add Turf button
-                Center(
-                  child: StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(widget.user?.uid)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return CircularProgressIndicator(); // Show loading spinner while fetching data
-                      }
-
-                      if (!snapshot.hasData || !snapshot.data!.exists) {
-                        return Text(
-                          'User data not found',
-                          style: TextStyle(color: Colors.white),
-                        );
-                      }
-
-                      final userData = snapshot.data!.data() as Map<String, dynamic>;
-                      final isTurfOwner = userData['userType'] == 'Turf Owner';
-                      final isStatusYes = userData['status'] == 'yes';
-
-                      return ElevatedButton(
-                        onPressed: () {
-                          if (isTurfOwner && isStatusYes) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => AddTurfPage()),
-                            );
-                          } else {
-                            Fluttertoast.showToast(
-                              msg: "Your ID isn't verified by Admin or you are not a Turf Owner.",
-                              toastLength: Toast.LENGTH_LONG,
-                              gravity: ToastGravity.BOTTOM,
-                              backgroundColor: Colors.red,
-                              textColor: Colors.white,
-                              fontSize: 16.0,
-                            );
-
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => StatusFilePage()),
-                            );
-                          }
-                        },
-                        child: Text('Add Turf'),
-                        style: ElevatedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: isTurfOwner && isStatusYes
-                              ? Colors.blueAccent
-                              : Colors.grey, // Gray shade for inactive appearance
-                          padding: EdgeInsets.symmetric(horizontal: 140, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                // Dark Blue Banner
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                  ),
+                  child: Column(
+                    children: [
+                      Stack(
+                        children: [
+                          Container(
+                            height: 230, // Adjust as needed
+                            width: MediaQuery.of(context).size.width,
+                            decoration: BoxDecoration(
+                              color: Colors.blueGrey.shade900,
+                              borderRadius: BorderRadius.only(
+                                bottomLeft: Radius.circular(40),
+                                bottomRight: Radius.circular(40),
+                              ),
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                          Column(
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.symmetric(vertical: 30, horizontal: 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Hi, $userName",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(height: 5),
+                                    Text(
+                                      "Manage your Turfs",
+                                      style: TextStyle(color: Colors.white70, fontSize: 16),
+                                    ),
+                                    SizedBox(height: 20),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(
+                                height: 120,
+                                child: Stack(
+                                  children: [
+                                    Positioned.fill(
+                                      top: 50,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.only(
+                                            topLeft: Radius.circular(40),
+                                            topRight: Radius.circular(40),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                                      child: StreamBuilder<QuerySnapshot>(
+                                        stream: _turfsStream,
+                                        builder: (context, snapshot) {
+                                          if (!snapshot.hasData) {
+                                            return Center(child: CircularProgressIndicator());
+                                          }
+
+                                          int activeTurfs = snapshot.data!.docs.length;
+                                          String currentUserId = FirebaseAuth.instance.currentUser!.uid;
+                                          DateTime today = DateTime.now();
+                                          String formattedDate = "${today.year}-${today.month}-${today.day}"; // Ensure your date format matches Firestore format
+
+                                          return StreamBuilder<QuerySnapshot>(
+                                            stream: FirebaseFirestore.instance
+                                                .collection('bookings')
+                                                .where('turfId', isEqualTo: currentUserId)
+                                                .where('bookingDate', isEqualTo: formattedDate) // Assuming 'bookingDate' is stored as a string in Firestore
+                                                .snapshots(),
+                                            builder: (context, bookingSnapshot) {
+                                              int todayBookings = bookingSnapshot.hasData ? bookingSnapshot.data!.docs.length : 0;
+
+                                              return Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                                children: [
+                                                  _buildDashboardCard("Active Turfs", activeTurfs, Colors.teal.shade900, Colors.grey.shade100),
+                                                  _buildDashboardCard("Today's Bookings", todayBookings, Colors.teal.shade900, Colors.grey.shade100),
+                                                ],
+                                              );
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: 20), // Space after button
 
-                // Listed Turfs heading
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: Text(
-                    'Listed Turfs',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+
+                SizedBox(height: 20),
+
+                // Add Turf Button
+                Center(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (isTurfOwner && isStatusYes) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => AddTurfPage()),
+                        );
+                      } else {
+                        Fluttertoast.showToast(
+                          msg: "Your ID isn't verified by Admin or you are not a Turf Owner.",
+                          toastLength: Toast.LENGTH_LONG,
+                          gravity: ToastGravity.BOTTOM,
+                          backgroundColor: Colors.red,
+                          textColor: Colors.white,
+                          fontSize: 16.0,
+                        );
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => StatusFilePage()),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isTurfOwner && isStatusYes ? Colors.teal : Colors.grey,
+                      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                    child: Container(
+                      width: double.infinity,
+                      alignment: Alignment.center,
+                      child: Text('Add Turf', style: TextStyle(fontSize: 18, color: Colors.white)),
                     ),
                   ),
                 ),
 
-                // Turf Listing
+                SizedBox(height: 20),
+
+                // Search Bar
+                TextField(
+                  controller: _searchController,
+                  style: TextStyle(color: Colors.black87),
+                  decoration: InputDecoration(
+                    hintText: 'Search Turf...',
+                    hintStyle: TextStyle(color: Colors.black54),
+                    prefixIcon: Icon(Icons.search, color: Colors.black87),
+                    suffixIcon: searchQuery.isNotEmpty
+                        ? IconButton(
+                      icon: Icon(Icons.clear, color: Colors.black87),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {
+                          searchQuery = '';
+                          _setupTurfStream();
+                        });
+                      },
+                    )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.grey[200],
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+
+                SizedBox(height: 20),
+
+                // Your Turfs Title
+                Text(
+                  'Your Turfs',
+                  style: TextStyle(color: Colors.black87, fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+
+                // Turf List
                 StreamBuilder<QuerySnapshot>(
-                  stream: _turfsStream, // Use the stream created in initState
+                  stream: _turfsStream,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Center(child: CircularProgressIndicator());
                     }
                     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return Center(
-                        child: Text(
-                          'No turfs available',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      );
+                      return Center(child: Text('No turfs available', style: TextStyle(color: Colors.black87)));
                     }
 
-                    final turfDocs = snapshot.data!.docs;
+                    final turfDocs = snapshot.data!.docs.where((doc) {
+                      final turfData = doc.data() as Map<String, dynamic>;
+                      final turfName = turfData['name']?.toString() ?? '';
+                      return searchQuery.isEmpty || turfName.contains(searchQuery);
+                    }).toList();
+
                     return ListView.builder(
                       physics: NeverScrollableScrollPhysics(),
                       shrinkWrap: true,
                       itemCount: turfDocs.length,
                       itemBuilder: (context, index) {
-                        final turfData =
-                        turfDocs[index].data() as Map<String, dynamic>;
+                        final turfData = turfDocs[index].data() as Map<String, dynamic>;
                         return _buildTurfCard(turfData);
                       },
                     );
@@ -266,103 +345,193 @@ class _HomePage2State extends State<HomePage2> {
     );
   }
 
+  Widget _buildDashboardCard(String title, int count, Color color1, Color color2) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      width: 150,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [color1, color2]),
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(color: Colors.black26, blurRadius: 6, spreadRadius: 1),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            count.toString(),
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          SizedBox(height: 5),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, color: Colors.white,fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
 
-  // Build location widget
-  // Widget _buildLocationWidget() {
-  //   if (_currentPosition == null) {
-  //     return CircularProgressIndicator(); // Placeholder
-  //   }
-  //   return Text(
-  //     '${_currentPosition!.latitude.toStringAsFixed(2)}, ${_currentPosition!.longitude.toStringAsFixed(2)}',
-  //     style: TextStyle(color: Colors.white, fontSize: 16),
-  //   );
-  // }
 
-  // Build turf card
-// Build turf card
-  Widget _buildTurfCard(Map<String, dynamic> turfData) {
-    // Extract the turfId from the turf data
-    String turfId = turfData['turfId'] ?? ''; // Default to an empty string if turfId is null
-
-    return GestureDetector(
-      onTap: () {
-        if (turfId.isNotEmpty) { // Check if turfId is valid
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => TurfDetails(turfId: turfId), // Pass the turfId to TurfDetails
-            ),
-          );
-        } else {
-          print('Turf ID is missing'); // Debugging information
-        }
-      },
-      child: Card(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
-        elevation: 8,
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        shadowColor: Colors.black.withOpacity(0.2), // Slightly darker shadow
-        child: Padding(
-          padding: const EdgeInsets.all(16.0), // Increased padding for a spacious feel
-          child: Row(
-            children: [
-              // Turf Image
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: turfData['imageUrl'] != null
-                    ? Image.network(
-                  turfData['imageUrl'],
-                  width: 80,
-                  height: 80,
-                  fit: BoxFit.cover,
-                )
-                    : Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    color: Colors.grey[300], // Placeholder color
-                  ),
-                  child: Icon(Icons.image, size: 40, color: Colors.grey[600]),
-                ),
-              ),
-              SizedBox(width: 16), // Spacing between image and text
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      turfData['name'] ?? 'Unnamed Turf',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18, // Increased font size
-                      ),
-                    ),
-                    SizedBox(height: 4), // Space between title and description
-                    Text(
-                      turfData['description'] ?? 'No description provided.',
-                      style: TextStyle(
-                        color: Colors.grey[700],
-                        fontSize: 14, // Slightly larger than normal
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.arrow_forward_ios,
-                color: Colors.black54,
-                size: 20,
-              ),
+  // Sidebar Drawer
+  Widget _buildSidebar() {
+    return Drawer(
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.teal.shade900.withOpacity(0.9),
+              Colors.teal.withOpacity(0.9),
             ],
           ),
+        ),
+        child: Column(
+          children: [
+            // Header with App Title
+            Container(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.white54, width: 1)),
+              ),
+              child: Text(
+                'Turf Management',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+
+            // Menu List
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.only(top: 20),
+                children: [
+                  _buildSidebarItem(Icons.home, 'Home', () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => HomePage2(user: widget.user)));
+                  }),
+                  _buildSidebarItem(Icons.person, 'Profile', () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => ProfilePage(user: widget.user)));
+                  }),
+                ],
+              ),
+            ),
+
+            // Logout Button
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: _buildSidebarItem(Icons.logout, 'Logout', () {
+                // Handle logout
+              }, color: Colors.redAccent),
+            ),
+          ],
         ),
       ),
     );
   }
 
 
+// Sidebar Item Helper Function
+  Widget _buildSidebarItem(IconData icon, String title, VoidCallback onTap, {Color color = Colors.white}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      splashColor: Colors.white.withOpacity(0.2), // Smooth splash effect
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          gradient: LinearGradient(
+            colors: [
+              Colors.white.withOpacity(0.1),
+              Colors.white.withOpacity(0.05)
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 6,
+              offset: Offset(2, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 24),
+            SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: color),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+  // Turf Card UI
+  Widget _buildTurfCard(Map<String, dynamic> turfData) {
+    String turfId = turfData['turfId'] ?? ''; // Default to an empty
+    return GestureDetector(
+        onTap: () {
+      if (turfId.isNotEmpty) { // Check if turfId is valid
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TurfDetails(turfId: turfId), // Pass the turfId to TurfDetails
+          ),
+        );
+      } else {
+        print('Turf ID is missing'); // Debugging information
+      }
+    },
+    child: Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      elevation: 8,
+      margin: EdgeInsets.symmetric(vertical: 10),
+      child: ListTile(
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(10), // Rounded corners for the image
+          child: Image.network(
+            turfData['imageUrl'] ?? 'https://via.placeholder.com/80',
+            width: 60,
+            height: 60,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Icon(Icons.broken_image, size: 40, color: Colors.grey),
+          ),
+        ),
+        title: Text(
+          turfData['name'] ?? 'Unnamed Turf',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        subtitle: Text(
+          turfData['description'] ?? 'No description available',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+        trailing: Icon(Icons.arrow_forward_ios, color: Colors.teal[700]),
+      ),
+    )
+    );
+  }
+
+  // Placeholder for Horizontal Cards
+  Widget _buildPlaceholderCard() {
+    return Container(width: 120, height: 100, color: Colors.grey[700], margin: EdgeInsets.only(right: 10));
+  }
 }
