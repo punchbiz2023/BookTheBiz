@@ -27,7 +27,6 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.example.odp"
-    namespace "com.example.odp.booking_and_publish_slots"
     compileSdkVersion 35
     ndkVersion flutter.ndkVersion
 
