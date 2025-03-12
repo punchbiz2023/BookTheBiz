@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class BookingsPage extends StatefulWidget {
   @override
@@ -79,7 +80,11 @@ class _BookingsPageState extends State<BookingsPage>
           return const Center(child: Text('Error fetching bookings'));
         }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(child: Text('No bookings found'));
+          return Center(
+            child: Image.asset(
+              "lib/assets/static/undraw_empty_4zx0.png",
+            ),
+          );
         }
 
         var bookings = snapshot.data!;
@@ -116,6 +121,16 @@ class _BookingsPageState extends State<BookingsPage>
           displayBookings = pastBookings;
         } else if (state == 'cancelled') {
           displayBookings = cancelledBookings;
+        }
+
+        if (displayBookings.isEmpty) {
+          return Center(
+            child: SvgPicture.asset(
+              'assets/static/undraw_empty_4zx0.svg', // Ensure this path is correct
+              width: 200,
+              height: 200,
+            ),
+          );
         }
 
         return ListView.builder(
@@ -174,26 +189,6 @@ class _BookingsPageState extends State<BookingsPage>
                                 Text(
                                   bookingData['bookingDate'] ??
                                       'No Booking Date',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.access_time,
-                                  size: 12,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  bookingData['bookingTime'] ??
-                                      'No Booking Time',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey,
