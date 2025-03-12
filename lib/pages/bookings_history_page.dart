@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:odp/pages/Turf%20owner/Display-%20turfs/bkuserdetails.dart';
+import 'package:odp/pages/bkdetails.dart';
 
 class BookingsPage extends StatefulWidget {
   @override
@@ -250,7 +252,16 @@ class _BookingsPageState extends State<BookingsPage>
                       ),
                       const SizedBox(height: 8),
                       OutlinedButton.icon(
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => BookingDetailsPage1(
+                                bookingData: bookingData,
+                              ),
+                            ),
+                          );
+                        },
                         icon: const Icon(Icons.info_outline, size: 14),
                         label: const Text('Details'),
                         style: OutlinedButton.styleFrom(
