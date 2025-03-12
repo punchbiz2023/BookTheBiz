@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:odp/pages/profile.dart';
 import 'package:odp/widgets/firebaseimagecard.dart';
 import 'bkdetails.dart';
-
+import 'bookings_history_page.dart'; // Import the renamed page
 
 class HomePage1 extends StatefulWidget {
   final User? user;
@@ -14,7 +14,8 @@ class HomePage1 extends StatefulWidget {
   _HomePage1State createState() => _HomePage1State();
 }
 
-class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMixin {
+class _HomePage1State extends State<HomePage1>
+    with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String selectedTab = 'active';
   String _searchText = '';
@@ -47,7 +48,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       ),
     );
   }
-
 
   Stream<List<DocumentSnapshot>> _fetchPastBookings() {
     return FirebaseFirestore.instance
@@ -104,15 +104,28 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
         backgroundColor: Colors.teal,
         elevation: 0,
         automaticallyImplyLeading: false,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 8.0),
+          child: CircleAvatar(
+            backgroundColor: Colors.white,
+            child: IconButton(
+              icon: Icon(Icons.person, color: Colors.teal),
+              onPressed: _navigateToProfile,
+            ),
+          ),
+        ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 320),
-            child: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: IconButton(
-                icon: Icon(Icons.person, color: Colors.teal),
-                onPressed: _navigateToProfile,
-              ),
+            padding: const EdgeInsets.only(right: 8.0),
+            child: IconButton(
+              icon: Icon(Icons.confirmation_number, color: Colors.white),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => BookingsPage()),
+                );
+              },
             ),
           ),
         ],
@@ -144,13 +157,13 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                     indicatorColor: selectedTab == 'active'
                         ? Colors.teal
                         : selectedTab == 'past'
-                        ? Colors.blue
-                        : Colors.red,
+                            ? Colors.blue
+                            : Colors.red,
                     labelColor: selectedTab == 'active'
                         ? Colors.teal
                         : selectedTab == 'past'
-                        ? Colors.blue
-                        : Colors.red,
+                            ? Colors.blue
+                            : Colors.red,
                     unselectedLabelColor: Colors.grey,
                     tabs: [
                       Tab(text: 'Active'),
@@ -174,8 +187,8 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                     index: selectedTab == 'active'
                         ? 0
                         : selectedTab == 'past'
-                        ? 1
-                        : 2,
+                            ? 1
+                            : 2,
                     children: [
                       _buildPastBookingsSection('active'),
                       _buildPastBookingsSection('past'),
@@ -190,8 +203,6 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       ),
     );
   }
-
-
 
   Widget _buildPopularTurfs() {
     return StreamBuilder<QuerySnapshot>(
@@ -234,7 +245,8 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
             return FirebaseImageCard(
               imageUrl: turfData['imageUrl'] ?? '',
               title: turfData['name'] ?? 'Unknown Turf',
-              description: turfData['description'] ?? 'No description available',
+              description:
+                  turfData['description'] ?? 'No description available',
               documentId: doc.id,
               docname: turfData['name'] ?? 'Unknown Turf',
               chips: List<String>.from(turfData['availableGrounds'] ?? []),
@@ -245,6 +257,7 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       },
     );
   }
+
   Widget _buildPastBookingsSearchBar() {
     return TextFormField(
       onChanged: (value) {
@@ -283,10 +296,11 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
         var pastBookings = snapshot.data!;
         var filteredBookings = pastBookings.where((booking) {
           var bookingData = booking.data() as Map<String, dynamic>;
-          return bookingData['userId'] == _currentUserId && bookingData['turfName']
-              .toString()
-              .toLowerCase()
-              .contains(_pastBookingSearchText.toLowerCase());
+          return bookingData['userId'] == _currentUserId &&
+              bookingData['turfName']
+                  .toString()
+                  .toLowerCase()
+                  .contains(_pastBookingSearchText.toLowerCase());
         }).toList();
 
         if (_customDate != null) {
@@ -309,28 +323,41 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
           return bookingDate.isBefore(DateTime.now());
         }).toList();
 
+
+
+
+
+
         if (_sortOrder == 'Ascending') {
           activeBookings.sort((a, b) {
-            var dateA = DateTime.parse((a.data() as Map<String, dynamic>)['bookingDate']);
-            var dateB = DateTime.parse((b.data() as Map<String, dynamic>)['bookingDate']);
+            var dateA = DateTime.parse(
+                (a.data() as Map<String, dynamic>)['bookingDate']);
+            var dateB = DateTime.parse(
+                (b.data() as Map<String, dynamic>)['bookingDate']);
             return dateA.compareTo(dateB);
           });
 
           pastBookingsList.sort((a, b) {
-            var dateA = DateTime.parse((a.data() as Map<String, dynamic>)['bookingDate']);
-            var dateB = DateTime.parse((b.data() as Map<String, dynamic>)['bookingDate']);
+            var dateA = DateTime.parse(
+                (a.data() as Map<String, dynamic>)['bookingDate']);
+            var dateB = DateTime.parse(
+                (b.data() as Map<String, dynamic>)['bookingDate']);
             return dateA.compareTo(dateB);
           });
         } else {
           activeBookings.sort((a, b) {
-            var dateA = DateTime.parse((a.data() as Map<String, dynamic>)['bookingDate']);
-            var dateB = DateTime.parse((b.data() as Map<String, dynamic>)['bookingDate']);
+            var dateA = DateTime.parse(
+                (a.data() as Map<String, dynamic>)['bookingDate']);
+            var dateB = DateTime.parse(
+                (b.data() as Map<String, dynamic>)['bookingDate']);
             return dateB.compareTo(dateA);
           });
 
           pastBookingsList.sort((a, b) {
-            var dateA = DateTime.parse((a.data() as Map<String, dynamic>)['bookingDate']);
-            var dateB = DateTime.parse((b.data() as Map<String, dynamic>)['bookingDate']);
+            var dateA = DateTime.parse(
+                (a.data() as Map<String, dynamic>)['bookingDate']);
+            var dateB = DateTime.parse(
+                (b.data() as Map<String, dynamic>)['bookingDate']);
             return dateB.compareTo(dateA);
           });
         }
@@ -358,10 +385,12 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                   shrinkWrap: true,
                   physics: NeverScrollableScrollPhysics(),
                   itemBuilder: (context, index) {
-                    var bookingData = activeBookings[index].data() as Map<String, dynamic>;
+                    var bookingData =
+                        activeBookings[index].data() as Map<String, dynamic>;
                     bookingData['bookID'] = activeBookings[index].id;
 
-                    if (bookingData['bookingSlots'] == null || bookingData['bookingSlots'].isEmpty) {
+                    if (bookingData['bookingSlots'] == null ||
+                        bookingData['bookingSlots'].isEmpty) {
                       return SizedBox();
                     }
                     return GestureDetector(
@@ -376,7 +405,8 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                             bookingData['turfName'] ?? 'No Turf Name',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          subtitle: Text(bookingData['bookingDate'] ?? 'No Booking Date'),
+                          subtitle: Text(
+                              bookingData['bookingDate'] ?? 'No Booking Date'),
                           trailing: Text(
                             '${bookingData['amount']} INR',
                             style: TextStyle(color: Colors.teal),
@@ -416,12 +446,15 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                 shrinkWrap: true,
                 physics: NeverScrollableScrollPhysics(),
                 itemBuilder: (context, index) {
-                  var bookingData = activeBookings[index].data() as Map<String, dynamic>;
+                  var bookingData =
+                      activeBookings[index].data() as Map<String, dynamic>;
                   bookingData['bookID'] = activeBookings[index].id;
 
-                  if (bookingData['bookingSlots'] == null || bookingData['bookingSlots'].isEmpty) {
+                  if (bookingData['bookingSlots'] == null ||
+                      bookingData['bookingSlots'].isEmpty) {
                     return GestureDetector(
-                      onLongPress: () => _enableSelectionMode(bookingData, 'cancelled'),
+                      onLongPress: () =>
+                          _enableSelectionMode(bookingData, 'cancelled'),
                       child: Card(
                         elevation: 2,
                         margin: EdgeInsets.symmetric(vertical: 8),
@@ -431,37 +464,50 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                         child: ListTile(
                           title: Text(
                             bookingData['turfName'] ?? 'No Turf Name',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, color: Colors.red),
                           ),
-                          subtitle: Text(bookingData['bookingDate'] ?? 'No Booking Date'),
-                          trailing: selectionMode && selectedBookings.any((selectedBooking) {
-                            bool allFieldsMatch = true;
-                            List<String> fieldsToCheck = ['turfId', 'bookingDate', 'bookingSlots', 'userId'];
-                            for (String key in fieldsToCheck) {
-                              if (key == 'bookingSlots') {
-                                if (selectedBooking['data'][key] is List &&
-                                    bookingData[key] is List) {
-                                  if (selectedBooking['data'][key].length != bookingData[key].length) {
-                                    allFieldsMatch = false;
-                                    break;
-                                  }
-                                }
-                              } else if (selectedBooking['data'][key] != bookingData[key]) {
-                                allFieldsMatch = false;
-                                break;
-                              }
-                            }
-                            return allFieldsMatch;
-                          })
+                          subtitle: Text(
+                              bookingData['bookingDate'] ?? 'No Booking Date'),
+                          trailing: selectionMode &&
+                                  selectedBookings.any((selectedBooking) {
+                                    bool allFieldsMatch = true;
+                                    List<String> fieldsToCheck = [
+                                      'turfId',
+                                      'bookingDate',
+                                      'bookingSlots',
+                                      'userId'
+                                    ];
+                                    for (String key in fieldsToCheck) {
+                                      if (key == 'bookingSlots') {
+                                        if (selectedBooking['data'][key]
+                                                is List &&
+                                            bookingData[key] is List) {
+                                          if (selectedBooking['data'][key]
+                                                  .length !=
+                                              bookingData[key].length) {
+                                            allFieldsMatch = false;
+                                            break;
+                                          }
+                                        }
+                                      } else if (selectedBooking['data'][key] !=
+                                          bookingData[key]) {
+                                        allFieldsMatch = false;
+                                        break;
+                                      }
+                                    }
+                                    return allFieldsMatch;
+                                  })
                               ? CircleAvatar(
-                            radius: 12,
-                            backgroundColor: Colors.red,
-                            child: Icon(Icons.check, color: Colors.white, size: 16),
-                          )
+                                  radius: 12,
+                                  backgroundColor: Colors.red,
+                                  child: Icon(Icons.check,
+                                      color: Colors.white, size: 16),
+                                )
                               : Text(
-                            '${bookingData['amount']} INR',
-                            style: TextStyle(color: Colors.red),
-                          ),
+                                  '${bookingData['amount']} INR',
+                                  style: TextStyle(color: Colors.red),
+                                ),
                           onTap: () {
                             if (!selectionMode) {
                               Navigator.push(
@@ -502,10 +548,12 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                 shrinkWrap: true,
                 physics: NeverScrollableScrollPhysics(),
                 itemBuilder: (context, index) {
-                  var bookingData = pastBookingsList[index].data() as Map<String, dynamic>;
+                  var bookingData =
+                      pastBookingsList[index].data() as Map<String, dynamic>;
                   bookingData['bookID'] = pastBookingsList[index].id;
                   return GestureDetector(
-                    onLongPress: () => _enableSelectionMode(bookingData, 'past'),
+                    onLongPress: () =>
+                        _enableSelectionMode(bookingData, 'past'),
                     child: Card(
                       elevation: 2,
                       margin: EdgeInsets.symmetric(vertical: 8),
@@ -515,37 +563,50 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                       child: ListTile(
                         title: Text(
                           bookingData['turfName'],
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade600),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade600),
                         ),
                         subtitle: Text(bookingData['bookingDate']),
-                        trailing: selectionMode && selectedBookings.any((selectedBooking) {
-                          bool allFieldsMatch = true;
-                          List<String> fieldsToCheck = ['turfId', 'bookingDate', 'bookingSlots', 'userId'];
-                          for (String key in fieldsToCheck) {
-                            if (key == 'bookingSlots') {
-                              if (selectedBooking['data'][key] is List &&
-                                  bookingData[key] is List) {
-                                if (selectedBooking['data'][key].length != bookingData[key].length) {
-                                  allFieldsMatch = false;
-                                  break;
-                                }
-                              }
-                            } else if (selectedBooking['data'][key] != bookingData[key]) {
-                              allFieldsMatch = false;
-                              break;
-                            }
-                          }
-                          return allFieldsMatch;
-                        })
+                        trailing: selectionMode &&
+                                selectedBookings.any((selectedBooking) {
+                                  bool allFieldsMatch = true;
+                                  List<String> fieldsToCheck = [
+                                    'turfId',
+                                    'bookingDate',
+                                    'bookingSlots',
+                                    'userId'
+                                  ];
+                                  for (String key in fieldsToCheck) {
+                                    if (key == 'bookingSlots') {
+                                      if (selectedBooking['data'][key]
+                                              is List &&
+                                          bookingData[key] is List) {
+                                        if (selectedBooking['data'][key]
+                                                .length !=
+                                            bookingData[key].length) {
+                                          allFieldsMatch = false;
+                                          break;
+                                        }
+                                      }
+                                    } else if (selectedBooking['data'][key] !=
+                                        bookingData[key]) {
+                                      allFieldsMatch = false;
+                                      break;
+                                    }
+                                  }
+                                  return allFieldsMatch;
+                                })
                             ? CircleAvatar(
-                          radius: 12,
-                          backgroundColor: Colors.teal,
-                          child: Icon(Icons.check, color: Colors.white, size: 16),
-                        )
+                                radius: 12,
+                                backgroundColor: Colors.teal,
+                                child: Icon(Icons.check,
+                                    color: Colors.white, size: 16),
+                              )
                             : Text(
-                          '${bookingData['amount']} INR',
-                          style: TextStyle(color: Colors.teal),
-                        ),
+                                '${bookingData['amount']} INR',
+                                style: TextStyle(color: Colors.teal),
+                              ),
                         onTap: () {
                           Navigator.push(
                             context,
@@ -574,14 +635,16 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.grey,
-                        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 13, horizontal: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
                       child: const Text(
                         "Cancel",
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.w800),
                       ),
                     ),
                     ElevatedButton.icon(
@@ -595,7 +658,8 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 12, horizontal: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -610,7 +674,8 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
     );
   }
 
-  void _enableSelectionMode(Map<String, dynamic> bookingData, String bookingType) {
+  void _enableSelectionMode(
+      Map<String, dynamic> bookingData, String bookingType) {
     setState(() {
       selectionMode = true;
       selectedBookings.add({
@@ -635,7 +700,8 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
       String bookID = booking['bookID'];
 
       try {
-        var bookingRef = FirebaseFirestore.instance.collection('bookings').doc(bookID);
+        var bookingRef =
+            FirebaseFirestore.instance.collection('bookings').doc(bookID);
         await bookingRef.delete();
         print('Booking with ID: $bookID has been deleted successfully');
       } catch (e) {
@@ -646,7 +712,8 @@ class _HomePage1State extends State<HomePage1> with SingleTickerProviderStateMix
 
     if (deletionSuccessful) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Selected bookings have been deleted successfully')),
+        SnackBar(
+            content: Text('Selected bookings have been deleted successfully')),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

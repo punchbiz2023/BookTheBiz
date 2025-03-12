@@ -31,6 +31,8 @@ dependencies:
   lottie: ^2.0.0
   firebase_performance: ^0.10.0+8
   razorpay_flutter: ^1.4.0
+
+
 dependency_overrides:
     intl: ^0.18.1
 
@@ -45,3 +47,4 @@ flutter:
   assets:
     - lib/assets/placeholder_image.jpeg
     - lib/assets/badminton.png
+    - lib/assets/static/undraw_empty_4zx0.png
