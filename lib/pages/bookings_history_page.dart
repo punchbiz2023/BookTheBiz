@@ -57,35 +57,6 @@ class _BookingsPageState extends State<BookingsPage>
           _buildBookingsSection('cancelled'),
         ],
       ),
-      bottomNavigationBar: _tabController.index == 0
-          ? Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 4,
-                    offset: Offset(0, -1),
-                  ),
-                ],
-              ),
-              child: ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Book new appointment',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-              ),
-            )
-          : null,
     );
   }
 
@@ -185,7 +156,7 @@ class _BookingsPageState extends State<BookingsPage>
                           ),
                           const SizedBox(width: 8),
                           StatusBadge(
-                              status: bookingData['status'] ?? 'unknown'),
+                              status: bookingData['status'] ?? 'Confirmed'),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -397,8 +368,8 @@ class StatusBadge extends StatelessWidget {
         icon = Icons.cancel;
         break;
       default:
-        color = Colors.grey;
-        icon = Icons.help;
+        color = Colors.green;
+        icon = Icons.check_box_sharp;
     }
 
     return Row(
