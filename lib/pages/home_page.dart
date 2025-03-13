@@ -623,6 +623,7 @@ class _HomePage1State extends State<HomePage1>
                 },
               ),
             ],
+
             if (selectionMode)
               Padding(
                 padding: const EdgeInsets.all(16),
