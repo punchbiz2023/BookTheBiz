@@ -100,7 +100,8 @@ class _BookingsPageState extends State<BookingsPage>
           var bookingDate =
               DateTime.tryParse(bookingData['bookingDate'] ?? '') ??
                   DateTime.now();
-          return bookingDate.isAfter(DateTime.now());
+          return bookingDate.isAfter(DateTime.now()) &&
+              (bookingData['bookingSlots']?.isNotEmpty ?? false);
         }).toList();
 
         var pastBookings = filteredBookings.where((booking) {
@@ -108,12 +109,14 @@ class _BookingsPageState extends State<BookingsPage>
           var bookingDate =
               DateTime.tryParse(bookingData['bookingDate'] ?? '') ??
                   DateTime.now();
-          return bookingDate.isBefore(DateTime.now());
+          return bookingDate.isBefore(DateTime.now()) &&
+              (bookingData['bookingSlots']?.isNotEmpty ?? false);
         }).toList();
 
         var cancelledBookings = filteredBookings.where((booking) {
           var bookingData = booking.data() as Map<String, dynamic>;
-          return bookingData['status'] == 'cancelled';
+          return bookingData['status'] == 'cancelled' ||
+              (bookingData['bookingSlots']?.isEmpty ?? true);
         }).toList();
 
         List<DocumentSnapshot> displayBookings = [];

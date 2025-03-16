@@ -52,11 +52,13 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   void _handlePaymentSuccess(PaymentSuccessResponse response) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment successful!')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Payment successful!')));
   }
 
   void _handlePaymentError(PaymentFailureResponse response) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment failed!')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Payment failed!')));
   }
 
   Future<void> _fetchTurfDetails() async {
@@ -82,7 +84,8 @@ class _BookingPageState extends State<BookingPage> {
           .collection('turfs')
           .doc(widget.documentId)
           .collection('bookings')
-          .where('bookingDate', isEqualTo: DateFormat('yyyy-MM-dd').format(selectedDate!))
+          .where('bookingDate',
+              isEqualTo: DateFormat('yyyy-MM-dd').format(selectedDate!))
           .get();
 
       Map<String, List<String>> bookedSlotsMap = {};
@@ -108,7 +111,7 @@ class _BookingPageState extends State<BookingPage> {
   Future<String> _fetchUserName(String userId) async {
     try {
       DocumentSnapshot<Map<String, dynamic>> userDoc =
-      await _firestore.collection('users').doc(userId).get();
+          await _firestore.collection('users').doc(userId).get();
 
       if (userDoc.exists) {
         return userDoc.data()?['name'] ?? 'Anonymous';
@@ -126,7 +129,8 @@ class _BookingPageState extends State<BookingPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Book Your Turf',
-            style: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.bold)),
+            style:
+                TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.bold)),
         backgroundColor: Colors.black,
         elevation: 0,
       ),
@@ -187,7 +191,9 @@ class _BookingPageState extends State<BookingPage> {
 
     if (selectedDate == null || selectedSlots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('These slots have already been booked. Try new slots')),
+        SnackBar(
+            content:
+                Text('These slots have already been booked. Try new slots')),
       );
       return;
     }
@@ -209,7 +215,8 @@ class _BookingPageState extends State<BookingPage> {
 
         if (rawSlots is List<dynamic>) {
           // Convert each item to String safely
-          setState(() {  // ✅ This ensures UI updates after fetching
+          setState(() {
+            // ✅ This ensures UI updates after fetching
             ownerselectedSlots = rawSlots.whereType<String>().toList();
           });
         }
@@ -264,7 +271,8 @@ class _BookingPageState extends State<BookingPage> {
             ),
             if (isosp) // Show "Pay On Spot" button only if isosp is true
               TextButton(
-                child: Text('Pay On Spot', style: TextStyle(color: Colors.green)),
+                child:
+                    Text('Pay On Spot', style: TextStyle(color: Colors.green)),
                 onPressed: () async {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('On-spot payment selected')),
@@ -274,7 +282,8 @@ class _BookingPageState extends State<BookingPage> {
                     Map<String, dynamic> bookingData = {
                       'userId': currentUser.uid,
                       'userName': userName,
-                      'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                      'bookingDate':
+                          DateFormat('yyyy-MM-dd').format(selectedDate!),
                       'bookingSlots': selectedSlots,
                       'totalHours': totalHours,
                       'amount': totalAmount,
@@ -300,8 +309,9 @@ class _BookingPageState extends State<BookingPage> {
                     );
 
                     Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => BookingSuccessPage()),
-                          (Route<dynamic> route) => false,
+                      MaterialPageRoute(
+                          builder: (context) => BookingSuccessPage()),
+                      (Route<dynamic> route) => false,
                     );
                   } catch (e) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -314,7 +324,8 @@ class _BookingPageState extends State<BookingPage> {
                 },
               ),
             TextButton(
-              child: Text('Confirm Booking', style: TextStyle(color: Colors.green)),
+              child: Text('Confirm Booking',
+                  style: TextStyle(color: Colors.green)),
               onPressed: () async {
                 var options = {
                   'key': 'rzp_test_RmOLs985IPNRVq',
@@ -330,12 +341,14 @@ class _BookingPageState extends State<BookingPage> {
                   },
                 };
 
-                _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
+                _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS,
+                    (PaymentSuccessResponse response) async {
                   try {
                     Map<String, dynamic> bookingData = {
                       'userId': currentUser.uid,
                       'userName': userName,
-                      'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                      'bookingDate':
+                          DateFormat('yyyy-MM-dd').format(selectedDate!),
                       'bookingSlots': selectedSlots,
                       'totalHours': totalHours,
                       'amount': totalAmount,
@@ -343,6 +356,7 @@ class _BookingPageState extends State<BookingPage> {
                       'turfName': widget.documentname,
                       'selectedGround': selectedGround,
                       'paymentMethod': 'Online',
+                      'status': 'confirmed', // Add status as confirmed
                     };
 
                     await _firestore
@@ -361,8 +375,9 @@ class _BookingPageState extends State<BookingPage> {
                     );
 
                     Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => BookingSuccessPage()),
-                          (Route<dynamic> route) => false,
+                      MaterialPageRoute(
+                          builder: (context) => BookingSuccessPage()),
+                      (Route<dynamic> route) => false,
                     );
                   } catch (e) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -374,7 +389,8 @@ class _BookingPageState extends State<BookingPage> {
                   }
                 });
 
-                _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) {
+                _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR,
+                    (PaymentFailureResponse response) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Payment failed: ${response.message}'),
@@ -422,7 +438,8 @@ class _BookingPageState extends State<BookingPage> {
         int bookingSlotsCount = bookingSlotsRaw.length;
 
         if (bookingCounts.containsKey(bookingDate)) {
-          bookingCounts[bookingDate] = (bookingCounts[bookingDate]! + bookingSlotsCount).clamp(0, 10);
+          bookingCounts[bookingDate] =
+              (bookingCounts[bookingDate]! + bookingSlotsCount).clamp(0, 10);
         } else {
           bookingCounts[bookingDate] = bookingSlotsCount.clamp(0, 10);
         }
@@ -518,7 +535,8 @@ class _BookingPageState extends State<BookingPage> {
                       alignment: Alignment.center,
                       child: Text(
                         '${day.day}',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                     );
                   },
@@ -547,7 +565,8 @@ class _BookingPageState extends State<BookingPage> {
     if (selectedDate == null) {
       return Colors.grey;
     }
-    double bookingPercentage = (bookingSlotsForSelectedDay / maxSlotsPerDay) * 100;
+    double bookingPercentage =
+        (bookingSlotsForSelectedDay / maxSlotsPerDay) * 100;
 
     if (bookingSlotsForSelectedDay == 0) {
       return Colors.green;
@@ -578,7 +597,8 @@ class _BookingPageState extends State<BookingPage> {
     if (selectedDate == null) {
       return Text("Select a date to see booking status");
     }
-    double bookingPercentage = (bookingSlotsForSelectedDay / maxSlotsPerDay) * 100;
+    double bookingPercentage =
+        (bookingSlotsForSelectedDay / maxSlotsPerDay) * 100;
     Color statusColor;
     String statusText;
 
@@ -587,15 +607,16 @@ class _BookingPageState extends State<BookingPage> {
       statusText = "Available (0/$maxSlotsPerDay slots booked)";
     } else if (bookingPercentage >= 100) {
       statusColor = Colors.red;
-      statusText = "Fully Booked ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
+      statusText =
+          "Fully Booked ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
     } else if (bookingPercentage >= 50) {
       statusColor = Colors.orange;
       statusText =
-      "Partially Booked ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
+          "Partially Booked ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
     } else {
       statusColor = Colors.teal;
       statusText =
-      "Available ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
+          "Available ($bookingSlotsForSelectedDay/$maxSlotsPerDay slots booked)";
     }
 
     return Column(
@@ -630,14 +651,18 @@ class _BookingPageState extends State<BookingPage> {
 
   Widget _buildSlotSelector() {
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('turfs').doc(widget.documentId).get(),
+      future: FirebaseFirestore.instance
+          .collection('turfs')
+          .doc(widget.documentId)
+          .get(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
         } else if (snapshot.hasError) {
           return Center(child: Text('Error fetching slots: ${snapshot.error}'));
         } else if (!snapshot.hasData || !snapshot.data!.exists) {
-          return _buildSlotSelectionColumn([], []); // No data, return empty slots
+          return _buildSlotSelectionColumn(
+              [], []); // No data, return empty slots
         } else {
           var data = snapshot.data!.data() as Map<String, dynamic>?;
           List<String> ownerSelectedSlots = [];
@@ -649,8 +674,10 @@ class _BookingPageState extends State<BookingPage> {
             }
           }
 
-          var bookedSlotsMap = data?['bookedSlots'] as Map<String, dynamic>? ?? {};
-          List<String> bookedSlots = bookedSlotsMap[selectedGround]?.cast<String>() ?? [];
+          var bookedSlotsMap =
+              data?['bookedSlots'] as Map<String, dynamic>? ?? {};
+          List<String> bookedSlots =
+              bookedSlotsMap[selectedGround]?.cast<String>() ?? [];
 
           return _buildSlotSelectionColumn(bookedSlots, ownerSelectedSlots);
         }
@@ -658,8 +685,8 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-
-  Column _buildSlotSelectionColumn(List<String> bookedSlots, List<String> ownerSelectedSlots) {
+  Column _buildSlotSelectionColumn(
+      List<String> bookedSlots, List<String> ownerSelectedSlots) {
     // Default slot structure if ownerSelectedSlots is empty
     final defaultSlots = {
       'Early Morning': [
@@ -709,13 +736,14 @@ class _BookingPageState extends State<BookingPage> {
         SizedBox(height: 20),
         Text(
           'Available Slots',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+          style: TextStyle(
+              fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
         ),
         SizedBox(height: 10),
         ...slots.entries.map((entry) => Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: _buildSlotChips(entry.key, '', entry.value, bookedSlots),
-        )),
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildSlotChips(entry.key, '', entry.value, bookedSlots),
+            )),
       ],
     );
   }
@@ -782,7 +810,6 @@ class _BookingPageState extends State<BookingPage> {
                   ),
                 ),
               ),
-
               if (selectedGround != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 20),
@@ -811,17 +838,20 @@ class _BookingPageState extends State<BookingPage> {
     List<String> grounds = [];
     if (snapshot.exists) {
       List<dynamic> availableGroundsList = snapshot['availableGrounds'];
-      grounds = availableGroundsList.map((ground) => ground.toString()).toList();
+      grounds =
+          availableGroundsList.map((ground) => ground.toString()).toList();
     }
 
     return grounds;
   }
 
-  Widget _buildSlotChips(String title, String subtitle, List<String> slots, List<String> bookedSlots) {
+  Widget _buildSlotChips(String title, String subtitle, List<String> slots,
+      List<String> bookedSlots) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(title,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey)),
         Wrap(
           spacing: 8.0,
@@ -835,10 +865,12 @@ class _BookingPageState extends State<BookingPage> {
               onSelected: isBooked
                   ? null
                   : (selected) {
-                setState(() {
-                  selectedSlots.contains(slot) ? selectedSlots.remove(slot) : selectedSlots.add(slot);
-                });
-              },
+                      setState(() {
+                        selectedSlots.contains(slot)
+                            ? selectedSlots.remove(slot)
+                            : selectedSlots.add(slot);
+                      });
+                    },
             );
           }).toList(),
         ),
