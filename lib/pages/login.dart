@@ -34,7 +34,7 @@ class _LoginPageState extends State<LoginApp> {
 
     try {
       final UserCredential userCredential =
-      await _auth.signInWithEmailAndPassword(
+          await _auth.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
@@ -53,7 +53,7 @@ class _LoginPageState extends State<LoginApp> {
           await Firebase.initializeApp();
           final FirebaseFirestore firestore = FirebaseFirestore.instance;
           final DocumentReference userRef =
-          firestore.collection('users').doc(userCredential.user!.uid);
+              firestore.collection('users').doc(userCredential.user!.uid);
 
           final Map<String, dynamic> userData = await userRef
               .get()
@@ -67,7 +67,8 @@ class _LoginPageState extends State<LoginApp> {
           } else {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => HomePage1(user: userCredential.user)),
+              MaterialPageRoute(
+                  builder: (context) => HomePage1(user: userCredential.user)),
             );
           }
         }
@@ -101,7 +102,17 @@ class _LoginPageState extends State<LoginApp> {
       await _auth.sendPasswordResetEmail(email: email);
       Fluttertoast.showToast(msg: 'Password reset email sent!');
     } catch (e) {
-      Fluttertoast.showToast(msg: 'Error: ${e.toString()}');
+      if (e is FirebaseAuthException) {
+        if (e.code == 'user-not-found') {
+          Fluttertoast.showToast(msg: 'No user found for that email.');
+        } else if (e.code == 'invalid-email') {
+          Fluttertoast.showToast(msg: 'Invalid email format.');
+        } else {
+          Fluttertoast.showToast(msg: 'Error: ${e.message}');
+        }
+      } else {
+        Fluttertoast.showToast(msg: 'Error: ${e.toString()}');
+      }
     }
   }
 
@@ -110,119 +121,122 @@ class _LoginPageState extends State<LoginApp> {
     return Scaffold(
       // AppBar with teal background and "TURFY" title
       appBar: AppBar(
-      backgroundColor: Colors.transparent,
-      centerTitle: true,
-      title: Image.asset(
-        'lib/assets/logo.png', // Ensure logo.png is added to assets folder and mentioned in pubspec.yaml
-        height: 40, // Adjust height as needed
-        fit: BoxFit.contain,
+        backgroundColor: Colors.transparent,
+        centerTitle: true,
+        title: Image.asset(
+          'lib/assets/logo.png', // Ensure logo.png is added to assets folder and mentioned in pubspec.yaml
+          height: 40, // Adjust height as needed
+          fit: BoxFit.contain,
+        ),
       ),
-    ),
       // White background for a clean, professional look
       backgroundColor: Colors.white,
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-          child: Center( // Center vertically and horizontally
-            child: Column(
-              mainAxisSize: MainAxisSize.min, // Minimize vertical space usage
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Heading
-                Text(
-                  'Login',
-                  style: TextStyle(
-                    color: Colors.teal.shade800,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Center(
+          // Center vertically and horizontally
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // Minimize vertical space usage
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Heading
+              Text(
+                'Login',
+                style: TextStyle(
+                  color: Colors.teal.shade800,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center, // Center the text horizontally
+              ),
+              const SizedBox(height: 30),
+
+              // Email TextField
+              _buildTextField(
+                iconData: Icons.email_outlined,
+                hintText: 'Email',
+                controller: _emailController,
+                isObscure: false,
+              ),
+              const SizedBox(height: 20),
+
+              // Password TextField
+              _buildTextField(
+                iconData: Icons.lock_outline,
+                hintText: 'Password',
+                controller: _passwordController,
+                isObscure: true,
+              ),
+              const SizedBox(height: 10),
+
+              // Forgot Password
+              GestureDetector(
+                onTap: _forgotPassword,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'Forgot Password?',
+                    style: TextStyle(
+                      color: Colors.teal.shade800,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                    ),
                   ),
-                  textAlign: TextAlign.center, // Center the text horizontally
                 ),
-                const SizedBox(height: 30),
+              ),
+              const SizedBox(height: 30),
 
-                // Email TextField
-                _buildTextField(
-                  iconData: Icons.email_outlined,
-                  hintText: 'Email',
-                  controller: _emailController,
-                  isObscure: false,
+              // Login Button
+              ElevatedButton(
+                onPressed: _loading ? null : _login,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-                const SizedBox(height: 20),
-
-                // Password TextField
-                _buildTextField(
-                  iconData: Icons.lock_outline,
-                  hintText: 'Password',
-                  controller: _passwordController,
-                  isObscure: true,
-                ),
-                const SizedBox(height: 10),
-
-                // Forgot Password
-                GestureDetector(
-                  onTap: _forgotPassword,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      'Forgot Password?',
-                      style: TextStyle(
-                        color: Colors.teal.shade800,
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.underline,
+                child: _loading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(color: Colors.white),
+                      )
+                    : const Text(
+                        'Login',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 30),
+              ),
+              const SizedBox(height: 12),
 
-                // Login Button
-                ElevatedButton(
-                  onPressed: _loading ? null : _login,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal.shade600,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: _loading
-                      ? const SizedBox(
-                    height: 20, width: 20,
-                    child: CircularProgressIndicator(color: Colors.white),
-                  )
-                      : const Text(
-                    'Login',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              // Sign Up Button
+              OutlinedButton(
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => SignupPage()),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.teal.shade600, width: 2),
+                  foregroundColor: Colors.teal.shade600,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                const SizedBox(height: 12),
-
-                // Sign Up Button
-                OutlinedButton(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => SignupPage()),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.teal.shade600, width: 2),
-                    foregroundColor: Colors.teal.shade600,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text(
-                    'Sign Up',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
+                child: const Text(
+                  'Sign Up',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
     );
   }
 
@@ -248,7 +262,8 @@ class _LoginPageState extends State<LoginApp> {
           hintText: hintText,
           hintStyle: TextStyle(color: Colors.teal.shade400),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         ),
       ),
     );

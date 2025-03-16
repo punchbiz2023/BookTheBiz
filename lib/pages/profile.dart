@@ -200,18 +200,19 @@ class _ProfilePageState extends State<ProfilePage> {
                                   : const AssetImage('lib/assets/img.png')
                                       as ImageProvider,
                             ),
-                            GestureDetector(
-                              onTap: _isEditing ? _pickImage : null,
-                              child: CircleAvatar(
-                                radius: 18,
-                                backgroundColor: Colors.black54,
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  color: Colors.white,
-                                  size: 18,
+                            if (_isEditing)
+                              GestureDetector(
+                                onTap: _pickImage,
+                                child: CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: Colors.black54,
+                                  child: const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
