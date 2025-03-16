@@ -34,32 +34,27 @@ class _LoginPageState extends State<LoginApp> {
 
     try {
       final UserCredential userCredential =
-          await _auth.signInWithEmailAndPassword(
+      await _auth.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (userCredential.user != null) {
-        // Check if the email and password match admin credentials
-        if (_emailController.text.trim() == 'adminpunchbiz@gmail.com' &&
-            _passwordController.text.trim() == '1234567890') {
-          // Navigate to admin page
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => AdminControllersPage()),
-          );
-        } else {
-          // Check user type from Firestore
-          await Firebase.initializeApp();
-          final FirebaseFirestore firestore = FirebaseFirestore.instance;
-          final DocumentReference userRef =
-              firestore.collection('users').doc(userCredential.user!.uid);
+        await Firebase.initializeApp();
+        final FirebaseFirestore firestore = FirebaseFirestore.instance;
+        final DocumentReference userRef =
+        firestore.collection('users').doc(userCredential.user!.uid);
+        final userData = await userRef.get().then((ds) => ds.data() as Map<String, dynamic>?);
 
-          final Map<String, dynamic> userData = await userRef
-              .get()
-              .then((ds) => ds.data() as Map<String, dynamic>);
+        if (userData != null) {
+          String userType = userData['userType'];
 
-          if (userData['userType'] == 'Turf Owner') {
+          if (userType == 'adminuser') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => AdminControllersPage()),
+            );
+          } else if (userType == 'Turf Owner') {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => HomePage2()),
@@ -71,8 +66,11 @@ class _LoginPageState extends State<LoginApp> {
                   builder: (context) => HomePage1(user: userCredential.user)),
             );
           }
+
+          Fluttertoast.showToast(msg: 'Login Successful');
+        } else {
+          Fluttertoast.showToast(msg: 'User data not found');
         }
-        Fluttertoast.showToast(msg: 'Login Successful');
       }
     } catch (e) {
       if (e is FirebaseAuthException) {
@@ -90,6 +88,8 @@ class _LoginPageState extends State<LoginApp> {
       setState(() => _loading = false);
     }
   }
+
+
 
   Future<void> _forgotPassword() async {
     String email = _emailController.text.trim();

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 import 'login.dart';
 
@@ -13,8 +14,6 @@ class AdminControllersPage extends StatefulWidget {
 class _AdminControllersPageState extends State<AdminControllersPage> with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  // Lists for users with different statuses
   List<Map<String, dynamic>> notConfirmedUsers = [];
   List<Map<String, dynamic>> confirmedUsers = [];
   bool isLoading = true; // New variable to track loading state
@@ -266,15 +265,32 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
                   children: [
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await _firestore.collection('users').doc(userID).update({
-                          'status': 'yes',
-                        });
-                        Navigator.pop(context);
-                        fetchUserData();
+                        // Fetch current user details
+                        final currentUser = FirebaseAuth.instance.currentUser;
+                        if (currentUser != null) {
+                          final userDoc = await _firestore.collection('users').doc(currentUser.uid).get();
+                          final userData = userDoc.data() as Map<String, dynamic>?;
+
+                          if (userData != null) {
+                            // Update with map including name and mobile
+                            await _firestore.collection('users').doc(userID).update({
+                              'status': 'yes',
+                              'verifiedby': {
+                                'id': currentUser.uid,
+                                'name': userData['name'],
+                                'mobile': userData['mobile'],
+                              }
+                            });
+
+                            Navigator.pop(context);
+                            fetchUserData();
+                          } else {
+                            Fluttertoast.showToast(msg: 'User data not found');
+                          }
+                        }
                       },
                       icon: Icon(Icons.check, color: Colors.white),
-                      label:
-                      Text('Approve', style: TextStyle(color: Colors.white)),
+                      label: Text('Approve', style: TextStyle(color: Colors.white)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         shape: RoundedRectangleBorder(
@@ -282,17 +298,35 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
                         ),
                       ),
                     ),
+
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await _firestore.collection('users').doc(userID).update({
-                          'status': 'Not Confirmed',
-                        });
-                        Navigator.pop(context);
-                        fetchUserData();
+                        // Fetch current user details
+                        final currentUser = FirebaseAuth.instance.currentUser;
+                        if (currentUser != null) {
+                          final userDoc = await _firestore.collection('users').doc(currentUser.uid).get();
+                          final userData = userDoc.data() as Map<String, dynamic>?;
+
+                          if (userData != null) {
+                            // Update with map including name and mobile
+                            await _firestore.collection('users').doc(userID).update({
+                              'status': 'Not Confirmed',
+                              'verifiedby': {
+                                'id': currentUser.uid,
+                                'name': userData['name'],
+                                'mobile': userData['mobile'],
+                              }
+                            });
+
+                            Navigator.pop(context);
+                            fetchUserData();
+                          } else {
+                            Fluttertoast.showToast(msg: 'User data not found');
+                          }
+                        }
                       },
                       icon: Icon(Icons.cancel, color: Colors.white),
-                      label:
-                      Text('Disagree', style: TextStyle(color: Colors.white)),
+                      label: Text('Disagree', style: TextStyle(color: Colors.white)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         shape: RoundedRectangleBorder(
