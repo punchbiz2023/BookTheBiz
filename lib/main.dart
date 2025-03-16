@@ -141,7 +141,7 @@ class _SplashScreenState extends State<SplashScreen>
               FadeTransition(
                 opacity: _textFadeAnimation,
                 child: Text(
-                  'Turf Booking App',
+                  'BookTheBiz',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,

@@ -32,7 +32,6 @@ dependencies:
   firebase_performance: ^0.10.0+8
   razorpay_flutter: ^1.4.0
 
-
 dependency_overrides:
     intl: ^0.18.1
 
