@@ -32,7 +32,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ODx App',
+      title: 'BookTheBiz',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
@@ -224,6 +224,6 @@ class AuthWrapper extends StatelessWidget {
 void startPerformanceTrace() async {
   final Trace trace = FirebasePerformance.instance.newTrace('auth_wrapper_trace');
   trace.start();
-  await Future.delayed(Duration(seconds: 1));
+  await Future.delayed(const Duration(seconds: 1));
   trace.stop();
 }

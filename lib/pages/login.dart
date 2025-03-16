@@ -110,18 +110,14 @@ class _LoginPageState extends State<LoginApp> {
     return Scaffold(
       // AppBar with teal background and "TURFY" title
       appBar: AppBar(
-        backgroundColor: Colors.teal,
-        title: Text(
-          'TURFY',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
-            color: Colors.white,
-          ),
-        ),
-        centerTitle: true,
-        elevation: 0,
+      backgroundColor: Colors.transparent,
+      centerTitle: true,
+      title: Image.asset(
+        'lib/assets/logo.png', // Ensure logo.png is added to assets folder and mentioned in pubspec.yaml
+        height: 40, // Adjust height as needed
+        fit: BoxFit.contain,
       ),
+    ),
       // White background for a clean, professional look
       backgroundColor: Colors.white,
         body: SingleChildScrollView(

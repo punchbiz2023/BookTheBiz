@@ -3,9 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:odp/pages/login.dart'; // Import your login page
-// Import your Turf Owner / Home pages if needed
-// import 'package:odp/pages/Turf%20owner/Main%20Func/owner_home.dart';
-// import 'package:odp/pages/home_page.dart';
 
 class SignupPage extends StatefulWidget {
   @override
@@ -22,7 +19,7 @@ class _SignupPageState extends State<SignupPage> {
   final TextEditingController _mobileController  = TextEditingController();
 
   bool _loading = false;
-  String _userType = 'User'; // Default user type
+  String _userType = 'User';
 
   @override
   void dispose() {
@@ -34,9 +31,8 @@ class _SignupPageState extends State<SignupPage> {
   }
 
   Future<void> _signup() async {
-    setState(() {
-      _loading = true;
-    });
+    setState(() => _loading = true);
+
     try {
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
@@ -46,38 +42,30 @@ class _SignupPageState extends State<SignupPage> {
       // Send email verification
       await userCredential.user!.sendEmailVerification();
 
-      // Prepare user data for Firestore
-      Map<String, dynamic> userData = {
+      // Save user data in Firestore
+      await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'name'     : _nameController.text.trim(),
         'email'    : _emailController.text.trim(),
         'mobile'   : _mobileController.text.trim(),
         'userType' : _userType,
-      };
-
-      await _firestore
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set(userData);
+      });
 
       Fluttertoast.showToast(
         msg: 'Verification email sent. Please check your inbox.',
       );
 
-      // Clear fields after signup
       _nameController.clear();
       _emailController.clear();
       _passwordController.clear();
       _mobileController.clear();
+
     } catch (e) {
       Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
     } finally {
-      setState(() {
-        _loading = false;
-      });
+      setState(() => _loading = false);
     }
   }
 
-  // Reusable TextField widget
   Widget _buildTextField({
     required IconData iconData,
     required String hintText,
@@ -105,7 +93,6 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  // User Type selector widget
   Widget _buildUserTypeSelector() {
     return Container(
       decoration: BoxDecoration(
@@ -166,14 +153,14 @@ class _SignupPageState extends State<SignupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // AppBar with consistent branding
       appBar: AppBar(
-        title: const Text(
-          'TURFY',
-          style: TextStyle(fontWeight: FontWeight.bold,color: Colors.white),
-        ),
-        backgroundColor: Colors.teal,
+        backgroundColor: Colors.transparent,
         centerTitle: true,
+        title: Image.asset(
+          'lib/assets/logo.png', // Ensure logo.png is added to assets folder and mentioned in pubspec.yaml
+          height: 40, // Adjust height as needed
+          fit: BoxFit.contain,
+        ),
       ),
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
@@ -182,28 +169,33 @@ class _SignupPageState extends State<SignupPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Create an Account',
+              'Register new account',
               style: TextStyle(
                 color: Colors.teal.shade800,
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
+
             _buildUserTypeSelector(),
             const SizedBox(height: 20),
+
             _buildTextField(
               iconData: Icons.person_outline,
               hintText: 'Name',
               controller: _nameController,
             ),
             const SizedBox(height: 20),
+
             _buildTextField(
               iconData: Icons.email_outlined,
               hintText: 'Email',
               controller: _emailController,
             ),
             const SizedBox(height: 20),
+
             _buildTextField(
               iconData: Icons.lock_outline,
               hintText: 'Password',
@@ -211,12 +203,14 @@ class _SignupPageState extends State<SignupPage> {
               isPassword: true,
             ),
             const SizedBox(height: 20),
+
             _buildTextField(
               iconData: Icons.phone_outlined,
               hintText: 'Mobile Number',
               controller: _mobileController,
             ),
             const SizedBox(height: 30),
+
             ElevatedButton(
               onPressed: _loading ? null : _signup,
               style: ElevatedButton.styleFrom(
@@ -242,6 +236,7 @@ class _SignupPageState extends State<SignupPage> {
               ),
             ),
             const SizedBox(height: 20),
+
             TextButton(
               onPressed: () {
                 Navigator.pushReplacement(

@@ -35,7 +35,7 @@ class StartPage extends StatelessWidget {
                   // Optional: App brand/name at top-left (like “TURFY”)
                   // You can remove this if not needed
                   Text(
-                    'TURFY',
+                    'BOOKTHEBIZ',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
