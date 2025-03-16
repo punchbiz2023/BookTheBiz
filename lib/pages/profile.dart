@@ -91,7 +91,8 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       print('Error picking image: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to pick image. Please try again.')),
+        const SnackBar(
+            content: Text('Failed to pick image. Please try again.')),
       );
     }
   }
