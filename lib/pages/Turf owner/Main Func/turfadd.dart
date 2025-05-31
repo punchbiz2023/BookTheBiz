@@ -5,6 +5,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:reorderables/reorderables.dart';
 
 class AddTurfPage extends StatefulWidget {
   @override
@@ -14,14 +18,19 @@ class AddTurfPage extends StatefulWidget {
 class _AddTurfPageState extends State<AddTurfPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  File? _imageFile;
+  final TextEditingController _locationController = TextEditingController();
+  List<File> _imageFiles = [];
   bool _isLoading = false;
+  Position? _currentPosition;
+  bool _isGettingLocation = false;
   final Map<String, double> _selectedGroundPrices = {};
   final ImagePicker _picker = ImagePicker();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _firebaseStorage = FirebaseStorage.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isosp = false;
+  LatLng? _selectedLocation;
+  GoogleMapController? _mapController;
 
   final List<String> _facilities = [
     'Parking',
@@ -68,75 +77,210 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
   final List<String> _selectedAvailableGrounds = [];
   String _selectedSlotType = 'Morning Slots';
-  Future<void> _pickImage() async {
-    final pickedImage = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedImage != null) {
+
+  // 1. Add these fields to your _AddTurfPageState:
+  int? _anchorImageIndex; // For spotlight image
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() {
+      _isGettingLocation = true;
+    });
+
+    try {
+      // Check location permission first
+      LocationPermission permission = await Geolocator.checkPermission();
+      
+      if (permission == LocationPermission.denied) {
+        // Request permission
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Location permission is required to get current location'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        // Show dialog to open settings
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Location Permission Required'),
+            content: Text('Location permission is permanently denied. Please enable it in settings to get current location.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await Geolocator.openAppSettings();
+                },
+                child: Text('Open Settings'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please enable location services to get current location'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
       setState(() {
-        _imageFile = File(pickedImage.path);
+        _currentPosition = position;
+        _locationController.text = '${position.latitude}, ${position.longitude}';
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error getting location: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isGettingLocation = false;
       });
     }
   }
 
-  Future<String> _uploadImage(File image) async {
-    try {
-      Reference storageRef = _firebaseStorage
-          .ref()
-          .child('turf_images/${DateTime.now().millisecondsSinceEpoch}.jpg');
-      UploadTask uploadTask = storageRef.putFile(image);
-      TaskSnapshot snapshot = await uploadTask;
-      return await snapshot.ref.getDownloadURL();
-    } catch (e) {
-      throw Exception('Failed to upload image: $e');
+  Future<void> _pickImages() async {
+    final pickedImages = await _picker.pickMultiImage();
+    if (pickedImages != null && pickedImages.isNotEmpty) {
+      setState(() {
+        _imageFiles.addAll(pickedImages.map((x) => File(x.path)));
+        if (_anchorImageIndex == null && _imageFiles.isNotEmpty) {
+          _anchorImageIndex = 0; // Default to first image
+        }
+      });
+      if (_imageFiles.length > 1) {
+        await _showAnchorImageDialog();
+      }
     }
   }
 
-  // IconData _getIconForItem(String item) {
-  //   switch (item.toLowerCase()) {
-  //     case 'football field':
-  //       return Icons.sports_soccer;
-  //     case 'volleyball court':
-  //       return Icons.sports_volleyball;
-  //     case 'cricket ground':
-  //       return Icons.sports_cricket;
-  //     case 'basketball court':
-  //       return Icons.sports_basketball;
-  //     case 'swimming pool':
-  //       return Icons.pool;
-  //     case 'shuttlecock':
-  //       return Icons.sports_tennis;
-  //     case 'tennis court':
-  //       return Icons.sports_tennis;
-  //     case 'badminton court':
-  //       return Icons.sports_tennis;
-  //     case 'parking':
-  //       return Icons.local_parking;
-  //     case 'restroom':
-  //       return Icons.wc;
-  //     case 'cafeteria':
-  //       return Icons.restaurant;
-  //     case 'lighting':
-  //       return Icons.lightbulb;
-  //     case 'seating':
-  //       return Icons.event_seat;
-  //     case 'shower':
-  //       return Icons.shower;
-  //     case 'changing room':
-  //       return Icons.room_preferences;
-  //     case 'wi-fi':
-  //       return Icons.wifi;
-  //     default:
-  //       return Icons.help;
-  //   }
-  // }
+  // 3. Add this method to show anchor/spotlight image selection dialog:
+  Future<void> _showAnchorImageDialog() async {
+    int? selected = _anchorImageIndex ?? 0;
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Select Spotlight Image'),
+          content: SizedBox(
+            width: 320,
+            height: 180,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _imageFiles.length,
+              itemBuilder: (context, idx) {
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      selected = idx;
+                    });
+                    Navigator.of(context).pop();
+                    setState(() {
+                      _anchorImageIndex = selected;
+                    });
+                  },
+                  child: Container(
+                    margin: EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: selected == idx ? Colors.teal : Colors.transparent,
+                        width: 3,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.file(
+                            _imageFiles[idx],
+                            width: 120,
+                            height: 160,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        if (selected == idx)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Icon(Icons.star, color: Colors.amber, size: 28),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<List<String>> _uploadImages(List<File> images) async {
+    List<String> urls = [];
+    for (int i = 0; i < images.length; i++) {
+      final image = images[i];
+      try {
+        Reference storageRef = _firebaseStorage
+            .ref()
+            .child('turf_images/${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
+        UploadTask uploadTask = storageRef.putFile(image);
+        TaskSnapshot snapshot = await uploadTask;
+        String url = await snapshot.ref.getDownloadURL();
+        urls.add(url);
+      } catch (e) {
+        throw Exception('Failed to upload image: $e');
+      }
+    }
+    return urls;
+  }
 
   Future<void> _submitTurf() async {
     if (_nameController.text.isEmpty ||
         _descriptionController.text.isEmpty ||
-        _imageFile == null ||
+        _imageFiles.isEmpty ||
         _selectedFacilities.isEmpty ||
-        _selectedAvailableGrounds.isEmpty) {
+        _selectedAvailableGrounds.isEmpty ||
+        _locationController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please complete all fields')),
+        SnackBar(content: Text('Please complete all fields including location and images')),
       );
       return;
     }
@@ -146,21 +290,30 @@ class _AddTurfPageState extends State<AddTurfPage> {
     });
 
     try {
-      String imageUrl = await _uploadImage(_imageFile!);
+      List<String> imageUrls = await _uploadImages(_imageFiles);
       String userId = _auth.currentUser!.uid;
       DocumentReference turfRef = _firestore.collection('turfs').doc();
       String turfId = turfRef.id;
+
+      // Spotlight image is always the first image
+      String imageUrl = imageUrls.isNotEmpty ? imageUrls.first : '';
+      List<String> turfImages = imageUrls.length > 1 ? imageUrls.sublist(1) : [];
 
       Map<String, dynamic> turfData = {
         'turfId': turfId,
         'name': _nameController.text,
         'description': _descriptionController.text,
         'price': _selectedGroundPrices,
-        'imageUrl': imageUrl,
+        'imageUrl': imageUrl, // Spotlight image as string
+        'turfimages': turfImages, // Remaining images as List<String>
         'facilities': _selectedFacilities,
         'availableGrounds': _selectedAvailableGrounds,
         'ownerId': userId,
         'isosp': _isosp,
+        'location': _locationController.text,
+        'hasLocation': true,
+        'latitude': _currentPosition?.latitude,
+        'longitude': _currentPosition?.longitude,
       };
       List<String> selectedSlots = [];
       selectedSlots.addAll(_selectedMorningSlots);
@@ -169,7 +322,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
       if (selectedSlots.isNotEmpty) {
         turfData['selectedSlots'] = selectedSlots;
       }
-
 
       await turfRef.set(turfData);
 
@@ -186,6 +338,160 @@ class _AddTurfPageState extends State<AddTurfPage> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _showLocationPickerDialog() async {
+    final TextEditingController manualLocationController = TextEditingController();
+    String selectedArea = '';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Choose Location'),
+          content: Container(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: Icon(Icons.my_location, color: Colors.teal),
+                  title: Text('Use Current Location'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _getCurrentLocation();
+                  },
+                ),
+                Divider(),
+                Text(
+                  'Popular Areas',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Container(
+                  height: 200,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _buildLocationOption('Koramangala', setState, selectedArea),
+                        _buildLocationOption('Indiranagar', setState, selectedArea),
+                        _buildLocationOption('Whitefield', setState, selectedArea),
+                        _buildLocationOption('Electronic City', setState, selectedArea),
+                        _buildLocationOption('Marathahalli', setState, selectedArea),
+                        _buildLocationOption('HSR Layout', setState, selectedArea),
+                        _buildLocationOption('BTM Layout', setState, selectedArea),
+                        _buildLocationOption('Jayanagar', setState, selectedArea),
+                        _buildLocationOption('JP Nagar', setState, selectedArea),
+                        _buildLocationOption('Bannerghatta', setState, selectedArea),
+                      ],
+                    ),
+                  ),
+                ),
+                Divider(),
+                Text(
+                  'Or Enter Location Manually',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                SizedBox(height: 8),
+                TextField(
+                  controller: manualLocationController,
+                  decoration: InputDecoration(
+                    hintText: 'Enter your location',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    prefixIcon: Icon(Icons.location_on, color: Colors.teal),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (selectedArea.isNotEmpty) {
+                  _locationController.text = selectedArea;
+                  Navigator.pop(context);
+                } else if (manualLocationController.text.isNotEmpty) {
+                  _locationController.text = manualLocationController.text;
+                  Navigator.pop(context);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Please select or enter a location'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Confirm'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocationOption(String location, StateSetter setState, String selectedArea) {
+    bool isSelected = location == selectedArea;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          selectedArea = location;
+        });
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.teal.shade50 : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.teal : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.location_on,
+              color: isSelected ? Colors.teal : Colors.grey,
+              size: 20,
+            ),
+            SizedBox(width: 12),
+            Text(
+              location,
+              style: TextStyle(
+                color: isSelected ? Colors.teal.shade700 : Colors.black87,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+            if (isSelected)
+              Icon(
+                Icons.check_circle,
+                color: Colors.teal,
+                size: 20,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -233,6 +539,9 @@ class _AddTurfPageState extends State<AddTurfPage> {
                       ),
                       SizedBox(height: 16),
 
+                      _buildLocationSection(),
+                      SizedBox(height: 16),
+
                       _buildTopicTitle('Available Grounds'),
                       _buildGlassContainer(_buildAvailableGroundsChips()),
                       SizedBox(height: 16),
@@ -269,6 +578,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
     required TextEditingController controller,
     required String label,
     int maxLines = 1,
+    bool enabled = true,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -304,6 +614,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
           hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15),
           border: InputBorder.none,
         ),
+        enabled: enabled,
       ),
     );
   }
@@ -558,53 +869,190 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
 // 🟢 Enhanced Image Picker with Glassmorphic Effect
   Widget _buildImagePicker() {
-    return GestureDetector(
-      onTap: _pickImage,
-      child: Container(
-        height: 180,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          color: Colors.white.withOpacity(0.2), // Light glass effect
-          border: Border.all(color: Colors.teal.shade300, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.teal.shade900.withOpacity(0.2),
-              blurRadius: 10,
-              spreadRadius: 2,
-              offset: Offset(2, 4),
-            ),
-          ],
-        ),
-        child: _imageFile == null
-            ? Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.image_outlined,
-              size: 50,
-              color: Colors.teal.shade700,
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Pick an Image',
-              style: TextStyle(
-                color: Colors.teal.shade700,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-            ),
-          ],
-        )
-            : ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
-            _imageFile!,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Turf Images',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.teal.shade700,
+            fontSize: 16,
           ),
         ),
-      ),
+        SizedBox(height: 8),
+        if (_imageFiles.isNotEmpty)
+          Column(
+            children: [
+              // Spotlight image (always the first image)
+              Container(
+                width: double.infinity,
+                height: 180,
+                margin: EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.amber, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.teal.shade900.withOpacity(0.15),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                      offset: Offset(2, 4),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: Image.file(
+                        _imageFiles.first,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: 180,
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 10,
+                      left: 10,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.star, color: Colors.white, size: 20),
+                            SizedBox(width: 6),
+                            Text(
+                              'Spotlight Image',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // All images as reorderable thumbnails (including the spotlight image)
+              ReorderableWrap(
+                spacing: 10,
+                runSpacing: 10,
+                needsLongPressDraggable: true,
+                onReorder: (oldIndex, newIndex) {
+                  setState(() {
+                    final img = _imageFiles.removeAt(oldIndex);
+                    _imageFiles.insert(newIndex, img);
+                  });
+                },
+                children: [
+                  ..._imageFiles.asMap().entries.map((entry) {
+                    int idx = entry.key;
+                    File img = entry.value;
+                    return Stack(
+                      key: ValueKey(img.path),
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(
+                            img,
+                            fit: BoxFit.cover,
+                            width: 80,
+                            height: 80,
+                          ),
+                        ),
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _imageFiles.removeAt(idx);
+                              });
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.close, color: Colors.white, size: 18),
+                            ),
+                          ),
+                        ),
+                        // Drag handle
+                        Positioned(
+                          bottom: 4,
+                          left: 4,
+                          child: Icon(Icons.drag_handle, color: Colors.teal.shade700, size: 18),
+                        ),
+                      ],
+                    );
+                  }),
+                  // Add image button at the end
+                  GestureDetector(
+                    onTap: _pickImages,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal.shade300, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.teal.shade900.withOpacity(0.1),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                            offset: Offset(2, 4),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Icon(Icons.add_a_photo, size: 28, color: Colors.teal.shade700),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          )
+        else
+          // If no images, show only the add button
+          GestureDetector(
+            onTap: _pickImages,
+            child: Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.teal.shade300, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.teal.shade900.withOpacity(0.2),
+                    blurRadius: 10,
+                    spreadRadius: 2,
+                    offset: Offset(2, 4),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(Icons.add_a_photo, size: 36, color: Colors.teal.shade700),
+              ),
+            ),
+          ),
+        SizedBox(height: 8),
+        Text(
+          'Drag and drop to reorder images. The first image is the spotlight image.',
+          style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
+        ),
+      ],
     );
   }
 
@@ -872,6 +1320,72 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
+  Widget _buildLocationSection() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 10,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Location',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.teal.shade700,
+            ),
+          ),
+          SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildGlassTextField(
+                  controller: _locationController,
+                  label: 'Enter Location',
+                  enabled: !_isGettingLocation,
+                ),
+              ),
+              SizedBox(width: 10),
+              IconButton(
+                onPressed: _isGettingLocation ? null : _showLocationPickerDialog,
+                icon: _isGettingLocation
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                        ),
+                      )
+                    : Icon(Icons.location_on, color: Colors.teal.shade700),
+                tooltip: 'Choose Location',
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Choose your turf location from popular areas or enter manually',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PriceInputDialog extends StatelessWidget {

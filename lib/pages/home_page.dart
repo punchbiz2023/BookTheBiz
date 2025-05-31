@@ -5,6 +5,9 @@ import 'package:odp/pages/profile.dart';
 import 'package:odp/widgets/firebaseimagecard.dart';
 import 'bkdetails.dart';
 import 'bookings_history_page.dart'; // Import the renamed page
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'dart:async';
 
 class HomePage1 extends StatefulWidget {
   final User? user;
@@ -24,14 +27,60 @@ class _HomePage1State extends State<HomePage1>
   DateTime? _customDate;
   bool selectionMode = false;
   List<Map<String, dynamic>> selectedBookings = [];
+  Set<String> _selectedGroundFilters = {};
+  Position? _currentPosition;
+  bool _isLoadingLocation = false;
+  String _selectedLocation = 'All Areas';
+  List<String> _availableLocations = ['All Areas'];
+  bool _showAllTurfs = false;
 
   final _currentUserId = FirebaseAuth.instance.currentUser?.uid;
   late TabController _tabController;
+
+  // Cache for location names
+  final Map<String, String> _locationNameCache = {};
+
+  // New variable to track price sort order
+  String _priceSortOrder = 'none';
+
+  // Add these fields to _HomePage1State:
+  double? _minPriceFilter;
+  double? _maxPriceFilter;
+
+  // 1. Add this helper method inside your _HomePage1State class:
+  List<Map<String, dynamic>> _generatePriceBuckets(List<DocumentSnapshot> turfs) {
+    List<double> prices = [];
+    for (final doc in turfs) {
+      final turfData = doc.data() as Map<String, dynamic>;
+      final low = _extractLowestPrice(turfData['price']);
+      if (low != null) prices.add(low);
+    }
+    if (prices.isEmpty) return [
+      {'label': 'All', 'min': null, 'max': null},
+    ];
+
+    prices.sort();
+    double min = prices.first;
+    double max = prices.last;
+    double step = ((max - min) / 4).clamp(1, double.infinity);
+
+    return [
+      {'label': 'All', 'min': null, 'max': null},
+      {'label': 'Low (< ₹${(min + step).toStringAsFixed(0)})', 'min': min, 'max': min + step},
+      {'label': 'Medium (₹${(min + step).toStringAsFixed(0)} - ₹${(min + 2 * step).toStringAsFixed(0)})', 'min': min + step, 'max': min + 2 * step},
+      {'label': 'High (₹${(min + 2 * step).toStringAsFixed(0)} - ₹${(min + 3 * step).toStringAsFixed(0)})', 'min': min + 2 * step, 'max': min + 3 * step},
+      {'label': 'Premium (₹${(min + 3 * step).toStringAsFixed(0)}+)', 'min': min + 3 * step, 'max': null},
+    ];
+  }
+
+  // 2. Add this field to your _HomePage1State class:
+  String _selectedPriceBucket = 'All';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _initializeLocation();
   }
 
   @override
@@ -96,55 +145,745 @@ class _HomePage1State extends State<HomePage1>
     );
   }
 
+  Future<void> _initializeLocation() async {
+    await _getCurrentLocation();
+    await _loadAvailableLocations();
+  }
+
+  Future<void> _loadAvailableLocations() async {
+    try {
+      final turfs = await FirebaseFirestore.instance.collection('turfs').get();
+      final locations = turfs.docs.map((doc) {
+        final location = doc.data()['location']?.toString() ?? '';
+        if (location.isEmpty) return '';
+        
+        try {
+          final coords = location.split(',');
+          if (coords.length != 2) return '';
+          
+          final lat = double.parse(coords[0].trim());
+          final lng = double.parse(coords[1].trim());
+          
+          return '${lat.toStringAsFixed(6)},${lng.toStringAsFixed(6)}';
+        } catch (e) {
+          return '';
+        }
+      }).where((loc) => loc.isNotEmpty).toSet().toList();
+      
+      // Convert coordinates to addresses
+      final addresses = await Future.wait(
+        locations.map((loc) async {
+          try {
+            final coords = loc.split(',');
+            final lat = double.parse(coords[0]);
+            final lng = double.parse(coords[1]);
+            
+            final placemarks = await placemarkFromCoordinates(lat, lng);
+            if (placemarks.isNotEmpty) {
+              final place = placemarks[0];
+              String address = '';
+              
+              // Add sub-locality or locality
+              if (place.subLocality != null && place.subLocality!.isNotEmpty) {
+                address += place.subLocality!;
+              } else if (place.locality != null && place.locality!.isNotEmpty) {
+                address += place.locality!;
+              }
+              
+              // Add administrative area (city)
+              if (place.subAdministrativeArea != null && place.subAdministrativeArea!.isNotEmpty) {
+                if (address.isNotEmpty) address += ', ';
+                address += place.subAdministrativeArea!;
+              }
+              
+              // Store the coordinates with the address for later matching
+              return '$address|${coords[0]},${coords[1]}';
+            }
+          } catch (e) {
+            print('Error converting coordinates to address: $e');
+          }
+          return '';
+        })
+      );
+      
+      final uniqueAddresses = addresses.where((addr) => addr.isNotEmpty).toSet().toList();
+      
+      setState(() {
+        _availableLocations = ['All Areas', ...uniqueAddresses];
+        if (!_availableLocations.contains(_selectedLocation)) {
+          _selectedLocation = 'All Areas';
+        }
+      });
+    } catch (e) {
+      print('Error loading locations: $e');
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() {
+      _isLoadingLocation = true;
+    });
+
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Location services are disabled. Please enable them to see nearby turfs.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Location permission is required to see nearby turfs.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        bool? shouldOpenSettings = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Location Permission Required'),
+            content: Text('Location permission is permanently denied. Please enable it in settings to see nearby turfs.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text('Open Settings'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.teal,
+                ),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldOpenSettings == true) {
+          await Geolocator.openAppSettings();
+        }
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _currentPosition = position;
+        _isLoadingLocation = false;
+      });
+
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+
+        if (placemarks.isNotEmpty) {
+          Placemark place = placemarks[0];
+          String address = '';
+          
+          // Add sub-locality or locality
+          if (place.subLocality != null && place.subLocality!.isNotEmpty) {
+            address += place.subLocality!;
+          } else if (place.locality != null && place.locality!.isNotEmpty) {
+            address += place.locality!;
+          }
+          
+          // Add administrative area (city)
+          if (place.subAdministrativeArea != null && place.subAdministrativeArea!.isNotEmpty) {
+            if (address.isNotEmpty) address += ', ';
+            address += place.subAdministrativeArea!;
+          }
+          
+          // Store the coordinates with the address
+          final locationWithCoords = '$address|${position.latitude},${position.longitude}';
+          
+          setState(() {
+            // Only add current location if it's not already in the list
+            if (!_availableLocations.contains(locationWithCoords)) {
+              _availableLocations.insert(1, locationWithCoords);
+            }
+            _selectedLocation = locationWithCoords;
+          });
+        }
+      } catch (e) {
+        print('Error getting address: $e');
+      }
+
+    } catch (e) {
+      setState(() {
+        _isLoadingLocation = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error getting location: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  double _calculateDistance(String turfLocation) {
+    if (_currentPosition == null || turfLocation.isEmpty) return double.infinity;
+    
+    try {
+      final coords = turfLocation.split(',');
+      if (coords.length != 2) return double.infinity;
+      
+      final turfLat = double.parse(coords[0].trim());
+      final turfLng = double.parse(coords[1].trim());
+      
+      return Geolocator.distanceBetween(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+        turfLat,
+        turfLng,
+      );
+    } catch (e) {
+      return double.infinity;
+    }
+  }
+
+  String _getPriceDisplay(dynamic price) {
+    if (price is Map<String, dynamic>) {
+      // Find the lowest price from the map
+      double? lowestPrice;
+      price.forEach((key, value) {
+        if (value is num) {
+          if (lowestPrice == null || value < lowestPrice!) {
+            lowestPrice = value.toDouble();
+          }
+        }
+      });
+      return lowestPrice != null ? '₹${lowestPrice?.toStringAsFixed(0)}/hr' : 'N/A';
+    } else if (price is num) {
+      return '₹${price.toStringAsFixed(0)}/hr';
+    } else if (price is String) {
+      try {
+        final numPrice = double.parse(price);
+        return '₹${numPrice.toStringAsFixed(0)}/hr';
+      } catch (e) {
+        return 'N/A';
+      }
+    }
+    return 'N/A';
+  }
+
+  // Helper to extract the lowest price from price (Map, String, or num)
+  double? _extractLowestPrice(dynamic price) {
+    if (price is Map<String, dynamic>) {
+      double? lowest;
+      price.forEach((key, value) {
+        if (value is num) {
+          if (lowest == null || value < lowest!) lowest = value.toDouble();
+        } else if (value is String) {
+          final parsed = double.tryParse(value);
+          if (parsed != null && (lowest == null || parsed < lowest!)) lowest = parsed;
+        }
+      });
+      return lowest;
+    } else if (price is num) {
+      return price.toDouble();
+    } else if (price is String) {
+      return double.tryParse(price);
+    }
+    return null;
+  }
+
+  // Helper to extract the highest price from price (Map, String, or num)
+  double? _extractHighestPrice(dynamic price) {
+    if (price is Map<String, dynamic>) {
+      double? highest;
+      price.forEach((key, value) {
+        if (value is num) {
+          if (highest == null || value > highest!) highest = value.toDouble();
+        } else if (value is String) {
+          final parsed = double.tryParse(value);
+          if (parsed != null && (highest == null || parsed > highest!)) highest = parsed;
+        }
+      });
+      return highest;
+    } else if (price is num) {
+      return price.toDouble();
+    } else if (price is String) {
+      return double.tryParse(price);
+    }
+    return null;
+  }
+
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+Widget build(BuildContext context) {
+  return WillPopScope(
+    onWillPop: () async => false, // Disable back button
+    child: Scaffold(
       key: _scaffoldKey,
-      appBar: AppBar(
-        backgroundColor: Colors.teal,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 8.0),
-          child: CircleAvatar(
-            backgroundColor: Colors.white,
-            child: IconButton(
-              icon: Icon(Icons.person, color: Colors.teal),
-              onPressed: _navigateToProfile,
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(68),
+        child: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.white,
+          automaticallyImplyLeading: false,
+          titleSpacing: 0,
+          title: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: CircleAvatar(
+                  backgroundColor: Colors.teal.shade50,
+                  child: IconButton(
+                    icon: Icon(Icons.person, color: Colors.teal.shade700),
+                    onPressed: _navigateToProfile,
+                    tooltip: 'Profile',
+                  ),
+                ),
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  ' Turf Booking',
+                  style: TextStyle(
+                    color: Colors.teal.shade800,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 24,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.confirmation_number, color: Colors.teal.shade700),
+                tooltip: 'My Bookings',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => BookingsPage()),
+                  );
+                },
+              ),
+              SizedBox(width: 8),
+            ],
+          ),
+          bottom: PreferredSize(
+            preferredSize: Size.fromHeight(1),
+            child: Container(
+              color: Colors.grey[300],
+              height: 1,
             ),
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: IconButton(
-              icon: Icon(Icons.confirmation_number, color: Colors.white),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => BookingsPage()),
-                );
-              },
-            ),
-          ),
-        ],
       ),
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[100],
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Search Bar
-            _buildSearchBar(),
+            Container(
+              margin: EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.teal.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: _buildSearchBar(),
+            ),
+            
+            // Location Filter
+            Container(
+              margin: EdgeInsets.symmetric(vertical: 10),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.teal.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.location_on, color: Colors.teal),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButton<String>(
+                      value: _selectedLocation,
+                      isExpanded: true,
+                      underline: SizedBox(),
+                      items: _getUniqueLocations().map((String location) {
+                        // Extract just the address part for display
+                        final displayText = location == 'All Areas' 
+                            ? 'All Areas' 
+                            : location.split('|')[0];
+                        return DropdownMenuItem<String>(
+                          value: location,
+                          child: Text(
+                            displayText,
+                            style: TextStyle(color: Colors.black87),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
+                          setState(() {
+                            _selectedLocation = newValue;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Sports Type Filter
+            _buildSportsTypeFilter(),
+
+            // Nearby Turfs Section
+            if (_currentPosition != null) ...[
+              SizedBox(height: 20),
+              Row(
+                children: [
+                  Icon(Icons.near_me, color: Colors.teal, size: 28),
+                  SizedBox(width: 8),
+                  Text(
+                    'Nearby Turfs',
+                    style: TextStyle(
+                      color: Colors.teal,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 15),
+              _buildNearbyTurfs(),
+            ],
 
             // Popular Turfs Section
             SizedBox(height: 20),
-            _buildSectionTitle(' Turfs'),
+            Row(
+              children: [
+                Icon(Icons.sports_soccer, color: Colors.teal, size: 28),
+                SizedBox(width: 8),
+                _buildSectionTitle('All Turfs'),
+                Spacer(),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.filter_alt, color: Colors.teal),
+                  tooltip: 'Filter by Price',
+                  onSelected: (value) {
+                    setState(() {
+                      _priceSortOrder = value;
+                    });
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(value: 'none', child: Text('No Price Filter')),
+                    PopupMenuItem(value: 'lowToHigh', child: Text('Price: Low to High')),
+                    PopupMenuItem(value: 'highToLow', child: Text('Price: High to Low')),
+                  ],
+                ),
+              ],
+            ),
             _buildPopularTurfs(),
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => SupportPage(user: widget.user)),
+          );
+        },
+        icon: Icon(Icons.support_agent, color: Colors.white),
+        label: Text('Contact Support', style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.teal,
+        elevation: 6,
+      ),
+    ),
+  );
+}
+
+  Widget _buildSportsTypeFilter() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('turfs').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return SizedBox.shrink();
+        final turfs = snapshot.data!.docs;
+        final Set<String> allGrounds = {};
+        for (var doc in turfs) {
+          final turfData = doc.data() as Map<String, dynamic>;
+          final grounds = List<String>.from(turfData['availableGrounds'] ?? []);
+          allGrounds.addAll(grounds);
+        }
+        final groundsList = allGrounds.toList();
+        return ExpansionTile(
+          title: Text('SPORTS TYPE', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+          children: [
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: Text('All'),
+                  selected: _selectedGroundFilters.isEmpty,
+                  onSelected: (selected) {
+                    setState(() {
+                      _selectedGroundFilters.clear();
+                    });
+                  },
+                ),
+                ...groundsList.map((ground) => ChoiceChip(
+                  label: Text(ground),
+                  selected: _selectedGroundFilters.contains(ground),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedGroundFilters.add(ground);
+                      } else {
+                        _selectedGroundFilters.remove(ground);
+                      }
+                    });
+                  },
+                )),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildNearbyTurfs() {
+    if (_isLoadingLocation) {
+      return Container(
+        height: 280,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Loading nearby turfs...',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_currentPosition == null) {
+      return Container(
+        height: 280,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.location_off,
+                size: 48,
+                color: Colors.grey[400],
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Location access required',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Enable location services to see nearby turfs',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 14,
+                ),
+              ),
+              SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _getCurrentLocation,
+                icon: Icon(Icons.refresh),
+                label: Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('turfs').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(
+            child: Text(
+              'No turfs available nearby',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 16,
+              ),
+            ),
+          );
+        }
+
+        final turfs = snapshot.data!.docs;
+        
+        // Filter turfs with valid locations and sort by distance
+        final nearbyTurfs = turfs.where((doc) {
+          final turfData = doc.data() as Map<String, dynamic>;
+          final location = turfData['location']?.toString() ?? '';
+          return location.isNotEmpty;
+        }).toList();
+
+        nearbyTurfs.sort((a, b) {
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          final aDistance = _calculateDistance(aData['location'] ?? '');
+          final bDistance = _calculateDistance(bData['location'] ?? '');
+          return aDistance.compareTo(bDistance);
+        });
+
+        if (nearbyTurfs.isEmpty) {
+          return Center(
+            child: Text(
+              'No turfs with location data available',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 16,
+              ),
+            ),
+          );
+        }
+
+        return Container(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: nearbyTurfs.length,
+            itemBuilder: (context, index) {
+              final doc = nearbyTurfs[index];
+              final turfData = doc.data() as Map<String, dynamic>;
+              final priceDisplay = _getPriceDisplay(turfData['price']);
+              
+              final distance = _calculateDistance(turfData['location'] ?? '');
+              final distanceText = distance < 1000
+                  ? '${distance.toStringAsFixed(0)}m'
+                  : '${(distance / 1000).toStringAsFixed(1)}km';
+
+              return Container(
+                width: 200,
+                margin: EdgeInsets.only(right: 16),
+                child: Card(
+                  elevation: 7,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () {
+                      // Add navigation to turf details
+                    },
+                    child: Stack(
+                      children: [
+                        // Turf Image
+                        Container(
+                          height: 200,
+                          child: FirebaseImageCard(
+                            imageUrl: turfData['imageUrl'] ?? '',
+                            title: turfData['name'] ?? 'Unknown Turf',
+                            description: turfData['description'] ?? 'No description available',
+                            documentId: doc.id,
+                            docname: turfData['name'] ?? 'Unknown Turf',
+                            chips: List<String>.from(turfData['availableGrounds'] ?? []),
+                            price: priceDisplay,
+                          ),
+                        ),
+                        // Distance Badge
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              distanceText,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Price Badge
+                        Positioned(
+                          bottom: 8,
+                          left: 8,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              priceDisplay,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -164,41 +903,515 @@ class _HomePage1State extends State<HomePage1>
 
         final turfs = snapshot.data!.docs;
 
-        // Filter turfs based on search text
-        final filteredTurfs = turfs.where((doc) {
+        // Calculate min and max prices for all turfs
+        double minPrice = double.infinity;
+        double maxPrice = 0;
+        for (final doc in turfs) {
           final turfData = doc.data() as Map<String, dynamic>;
-          final turfName = turfData['name']?.toString().toLowerCase() ?? '';
-          return turfName.contains(_searchText.toLowerCase());
-        }).toList();
+          final low = _extractLowestPrice(turfData['price']);
+          final high = _extractHighestPrice(turfData['price']);
+          if (low != null && low < minPrice) minPrice = low;
+          if (high != null && high > maxPrice) maxPrice = high;
+        }
+        if (minPrice == double.infinity) minPrice = 0;
 
-        return GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          childAspectRatio: 0.72,
-          mainAxisSpacing: 21,
-          crossAxisSpacing: 20,
-          padding: EdgeInsets.all(10),
-          children: filteredTurfs.map((doc) {
-            final turfData = doc.data() as Map<String, dynamic>;
+        // Set default filter values if not set
+        _minPriceFilter ??= minPrice;
+        _maxPriceFilter ??= maxPrice;
 
-            final price = turfData['price'] is Map<String, dynamic>
-                ? turfData['price']['value'] ?? 'N/A'
-                : turfData['price'].toString();
+        return FutureBuilder<List<DocumentSnapshot>>(
+          future: _filterTurfsByLocation(turfs),
+          builder: (context, filteredSnapshot) {
+            if (!filteredSnapshot.hasData) {
+              return Center(child: CircularProgressIndicator());
+            }
+            var filteredTurfs = filteredSnapshot.data!;
 
-            return FirebaseImageCard(
-              imageUrl: turfData['imageUrl'] ?? '',
-              title: turfData['name'] ?? 'Unknown Turf',
-              description:
-                  turfData['description'] ?? 'No description available',
-              documentId: doc.id,
-              docname: turfData['name'] ?? 'Unknown Turf',
-              chips: List<String>.from(turfData['availableGrounds'] ?? []),
-              price: price,
+            // Apply price range filter
+            filteredTurfs = filteredTurfs.where((doc) {
+              final turfData = doc.data() as Map<String, dynamic>;
+              final price = _extractLowestPrice(turfData['price']);
+              if (price == null) return false;
+              return price >= (_minPriceFilter ?? minPrice) && price <= (_maxPriceFilter ?? maxPrice);
+            }).toList();
+
+            // Apply price sort order
+            if (_priceSortOrder == 'lowToHigh') {
+              filteredTurfs.sort((a, b) {
+                final aPrice = _extractLowestPrice((a.data() as Map<String, dynamic>)['price']) ?? 0;
+                final bPrice = _extractLowestPrice((b.data() as Map<String, dynamic>)['price']) ?? 0;
+                return aPrice.compareTo(bPrice);
+              });
+            } else if (_priceSortOrder == 'highToLow') {
+              filteredTurfs.sort((a, b) {
+                final aPrice = _extractLowestPrice((a.data() as Map<String, dynamic>)['price']) ?? 0;
+                final bPrice = _extractLowestPrice((b.data() as Map<String, dynamic>)['price']) ?? 0;
+                return bPrice.compareTo(aPrice);
+              });
+            }
+
+            if (filteredTurfs.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.location_off, size: 48, color: Colors.grey[400]),
+                    SizedBox(height: 16),
+                    Text(
+                      'No turfs found in selected location or price range',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Try selecting a different location or price filter.',
+                      style: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.cancel),
+                      label: Text('Clear Price Filter'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _selectedPriceBucket = 'All';
+                          _minPriceFilter = null;
+                          _maxPriceFilter = null;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            // Show only first 4 turfs initially if not showing all
+            final displayTurfs = _showAllTurfs ? filteredTurfs : filteredTurfs.take(4).toList();
+            final hasMoreTurfs = filteredTurfs.length > 4 && !_showAllTurfs;
+
+            // --- Replace the RangeSlider UI with this chip-based filter ---
+            final priceBuckets = _generatePriceBuckets(filteredTurfs);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Price Chip Filter UI
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Price Filter', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                      SizedBox(height: 8),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: priceBuckets.map((bucket) {
+                            final isSelected = _selectedPriceBucket == bucket['label'];
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: ChoiceChip(
+                                label: Text(bucket['label'], style: TextStyle(fontWeight: FontWeight.w600)),
+                                selected: isSelected,
+                                selectedColor: Colors.teal,
+                                backgroundColor: Colors.grey[200],
+                                labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.teal),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    _selectedPriceBucket = bucket['label'];
+                                    _minPriceFilter = bucket['min'] as double?;
+                                    _maxPriceFilter = bucket['max'] as double?;
+                                  });
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      if (_selectedPriceBucket != 'All')
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedPriceBucket = 'All';
+                                _minPriceFilter = null;
+                                _maxPriceFilter = null;
+                              });
+                            },
+                            child: Text('Reset', style: TextStyle(color: Colors.teal)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: NeverScrollableScrollPhysics(),
+                  childAspectRatio: 0.75,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  padding: EdgeInsets.all(10),
+                  children: displayTurfs.map((doc) {
+                    final turfData = doc.data() as Map<String, dynamic>;
+                    return _buildTurfCard(doc, turfData);
+                  }).toList(),
+                ),
+                if (hasMoreTurfs) ...[
+                  SizedBox(height: 20),
+                  Center(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _showAllTurfs = true;
+                        });
+                      },
+                      icon: Icon(Icons.grid_view),
+                      label: Text('View All ${filteredTurfs.length} Turfs'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                ],
+              ],
             );
-          }).toList(),
+          },
         );
       },
+    );
+  }
+
+  Widget _buildTurfCard(DocumentSnapshot doc, Map<String, dynamic> turfData) {
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+      child: Card(
+        elevation: 7,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            // Add navigation to turf details here
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: FirebaseImageCard(
+                  imageUrl: turfData['imageUrl'] ?? '',
+                  title: turfData['name'] ?? 'Unknown Turf',
+                  description: turfData['description'] ?? 'No description available',
+                  documentId: doc.id,
+                  docname: turfData['name'] ?? 'Unknown Turf',
+                  chips: List<String>.from(turfData['availableGrounds'] ?? []),
+                  price: turfData['price'],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Add this new method to handle unique locations
+  List<String> _getUniqueLocations() {
+    final seen = <String>{};
+    return _availableLocations.where((loc) {
+      if (loc == 'All Areas') return true;
+      final addressPart = loc.split('|')[0].trim();
+      return seen.add(addressPart); // Returns true if the address wasn't seen before
+    }).toList();
+  }
+
+  // Instead of turfAddress, use a helper to get address from coordinates
+  Future<String> _getAddressFromCoords(String coords) async {
+    try {
+      final parts = coords.split(',');
+      if (parts.length != 2) return '';
+      final lat = double.parse(parts[0]);
+      final lng = double.parse(parts[1]);
+      final placemarks = await placemarkFromCoordinates(lat, lng);
+      if (placemarks.isNotEmpty) {
+        final place = placemarks[0];
+        return (place.locality ?? '').toLowerCase();
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  Future<String> _resolveLocationName(String location) async {
+    if (_locationNameCache.containsKey(location)) {
+      return _locationNameCache[location]!;
+    }
+    // If it's already a name, return as is
+    if (!location.contains(',')) {
+      _locationNameCache[location] = location.toLowerCase();
+      return location.toLowerCase();
+    }
+    // Otherwise, geocode
+    try {
+      final parts = location.split(',');
+      if (parts.length != 2) return location.toLowerCase();
+      final lat = double.parse(parts[0]);
+      final lng = double.parse(parts[1]);
+      final placemarks = await placemarkFromCoordinates(lat, lng);
+      if (placemarks.isNotEmpty) {
+        final place = placemarks[0];
+        // Prefer locality, fallback to subAdministrativeArea, then administrativeArea
+        final name = (place.locality?.isNotEmpty == true)
+            ? place.locality!
+            : (place.subAdministrativeArea?.isNotEmpty == true)
+                ? place.subAdministrativeArea!
+                : (place.administrativeArea ?? '');
+        _locationNameCache[location] = name.toLowerCase();
+        return name.toLowerCase();
+      }
+    } catch (e) {
+      print('Geocoding error: $e');
+    }
+    _locationNameCache[location] = location.toLowerCase();
+    return location.toLowerCase();
+  }
+
+  // Add this async helper:
+  Future<List<DocumentSnapshot>> _filterTurfsByLocation(List<DocumentSnapshot> turfs) async {
+    final selectedLocationName = _selectedLocation == 'All Areas'
+        ? null
+        : _selectedLocation.split('|')[0].trim().toLowerCase();
+
+    List<DocumentSnapshot> filtered = [];
+    for (final doc in turfs) {
+      final turfData = doc.data() as Map<String, dynamic>;
+      final turfName = turfData['name']?.toString().toLowerCase() ?? '';
+      final grounds = List<String>.from(turfData['availableGrounds'] ?? []);
+      final location = turfData['location']?.toString() ?? '';
+
+      final matchesSearch = turfName.contains(_searchText.toLowerCase());
+      final matchesGround = _selectedGroundFilters.isEmpty ||
+          _selectedGroundFilters.any((g) => grounds.contains(g));
+
+      if (selectedLocationName != null) {
+        if (location.isEmpty) continue;
+        final resolvedName = await _resolveLocationName(location);
+        if (!resolvedName.contains(selectedLocationName)) continue;
+      }
+
+      if (matchesSearch && matchesGround) {
+        filtered.add(doc);
+      }
+    }
+    return filtered;
+  }
+}
+
+// 2. Add this new SupportPage widget (place it at the end of this file):
+
+class SupportPage extends StatefulWidget {
+  final User? user;
+  const SupportPage({Key? key, this.user}) : super(key: key);
+
+  @override
+  State<SupportPage> createState() => _SupportPageState();
+}
+
+class _SupportPageState extends State<SupportPage> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _subjectController = TextEditingController();
+  final TextEditingController _messageController = TextEditingController();
+  bool _isSubmitting = false;
+
+  Future<void> _submitTicket() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSubmitting = true);
+
+    try {
+      await FirebaseFirestore.instance.collection('support_tickets').add({
+        'userId': widget.user?.uid ?? '',
+        'userEmail': widget.user?.email ?? '',
+        'subject': _subjectController.text.trim(),
+        'message': _messageController.text.trim(),
+        'status': 'open',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      setState(() => _isSubmitting = false);
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          backgroundColor: Colors.green[50],
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 28),
+              SizedBox(width: 8),
+              Text('Ticket Submitted', style: TextStyle(color: Colors.green[800], fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            'Your support request has been submitted. Our team will contact you soon.',
+            style: TextStyle(color: Colors.green[900], fontWeight: FontWeight.w500),
+          ),
+          actions: [
+            TextButton(
+              child: Text('OK', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        ),
+      );
+      _subjectController.clear();
+      _messageController.clear();
+    } catch (e) {
+      setState(() => _isSubmitting = false);
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          backgroundColor: Colors.red[50],
+          title: Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.red, size: 28),
+              SizedBox(width: 8),
+              Text('Submission Failed', style: TextStyle(color: Colors.red[800], fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            'There was an error submitting your ticket. Please try again later.',
+            style: TextStyle(color: Colors.red[900], fontWeight: FontWeight.w500),
+          ),
+          actions: [
+            TextButton(
+              child: Text('OK', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Contact Support', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+        elevation: 2,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Raise a Support Ticket',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal[800]),
+              ),
+              SizedBox(height: 18),
+              TextFormField(
+                controller: _subjectController,
+                decoration: InputDecoration(
+                  labelText: 'Subject',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: Icon(Icons.subject),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                ),
+                validator: (value) => value == null || value.trim().isEmpty ? 'Please enter a subject' : null,
+              ),
+              SizedBox(height: 18),
+              TextFormField(
+                controller: _messageController,
+                decoration: InputDecoration(
+                  labelText: 'Message',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: Icon(Icons.message),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                ),
+                minLines: 4,
+                maxLines: 8,
+                validator: (value) => value == null || value.trim().isEmpty ? 'Please enter your message' : null,
+              ),
+              SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: _isSubmitting
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Icon(Icons.send),
+                  label: Text(_isSubmitting ? 'Submitting...' : 'Submit Ticket', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _isSubmitting ? null : _submitTicket,
+                ),
+              ),
+              SizedBox(height: 18),
+              Divider(),
+              SizedBox(height: 10),
+              Text(
+                'Need urgent help?',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[700]),
+              ),
+              SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.email, color: Colors.teal, size: 20),
+                  SizedBox(width: 8),
+                  SelectableText('thepunchbiz@gmail.com', style: TextStyle(color: Colors.teal[900], fontWeight: FontWeight.w500)),
+                ],
+              ),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.phone, color: Colors.teal, size: 20),
+                  SizedBox(width: 8),
+                  SelectableText('+91 94894 45922', style: TextStyle(color: Colors.teal[900], fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

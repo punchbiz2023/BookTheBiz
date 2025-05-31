@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // For date formatting
+import 'package:carousel_slider/carousel_slider.dart'; // Import for carousel
 import 'bookingpage.dart'; // Ensure this import is correct
 
 class DetailsPage extends StatefulWidget {
@@ -402,6 +403,142 @@ class _DetailsPageState extends State<DetailsPage> {
     );
   }
 
+  // Helper widget for activity/facility cards
+  Widget _buildIconCardList(String title, List<dynamic> items, Color color) {
+  final bool isActivities = title.toLowerCase().contains('activity');
+  final int crossAxisCount = isActivities ? 2 : 3;
+  final double iconRadius = isActivities ? 32 : 26;
+  final double iconSize = isActivities ? 32 : 28;
+  final double fontSize = isActivities ? 15 : 14;
+  final double cellHeight = isActivities ? 110 : 90;
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+      ),
+      SizedBox(height: 10),
+      GridView.builder(
+        shrinkWrap: true,
+        physics: NeverScrollableScrollPhysics(),
+        itemCount: items.length,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.0,
+        ),
+        itemBuilder: (context, idx) {
+          final item = items[idx];
+          return Container(
+            height: cellHeight,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: color.withOpacity(0.18), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.07),
+                  blurRadius: 8,
+                  offset: Offset(2, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircleAvatar(
+                  backgroundColor: color.withOpacity(0.13),
+                  radius: iconRadius,
+                  child: Icon(_getIconForItem(item), color: color, size: iconSize),
+                ),
+                SizedBox(height: 6),
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: Text(
+                      item,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.teal.shade700,
+                        fontWeight: FontWeight.w600,
+                        fontSize: fontSize,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+      SizedBox(height: 18),
+    ],
+  );
+}
+
+  // Widget for displaying turf images as a carousel
+  Widget _buildTurfImagesCarousel(List<dynamic> images, String spotlightImage) {
+    final allImages = [spotlightImage, ...images];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Gallery',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+        ),
+        SizedBox(height: 10),
+        CarouselSlider(
+          options: CarouselOptions(
+            height: 220,
+            enlargeCenterPage: true,
+            enableInfiniteScroll: allImages.length > 1,
+            viewportFraction: 0.8,
+            autoPlay: allImages.length > 1,
+            autoPlayInterval: Duration(seconds: 4),
+          ),
+          items: allImages.map((imgUrl) {
+            return Container(
+              margin: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10), // Sharper edges
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.13),
+                    blurRadius: 12,
+                    offset: Offset(2, 6),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10), // Sharper edges
+                child: Image.network(
+                  imgUrl,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: 220,
+                  loadingBuilder: (context, child, progress) =>
+                      progress == null
+                          ? child
+                          : Center(child: CircularProgressIndicator()),
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.grey[300],
+                    child: Icon(Icons.broken_image, color: Colors.grey[600], size: 60),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        SizedBox(height: 18),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -421,37 +558,55 @@ class _DetailsPageState extends State<DetailsPage> {
 
           if (snapshot.hasData && snapshot.data != null) {
             String imageUrl = snapshot.data!['imageUrl'] ?? '';
+            List<dynamic> turfImages = snapshot.data!['turfimages'] ?? [];
             List<dynamic> availableGrounds = snapshot.data!['availableGrounds'] ?? [];
             List<dynamic> facilities = snapshot.data!['facilities'] ?? [];
-            bool isosp = snapshot.data!['isosp'] ?? false; // Fetch isosp
+            bool isosp = snapshot.data!['isosp'] ?? false;
             String status = snapshot.data!['status'] ?? 'Opened';
 
             return CustomScrollView(
               slivers: [
                 SliverAppBar(
-                  expandedHeight: 250,
+                  expandedHeight: 260,
                   pinned: true,
                   flexibleSpace: FlexibleSpaceBar(
-                    title: Text(widget.documentname, style: TextStyle(color: Colors.white, fontSize: 20)),
+                    title: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.45),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        widget.documentname,
+                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     background: Stack(
                       fit: StackFit.expand,
                       children: [
                         imageUrl.isNotEmpty
-                            ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          color: Colors.black.withOpacity(0.5),
-                          colorBlendMode: BlendMode.darken,
-                        )
+                            ? Transform(
+                                alignment: Alignment.center,
+                                transform: Matrix4.rotationX(3.14159), // 180 degrees in radians
+                                child: Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.cover,
+                                  color: Colors.black.withOpacity(0.45),
+                                  colorBlendMode: BlendMode.darken,
+                                  alignment: Alignment.center,
+                                  filterQuality: FilterQuality.high,
+                                ),
+                              )
                             : Container(
-                          color: Colors.grey[700],
-                          child: Center(
-                            child: Text(
-                              'Image not available',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
+                                color: Colors.grey[700],
+                                child: Center(
+                                  child: Text(
+                                    'Image not available',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                              ),
                         Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
@@ -472,10 +627,14 @@ class _DetailsPageState extends State<DetailsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildChipList('Available Grounds', availableGrounds, Colors.blueAccent, Colors.white),
-                          _buildChipList('Facilities', facilities, Colors.green, Colors.white),
+                          // Show carousel if turfImages exist
+                          if (turfImages.isNotEmpty)
+                            _buildTurfImagesCarousel(turfImages, imageUrl),
+                          // Activities and Facilities as icon cards
+                          _buildIconCardList('Available Activities', availableGrounds, Colors.blue),
+                          _buildIconCardList('Facilities', facilities, Colors.green),
                           SizedBox(height: 20),
-                          _buildOnSpotPaymentStatus(isosp), // Display on-spot payment status
+                          _buildOnSpotPaymentStatus(isosp),
                           SizedBox(height: 20),
                           SizedBox(
                             width: double.infinity,

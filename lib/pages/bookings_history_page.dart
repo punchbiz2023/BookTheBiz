@@ -32,37 +32,6 @@ class _BookingsPageState extends State<BookingsPage>
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'My Bookings',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.blue,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: Colors.blue,
-          tabs: const [
-            Tab(text: 'Upcoming'),
-            Tab(text: 'Past'),
-            Tab(text: 'Cancelled'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildBookingsSection('upcoming'),
-          _buildBookingsSection('past'),
-          _buildBookingsSection('cancelled'),
-        ],
-      ),
-    );
-  }
-
   Stream<List<DocumentSnapshot>> _fetchBookings() {
     return FirebaseFirestore.instance
         .collection('bookings')
@@ -71,22 +40,119 @@ class _BookingsPageState extends State<BookingsPage>
         .map((snapshot) => snapshot.docs);
   }
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(110),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.teal.shade700, Colors.teal.shade300],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.teal.withOpacity(0.18),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.history, color: Colors.white, size: 28),
+                      SizedBox(width: 10),
+                      Text(
+                        'My Bookings',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 24,
+                          letterSpacing: 1.1,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black26,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TabBar(
+                  controller: _tabController,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white70,
+                  indicatorColor: Colors.white, // Underline color
+                  indicatorWeight: 3.5,         // Underline thickness
+                  labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  tabs: const [
+                    Tab(text: 'Upcoming'),
+                    Tab(text: 'Past'),
+                    Tab(text: 'Cancelled'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      backgroundColor: Colors.grey[100],
+      body: AnimatedSwitcher(
+        duration: Duration(milliseconds: 350),
+        child: TabBarView(
+          controller: _tabController,
+          physics: BouncingScrollPhysics(),
+          children: [
+            _buildBookingsSection('upcoming'),
+            _buildBookingsSection('past'),
+            _buildBookingsSection('cancelled'),
+          ],
+        ),
+      ),
+      floatingActionButton: selectionMode
+          ? FloatingActionButton.extended(
+              backgroundColor: Colors.red.shade600,
+              icon: Icon(Icons.delete),
+              label: Text('Delete (${selectedBookings.length})'),
+              onPressed: _deleteSelectedBookings,
+            )
+          : null,
+    );
+  }
+
   Widget _buildBookingsSection(String state) {
     return StreamBuilder<List<DocumentSnapshot>>(
       stream: _fetchBookings(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return const Center(child: Text('Error fetching bookings'));
-        }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Center(
-            child: Image.asset(
-              "lib/assets/static/undraw_empty_4zx0.png",
+            child: AnimatedSwitcher(
+              duration: Duration(milliseconds: 300),
+              child: CircularProgressIndicator(
+                color: Colors.teal,
+                strokeWidth: 3,
+              ),
             ),
           );
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text('Error fetching bookings',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return _buildEmptyState();
         }
 
         var bookings = snapshot.data!;
@@ -101,7 +167,8 @@ class _BookingsPageState extends State<BookingsPage>
               DateTime.tryParse(bookingData['bookingDate'] ?? '') ??
                   DateTime.now();
           return bookingDate.isAfter(DateTime.now()) &&
-              (bookingData['bookingSlots']?.isNotEmpty ?? false);
+              (bookingData['bookingSlots']?.isNotEmpty ?? false) &&
+              (bookingData['status'] != 'cancelled');
         }).toList();
 
         var pastBookings = filteredBookings.where((booking) {
@@ -110,7 +177,8 @@ class _BookingsPageState extends State<BookingsPage>
               DateTime.tryParse(bookingData['bookingDate'] ?? '') ??
                   DateTime.now();
           return bookingDate.isBefore(DateTime.now()) &&
-              (bookingData['bookingSlots']?.isNotEmpty ?? false);
+              (bookingData['bookingSlots']?.isNotEmpty ?? false) &&
+              (bookingData['status'] != 'cancelled');
         }).toList();
 
         var cancelledBookings = filteredBookings.where((booking) {
@@ -129,158 +197,160 @@ class _BookingsPageState extends State<BookingsPage>
         }
 
         if (displayBookings.isEmpty) {
-          return Center(
-            child: SvgPicture.asset(
-              'assets/static/undraw_empty_4zx0.svg', // Ensure this path is correct
-              width: 200,
-              height: 200,
-            ),
-          );
+          return _buildEmptyState();
         }
 
-        return ListView.builder(
+        return ListView.separated(
           itemCount: displayBookings.length,
-          padding:
-              const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 80),
+          padding: const EdgeInsets.only(top: 18, left: 12, right: 12, bottom: 80),
+          separatorBuilder: (context, index) => SizedBox(height: 14),
           itemBuilder: (context, index) {
             var bookingData =
                 displayBookings[index].data() as Map<String, dynamic>;
             bookingData['bookID'] = displayBookings[index].id;
 
-            return GestureDetector(
-              onLongPress: () => _enableSelectionMode(bookingData, state),
-              child: Card(
-                elevation: 2,
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              bookingData['turfName'] ?? 'No Turf Name',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          StatusBadge(
-                              status: bookingData['status'] ?? 'Confirmed'),
-                        ],
+            return Hero(
+              tag: 'booking_${bookingData['bookID']}',
+              child: GestureDetector(
+                onLongPress: () => _enableSelectionMode(bookingData, state),
+                child: AnimatedContainer(
+                  duration: Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  decoration: BoxDecoration(
+                    color: selectionMode && selectedBookings.any((b) => b['bookID'] == bookingData['bookID'])
+                        ? Colors.teal.shade50
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.teal.withOpacity(0.07),
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.calendar_today,
-                                  size: 12,
-                                  color: Colors.grey,
+                    ],
+                    border: Border.all(
+                      color: selectionMode && selectedBookings.any((b) => b['bookID'] == bookingData['bookID'])
+                          ? Colors.teal
+                          : Colors.transparent,
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                bookingData['turfName'] ?? 'No Turf Name',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Colors.teal,
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  bookingData['bookingDate'] ??
-                                      'No Booking Date',
-                                  style: const TextStyle(
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            StatusBadge(
+                                status: bookingData['status'] ?? 'Confirmed'),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                            const SizedBox(width: 6),
+                            Text(
+                              bookingData['bookingDate'] ?? 'No Booking Date',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Provider',
+                                  style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey,
                                   ),
                                 ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  bookingData['provider'] ?? 'No Provider',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const Divider(
-                          height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Provider',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text(
+                                  'Price',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                bookingData['provider'] ?? 'No Provider',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
+                                const SizedBox(height: 2),
+                                Text(
+                                  bookingData['price'] ?? 'No Price',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              const Text(
-                                'Price',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                bookingData['price'] ?? 'No Price',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => BookingDetailsPage1(
-                                bookingData: bookingData,
-                              ),
+                              ],
                             ),
-                          );
-                        },
-                        icon: const Icon(Icons.info_outline, size: 14),
-                        label: const Text('Details'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.blue,
-                          minimumSize: const Size(double.infinity, 32),
-                          textStyle: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          side: const BorderSide(color: Color(0xFFDCECFD)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => BookingDetailsPage1(
+                                  bookingData: bookingData,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.info_outline, size: 16),
+                          label: const Text('Details'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.teal.shade700,
+                            minimumSize: const Size(double.infinity, 36),
+                            textStyle: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            side: const BorderSide(color: Color(0xFFDCECFD)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -288,6 +358,45 @@ class _BookingsPageState extends State<BookingsPage>
           },
         );
       },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: AnimatedSwitcher(
+        duration: Duration(milliseconds: 350),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: SvgPicture.asset(
+                'assets/static/undraw_empty_4zx0.svg',
+                width: 180,
+                height: 180,
+                fit: BoxFit.contain,
+              ),
+            ),
+            SizedBox(height: 24),
+            Text(
+              'No bookings found',
+              style: TextStyle(
+                color: Colors.teal.shade700,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'You have no bookings in this category.',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 15,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -384,14 +493,14 @@ class StatusBadge extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: color),
+        Icon(icon, size: 13, color: color),
         const SizedBox(width: 4),
         Text(
           label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             color: color,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],

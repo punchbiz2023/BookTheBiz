@@ -273,18 +273,23 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
 
 // Custom Button for Open/Close
   Widget _statusButton(BuildContext context, String status, Color color) {
-    return ElevatedButton(
-      onPressed: () => _updateTurfStatus(context, status),
-      child: Text(status),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-        textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+  return ElevatedButton(
+    onPressed: () => _updateTurfStatus(context, status),
+    style: ElevatedButton.styleFrom(
+      backgroundColor: color,
+      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+      textStyle: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
       ),
-    );
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+      ),
+      foregroundColor: Colors.white, // Correct way to set text color in Material 3
+    ),
+    child: Text(status),
+  );
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(

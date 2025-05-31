@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:geolocator/geolocator.dart';
+import 'package:reorderables/reorderables.dart';
 
 class EditTurfPage extends StatefulWidget {
   final String turfId;
@@ -17,10 +19,15 @@ class _EditTurfPageState extends State<EditTurfPage> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
+  final _locationController = TextEditingController();
   String? _imageUrl;
   File? _newImageFile;
+  List<String> _turfImages = [];
+  List<File> _newImageFiles = [];
   bool _isosp = false;
   bool _isPriceMap = false;
+  bool _isGettingLocation = false;
+  bool _hasMultipleImages = false;
   Map<String, int> _price = {};
   Map<String, TextEditingController> _priceControllers = {};
   List<String> facilities = [
@@ -80,14 +87,13 @@ class _EditTurfPageState extends State<EditTurfPage> {
   Future<void> _loadTurfDetails() async {
     try {
       var doc = await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).get();
-      if (!doc.exists) {
-        return;
-      }
+      if (!doc.exists) return;
       var turfData = doc.data() as Map<String, dynamic>;
 
       setState(() {
         _nameController.text = turfData['name'] ?? '';
         _descriptionController.text = turfData['description'] ?? '';
+        _locationController.text = turfData['location'] ?? '';
 
         var priceData = turfData['price'];
         if (priceData is num) {
@@ -105,6 +111,8 @@ class _EditTurfPageState extends State<EditTurfPage> {
         }
 
         _imageUrl = turfData['imageUrl'] ?? '';
+        _turfImages = turfData['turfimages'] != null ? List<String>.from(turfData['turfimages']) : [];
+        _hasMultipleImages = turfData.containsKey('turfimages');
         _isosp = turfData['isosp'] ?? false;
         selectedFacilities = turfData['facilities'] != null ? Set<String>.from(turfData['facilities']) : {};
         selectedGrounds = turfData['availableGrounds'] != null ? Set<String>.from(turfData['availableGrounds']) : {};
@@ -132,9 +140,6 @@ class _EditTurfPageState extends State<EditTurfPage> {
     }
   }
 
-
-
-
   Future<void> _pickImage() async {
     final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
@@ -144,20 +149,53 @@ class _EditTurfPageState extends State<EditTurfPage> {
     }
   }
 
+  Future<void> _pickImages() async {
+    final pickedImages = await ImagePicker().pickMultiImage();
+    if (pickedImages != null && pickedImages.isNotEmpty) {
+      setState(() {
+        _newImageFiles.addAll(pickedImages.map((x) => File(x.path)));
+      });
+    }
+  }
+
+  Future<List<String>> _uploadImages(List<File> images) async {
+    List<String> urls = [];
+    for (int i = 0; i < images.length; i++) {
+      final image = images[i];
+      try {
+        Reference storageRef = FirebaseStorage.instance
+            .ref()
+            .child('turf_images/${widget.turfId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
+        UploadTask uploadTask = storageRef.putFile(image);
+        TaskSnapshot snapshot = await uploadTask;
+        String url = await snapshot.ref.getDownloadURL();
+        urls.add(url);
+      } catch (e) {
+        throw Exception('Failed to upload image: $e');
+      }
+    }
+    return urls;
+  }
+
   Future<void> _saveTurfDetails() async {
     try {
-      String? newImageUrl;
+      String? newImageUrl = _imageUrl;
+      List<String> newTurfImages = List.from(_turfImages);
 
-      // Upload new image if changed
-      if (_newImageFile != null) {
-        if (_imageUrl != null) {
-          var oldImageRef = FirebaseStorage.instance.refFromURL(_imageUrl!);
-          await oldImageRef.delete();
-        }
+      // Upload new images if any
+      if (_newImageFiles.isNotEmpty) {
+        List<String> uploadedUrls = await _uploadImages(_newImageFiles);
+        newTurfImages.addAll(uploadedUrls);
+        _newImageFiles.clear();
+      }
 
-        var storageRef = FirebaseStorage.instance.ref().child('turfs/${widget.turfId}/image.jpg');
-        await storageRef.putFile(_newImageFile!);
-        newImageUrl = await storageRef.getDownloadURL();
+      // The first image is always the spotlight image
+      if (_hasMultipleImages && (newTurfImages.isNotEmpty || newImageUrl != null)) {
+        List<String> allUrls = [];
+        if (newImageUrl != null && newImageUrl.isNotEmpty) allUrls.add(newImageUrl);
+        allUrls.addAll(newTurfImages);
+        newImageUrl = allUrls.first;
+        newTurfImages = allUrls.length > 1 ? allUrls.sublist(1) : [];
       }
 
       // Save price as either a single number or a map of ground prices
@@ -184,31 +222,730 @@ class _EditTurfPageState extends State<EditTurfPage> {
         'availableGrounds': selectedGrounds.toList(),
         'isosp': _isosp,
         if (newImageUrl != null) 'imageUrl': newImageUrl,
+        if (_hasMultipleImages) 'turfimages': newTurfImages,
         if (allSelectedSlots.isNotEmpty) 'selectedSlots': allSelectedSlots, // ✅ Only update if not empty
       };
 
       await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update(updateData);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Turf details updated successfully!')),
+      // Show success dialog instead of snackbar
+      await showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: Colors.green,
+                    size: 40,
+                  ),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  'Success!',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Turf details have been updated successfully.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Close dialog
+                    Navigator.pop(context); // Return to previous screen
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
-
-      Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving details: $e')),
+      // Show error dialog instead of snackbar
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 40,
+                  ),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  'Error',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Failed to save turf details. Please try again.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
   }
 
+  Future<void> _showLocationPickerDialog() async {
+    final TextEditingController manualLocationController = TextEditingController();
+    bool isGettingLocation = false;
 
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Set Turf Location'),
+          content: Container(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: Icon(Icons.my_location, color: Colors.teal),
+                  title: Text('Use Current Location'),
+                  subtitle: Text('Get precise location using GPS'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _updateLocation(useCurrentLocation: true);
+                  },
+                ),
+                Divider(),
+                Text(
+                  'Enter Location Details',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                SizedBox(height: 12),
+                TextField(
+                  controller: manualLocationController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Enter complete address (e.g., Street, Area, City, State)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    prefixIcon: Icon(Icons.location_on, color: Colors.teal),
+                    helperText: 'Please provide a detailed address for better visibility',
+                    helperStyle: TextStyle(color: Colors.grey[600]),
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Tip: A detailed address helps users find your turf easily',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (manualLocationController.text.isNotEmpty) {
+                  await _updateLocation(locationText: manualLocationController.text);
+                  Navigator.pop(context);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Please enter a location'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Save Location'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
+  Future<void> _updateLocation({bool useCurrentLocation = false, String? locationText}) async {
+    try {
+      if (useCurrentLocation) {
+        // Check location permission first
+        LocationPermission permission = await Geolocator.checkPermission();
+        
+        if (permission == LocationPermission.denied) {
+          // Request permission
+          permission = await Geolocator.requestPermission();
+          if (permission == LocationPermission.denied) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Location permission is required to get current location'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+            return;
+          }
+        }
+
+        if (permission == LocationPermission.deniedForever) {
+          // Show dialog to open settings
+          bool? shouldOpenSettings = await showDialog<bool>(
+            context: context,
+            builder: (context) => Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Container(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.location_off,
+                        color: Colors.orange,
+                        size: 40,
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Text(
+                      'Location Access Required',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange,
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Location permission is permanently denied. Please enable it in settings to get current location.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            'Open Settings',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+          if (shouldOpenSettings == true) {
+            await Geolocator.openAppSettings();
+          }
+          return;
+        }
+
+        // Check if location services are enabled
+        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) {
+          showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Container(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.location_disabled,
+                        color: Colors.orange,
+                        size: 40,
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Text(
+                      'Location Services Disabled',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange,
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Please enable location services to get current location.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'OK',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+          return;
+        }
+
+        setState(() {
+          _isGettingLocation = true;
+        });
+
+        // Get current position
+        Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+        locationText = '${position.latitude}, ${position.longitude}';
+      }
+
+      if (locationText != null) {
+        await FirebaseFirestore.instance
+            .collection('turfs')
+            .doc(widget.turfId)
+            .update({
+          'location': locationText,
+          'hasLocation': true,
+        });
+
+        setState(() {
+          _locationController.text = locationText!;
+        });
+
+        // Show success dialog
+        await showDialog(
+          context: context,
+          builder: (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Container(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 40,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  Text(
+                    'Location Updated',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    'Your turf location has been successfully updated.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'OK',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating location: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isGettingLocation = false;
+      });
+    }
+  }
+
+  Widget _buildImageEditSection() {
+    List<dynamic> allImages = [];
+    if (_imageUrl != null && _imageUrl!.isNotEmpty) allImages.add(_imageUrl!);
+    allImages.addAll(_turfImages);
+    allImages.addAll(_newImageFiles);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Turf Images',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.teal.shade700,
+            fontSize: 16,
+          ),
+        ),
+        SizedBox(height: 8),
+        if (allImages.isNotEmpty)
+          Column(
+            children: [
+              // Spotlight image (first image, shown big)
+              Container(
+                width: double.infinity,
+                height: 180,
+                margin: EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.amber, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.teal.shade900.withOpacity(0.15),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                      offset: Offset(2, 4),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(15),
+                  child: allImages.first is String
+                      ? Image.network(
+                          allImages.first,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: 180,
+                        )
+                      : Image.file(
+                          allImages.first,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: 180,
+                        ),
+                ),
+              ),
+              // All images as reorderable thumbnails (including the spotlight image)
+              ReorderableWrap(
+                spacing: 10,
+                runSpacing: 10,
+                needsLongPressDraggable: true,
+                onReorder: (oldIndex, newIndex) {
+                  setState(() {
+                    final img = allImages.removeAt(oldIndex);
+                    allImages.insert(newIndex, img);
+
+                    // Update _imageUrl, _turfImages, _newImageFiles
+                    _imageUrl = allImages.first is String && (allImages.first as String).startsWith('http')
+                        ? allImages.first
+                        : null;
+                    _turfImages = allImages
+                        .skip(1)
+                        .whereType<String>()
+                        .where((e) => e.startsWith('http'))
+                        .toList();
+                    _newImageFiles = allImages
+                        .skip(1)
+                        .where((e) => e is File)
+                        .cast<File>()
+                        .toList();
+                  });
+                },
+                children: [
+                  ...allImages.asMap().entries.map((entry) {
+                    int idx = entry.key;
+                    var img = entry.value;
+                    return Stack(
+                      key: ValueKey(img is String ? img : img.path),
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: img is String
+                              ? Image.network(
+                                  img,
+                                  fit: BoxFit.cover,
+                                  width: 80,
+                                  height: 80,
+                                )
+                              : Image.file(
+                                  img,
+                                  fit: BoxFit.cover,
+                                  width: 80,
+                                  height: 80,
+                                ),
+                        ),
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (img is String && idx == 0) {
+                                  // Don't allow removing spotlight image
+                                } else if (img is String) {
+                                  _turfImages.remove(img);
+                                } else if (img is File) {
+                                  _newImageFiles.remove(img);
+                                }
+                              });
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.close, color: Colors.white, size: 18),
+                            ),
+                          ),
+                        ),
+                        // Drag handle
+                        Positioned(
+                          bottom: 4,
+                          left: 4,
+                          child: Icon(Icons.drag_handle, color: Colors.teal.shade700, size: 18),
+                        ),
+                      ],
+                    );
+                  }),
+                  // Add image button at the end
+                  GestureDetector(
+                    onTap: _pickImages,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal.shade300, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.teal.shade900.withOpacity(0.1),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                            offset: Offset(2, 4),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Icon(Icons.add_a_photo, size: 28, color: Colors.teal.shade700),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          )
+        else
+          // If no images, show only the add button
+          GestureDetector(
+            onTap: _pickImages,
+            child: Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.teal.shade300, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.teal.shade900.withOpacity(0.2),
+                    blurRadius: 10,
+                    spreadRadius: 2,
+                    offset: Offset(2, 4),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(Icons.add_a_photo, size: 36, color: Colors.teal.shade700),
+              ),
+            ),
+          ),
+        SizedBox(height: 8),
+        Text(
+          'Drag and drop to reorder images. The first image is the spotlight image.',
+          style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Edit Turf Details'),
+        title: Text('Edit Turf Details',style: TextStyle(color:Colors.white)),
         backgroundColor: Colors.teal,
         actions: [
           IconButton(
@@ -222,37 +959,38 @@ class _EditTurfPageState extends State<EditTurfPage> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              GestureDetector(
-                onTap: _pickImage,
-                child: _newImageFile != null
-                    ? Image.file(
-                  _newImageFile!,
-                  height: 250,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                )
-
-                    : _imageUrl != null
-                    ? Image.network(
-                  _imageUrl!,
-                  height: 250,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                )
-                    : Container(
-                  height: 250,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.add_a_photo,
-                    size: 50,
-                    color: Colors.grey[700],
-                  ),
-                ),
-              ),
+              _hasMultipleImages
+                  ? _buildImageEditSection()
+                  : GestureDetector(
+                      onTap: _pickImage,
+                      child: _newImageFile != null
+                          ? Image.file(
+                              _newImageFile!,
+                              height: 250,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            )
+                          : _imageUrl != null
+                              ? Image.network(
+                                  _imageUrl!,
+                                  height: 250,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  height: 250,
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[300],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    Icons.add_a_photo,
+                                    size: 50,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                    ),
               SizedBox(height: 16),
               _buildTextField(_nameController, 'Turf Name'),
               SizedBox(height: 16),
@@ -269,13 +1007,77 @@ class _EditTurfPageState extends State<EditTurfPage> {
               _buildSlotChips(),
               SizedBox(height: 16),
               SizedBox(height: 16),
-              _buildIsospSwitch(), // Add the Switch for isosp
+              _buildIsospSwitch(),
+              SizedBox(height: 16),
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      spreadRadius: 1,
+                      blurRadius: 10,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Location',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal.shade700,
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _locationController,
+                            maxLines: 2,
+                            decoration: InputDecoration(
+                              hintText: 'Enter location',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              prefixIcon: Icon(Icons.location_on, color: Colors.teal),
+                            ),
+                            readOnly: true,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        IconButton(
+                          onPressed: _isGettingLocation ? null : _showLocationPickerDialog,
+                          icon: _isGettingLocation
+                              ? SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                                  ),
+                                )
+                              : Icon(Icons.edit_location, color: Colors.teal.shade700),
+                          tooltip: 'Edit Location',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
   Widget _buildDropdown() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -585,52 +1387,184 @@ class _EditTurfPageState extends State<EditTurfPage> {
     );
   }
 
-
-// Retrieve price for a ground
   int? _getGroundPrice(String ground) {
     return _price[ground];
   }
 
-// Show a dialog for entering a new price
   Future<int?> _showPriceDialog(String ground) async {
     TextEditingController priceController = TextEditingController();
 
     return await showDialog<int>(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Enter Price for $ground'),
-          content: TextField(
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.attach_money,
+                    color: Colors.teal,
+                    size: 40,
+                  ),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  'Set Price',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Enter price for $ground',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 20),
+                TextField(
             controller: priceController,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(hintText: 'Enter price'),
+                  decoration: InputDecoration(
+                    hintText: 'Enter amount',
+                    prefixIcon: Icon(Icons.currency_rupee, color: Colors.teal),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
           ),
-          actions: [
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.teal, width: 2),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
             TextButton(
               onPressed: () => Navigator.pop(context, null),
-              child: Text('Cancel'),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 16,
+                        ),
+                      ),
             ),
-            TextButton(
+                    SizedBox(width: 10),
+                    ElevatedButton(
               onPressed: () {
                 int? price = int.tryParse(priceController.text);
                 if (price != null && price > 0) {
                   Navigator.pop(context, price);
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Please enter a valid price')),
+                          showDialog(
+                            context: context,
+                            builder: (context) => Dialog(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Container(
+                                padding: EdgeInsets.all(20),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: EdgeInsets.all(15),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.shade50,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Colors.orange,
+                                        size: 40,
+                                      ),
+                                    ),
+                                    SizedBox(height: 20),
+                                    Text(
+                                      'Invalid Price',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                    SizedBox(height: 10),
+                                    Text(
+                                      'Please enter a valid price greater than 0',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    SizedBox(height: 20),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange,
+                                        foregroundColor: Colors.white,
+                                        padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'OK',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                   );
                 }
               },
-              child: Text('OK'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Save',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
             ),
           ],
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
   }
-
-
-
 
   Widget _buildIsospSwitch() {
     return Row(

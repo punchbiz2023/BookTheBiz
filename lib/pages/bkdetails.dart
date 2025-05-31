@@ -18,7 +18,7 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Booking Details', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text('Booking Details', style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold)),
         centerTitle: true,
         elevation: 4,
         backgroundColor: Colors.teal,

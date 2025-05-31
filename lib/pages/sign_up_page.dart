@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:odp/pages/login.dart'; // Import your login page
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SignupPage extends StatefulWidget {
   @override
@@ -18,8 +19,11 @@ class _SignupPageState extends State<SignupPage> {
   final TextEditingController _passwordController= TextEditingController();
   final TextEditingController _mobileController  = TextEditingController();
 
+  final Future<SharedPreferences> _prefs = SharedPreferences.getInstance();
+
   bool _loading = false;
   String _userType = 'User';
+  String? _errorMessage; // <-- Add this line
 
   @override
   void dispose() {
@@ -30,8 +34,17 @@ class _SignupPageState extends State<SignupPage> {
     super.dispose();
   }
 
+  Future<void> _saveCredentials(String email, String password) async {
+    final prefs = await _prefs;
+    await prefs.setString('savedEmail', email);
+    await prefs.setString('savedPassword', password);
+  }
+
   Future<void> _signup() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
 
     try {
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
@@ -44,26 +57,107 @@ class _SignupPageState extends State<SignupPage> {
 
       // Save user data in Firestore
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name'     : _nameController.text.trim(),
-        'email'    : _emailController.text.trim(),
-        'mobile'   : _mobileController.text.trim(),
-        'userType' : _userType,
+        'name': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'mobile': _mobileController.text.trim(),
+        'userType': _userType,
       });
 
       Fluttertoast.showToast(
         msg: 'Verification email sent. Please check your inbox.',
       );
 
+      // Ask to save credentials
+      if (!mounted) return;
+      final shouldSave = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Row(
+            children: [
+              Icon(Icons.save_outlined, color: Colors.teal.shade800),
+              SizedBox(width: 8),
+              Text('Save Login Details?'),
+            ],
+          ),
+          content: Text(
+            'Would you like to save your email and password for faster login next time?',
+            style: TextStyle(fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(
+                'Not Now',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade600,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text('Save', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ) ?? false;
+
+      if (shouldSave) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('savedEmail', _emailController.text.trim());
+        await prefs.setString('savedPassword', _passwordController.text.trim());
+        Fluttertoast.showToast(
+          msg: 'Login details saved successfully',
+          backgroundColor: Colors.teal.shade800,
+        );
+      }
+
       _nameController.clear();
       _emailController.clear();
       _passwordController.clear();
       _mobileController.clear();
 
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        _showErrorDialog('This email is already registered.');
+      } else if (e.code == 'invalid-email') {
+        _showErrorDialog('Invalid email format.');
+      } else if (e.code == 'weak-password') {
+        _showErrorDialog('Password is too weak.');
+      } else {
+        _showErrorDialog('Signup Failed: ${e.message}');
+      }
     } catch (e) {
-      Fluttertoast.showToast(msg: 'Signup Failed: ${e.toString()}');
+      _showErrorDialog('Signup Failed: ${e.toString()}');
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Registration Error'),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK', style: TextStyle(color: Colors.teal.shade800)),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildTextField({
@@ -178,6 +272,19 @@ class _SignupPageState extends State<SignupPage> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
+
+            if (_errorMessage != null) // <-- Show error message if present
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
 
             _buildUserTypeSelector(),
             const SizedBox(height: 20),

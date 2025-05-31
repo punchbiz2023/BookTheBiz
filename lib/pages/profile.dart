@@ -217,21 +217,36 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 16),
                         _isEditing
-                            ? TextField(
-                                controller: _nameController,
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                decoration: const InputDecoration(
-                                  hintText: 'Username',
-                                  hintStyle: TextStyle(color: Colors.white),
-                                  border: InputBorder.none,
+                            ? Container(
+                                width: double.infinity,
+                                alignment: Alignment.center,
+                                child: TextField(
+                                  controller: _nameController,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Username',
+                                    hintStyle: TextStyle(color: Colors.white),
+                                    border: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.white),
+                                    ),
+                                    enabledBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.white),
+                                    ),
+                                    focusedBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.white),
+                                    ),
+                                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+                                  ),
                                 ),
                               )
                             : Text(
                                 _userData?['name'] ?? 'Username',
+                                textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   fontSize: 22,
                                   color: Colors.white,
@@ -303,7 +318,15 @@ class _ProfilePageState extends State<ProfilePage> {
                                   fontSize: 16,
                                 ),
                                 decoration: const InputDecoration(
-                                  border: InputBorder.none,
+                                  border: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                  enabledBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
                                 ),
                               )
                             : Text(
@@ -350,7 +373,15 @@ class _ProfilePageState extends State<ProfilePage> {
                                   fontSize: 16,
                                 ),
                                 decoration: const InputDecoration(
-                                  border: InputBorder.none,
+                                  border: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                  enabledBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
                                 ),
                               )
                             : Text(

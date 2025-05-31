@@ -7,12 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:318475418724:android:039d0027a7b487e80df371",
+        "mobilesdk_app_id": "1:318475418724:android:140db5c11053e8fc0df371",
         "android_client_info": {
-          "package_name": "com.example.odp"
+          "package_name": "com.PunchBiz.odp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "318475418724-72b2squ5p2obc0pp6d5pcmprsfobs4pb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCuqbDzmM2hdCCHpGpZ6FXuw55I5WKpgDA"
@@ -20,7 +25,55 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "318475418724-72b2squ5p2obc0pp6d5pcmprsfobs4pb.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "318475418724-61r3dmmbsbhrl315vsgsu8cj0dqq5ksv.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.odp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:318475418724:android:039d0027a7b487e80df371",
+        "android_client_info": {
+          "package_name": "com.example.odp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "318475418724-72b2squ5p2obc0pp6d5pcmprsfobs4pb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuqbDzmM2hdCCHpGpZ6FXuw55I5WKpgDA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "318475418724-72b2squ5p2obc0pp6d5pcmprsfobs4pb.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "318475418724-61r3dmmbsbhrl315vsgsu8cj0dqq5ksv.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.odp"
+              }
+            }
+          ]
         }
       }
     }

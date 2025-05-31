@@ -8,7 +8,7 @@ class FirebaseImageCard extends StatelessWidget {
   final String documentId;
   final String docname;
   final List<String> chips;
-  final String price;
+  final dynamic price;
 
   const FirebaseImageCard({
     Key? key,
@@ -20,6 +20,31 @@ class FirebaseImageCard extends StatelessWidget {
     required this.chips,
     required this.price,
   }) : super(key: key);
+
+  String _getPriceDisplay(dynamic price) {
+    if (price is Map<String, dynamic>) {
+      // Find the lowest price from the map
+      double? lowestPrice;
+      price.forEach((key, value) {
+        if (value is num) {
+          if (lowestPrice == null || value < lowestPrice!) {
+            lowestPrice = value.toDouble();
+          }
+        }
+      });
+      return lowestPrice != null ? '₹${lowestPrice?.toStringAsFixed(0)}/hr' : 'N/A';
+    } else if (price is num) {
+      return '₹${price.toStringAsFixed(0)}/hr';
+    } else if (price is String) {
+      try {
+        final numPrice = double.parse(price);
+        return '₹${numPrice.toStringAsFixed(0)}/hr';
+      } catch (e) {
+        return 'N/A';
+      }
+    }
+    return 'N/A';
+  }
 
   void _navigateToDetails(BuildContext context) {
     Navigator.push(
@@ -87,7 +112,7 @@ class FirebaseImageCard extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    price,
+                    _getPriceDisplay(price),
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,

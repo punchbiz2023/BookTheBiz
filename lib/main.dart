@@ -8,6 +8,7 @@ import 'package:odp/pages/Turf%20owner/Main%20Func/owner_home.dart';
 import 'package:odp/pages/admincontroller.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/login.dart';
+import 'package:odp/pages/view_turfs_guest.dart';
 // Make sure to import or define SignupPage() in your project.
 import 'package:odp/pages/sign_up_page.dart';
 import 'firebase_options.dart';
@@ -33,10 +34,16 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'BookTheBiz',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
+      routes: {
+        '/login': (context) => LoginApp(),
+        '/guest': (context) => ViewTurfsGuestPage(),
+        // ...other routes...
+      },
       home: SplashScreen(), // Start with splash screen
     );
   }
@@ -47,131 +54,115 @@ class SplashScreen extends StatefulWidget {
   _SplashScreenState createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _iconController;
-  late Animation<double> _iconAnimation;
-  late AnimationController _textController;
-  late Animation<double> _textFadeAnimation;
-  late AnimationController _subtitleController;
-  late Animation<double> _subtitleFadeAnimation;
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-
-    // Icon Animation: scales in with an easeOutBack effect
-    _iconController = AnimationController(
+    _controller = AnimationController(
+      duration: const Duration(seconds: 2),
       vsync: this,
-      duration: Duration(seconds: 2),
     );
-    _iconAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _iconController, curve: Curves.easeOutBack),
+    _animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
     );
-    _iconController.forward();
+    _initializeApp();
+  }
 
-    // Title fade-in Animation (staggered by 500ms)
-    _textController = AnimationController(
-      vsync: this,
-      duration: Duration(seconds: 2),
-    );
-    _textFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _textController, curve: Curves.easeIn),
-    );
-    Future.delayed(Duration(milliseconds: 500), () {
-      _textController.forward();
-    });
-
-    // Subtitle fade-in Animation (staggered by 1000ms)
-    _subtitleController = AnimationController(
-      vsync: this,
-      duration: Duration(seconds: 2),
-    );
-    _subtitleFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _subtitleController, curve: Curves.easeIn),
-    );
-    Future.delayed(Duration(milliseconds: 1000), () {
-      _subtitleController.forward();
-    });
-
-    // Navigate to AuthWrapper after 5 seconds
-    Future.delayed(Duration(seconds: 5), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => AuthWrapper()),
+  Future<void> _initializeApp() async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
       );
-    });
+      print('Firebase initialized successfully.');
+      
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+        });
+        _controller.forward();
+        
+        // Navigate to home page after animation
+        Future.delayed(Duration(seconds: 3), () {
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => StartPage(), // <-- Show StartPage after splash
+              ),
+            );
+          }
+        });
+      }
+    } catch (e) {
+      print('Error initializing Firebase: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error initializing app. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
   void dispose() {
-    _iconController.dispose();
-    _textController.dispose();
-    _subtitleController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Gradient background with premium teal shades
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.teal.shade900, Colors.teal.shade300],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Animated sports icon using ScaleTransition
-              ScaleTransition(
-                scale: _iconAnimation,
-                child: Icon(
-                  Icons.sports_soccer,
-                  size: 120,
+      backgroundColor: Colors.teal,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ScaleTransition(
+              scale: _animation,
+              child: Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(
                   color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.sports_soccer,
+                    size: 80,
+                    color: Colors.teal,
+                  ),
                 ),
               ),
-              SizedBox(height: 20),
-              // Fade-in title text
+            ),
+            SizedBox(height: 20),
+            if (_isInitialized)
               FadeTransition(
-                opacity: _textFadeAnimation,
+                opacity: _animation,
                 child: Text(
                   'BookTheBiz',
                   style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    letterSpacing: 1.5,
-                    shadows: [
-                      Shadow(
-                        blurRadius: 10.0,
-                        color: Colors.black26,
-                        offset: Offset(2, 2),
-                      ),
-                    ],
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-              SizedBox(height: 10),
-              // Fade-in subtitle text
-              FadeTransition(
-                opacity: _subtitleFadeAnimation,
-                child: Text(
-                  'Experience Premium Turf Booking',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white70,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          ],
         ),
       ),
     );

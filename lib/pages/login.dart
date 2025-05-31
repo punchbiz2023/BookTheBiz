@@ -9,6 +9,8 @@ import 'package:odp/pages/Turf%20owner/Main%20Func/owner_home.dart';
 import 'package:odp/pages/admincontroller.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/sign_up_page.dart';
+import 'package:odp/pages/view_turfs_guest.dart'; 
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginApp extends StatefulWidget {
   @override
@@ -21,6 +23,11 @@ class _LoginPageState extends State<LoginApp> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _loading = false;
+  String? _errorMessage; // For visible error messages
+
+  final RegExp _emailRegex = RegExp(r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$");
+
+  final Future<SharedPreferences> _prefs = SharedPreferences.getInstance();
 
   @override
   void dispose() {
@@ -29,26 +36,104 @@ class _LoginPageState extends State<LoginApp> {
     super.dispose();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _checkSavedCredentials();
+  }
+
+  Future<void> _checkSavedCredentials() async {
+    final prefs = await _prefs;
+    final savedEmail = prefs.getString('savedEmail');
+    final savedPassword = prefs.getString('savedPassword');
+
+    if (savedEmail != null && savedPassword != null) {
+      setState(() {
+        _emailController.text = savedEmail;
+        _passwordController.text = savedPassword;
+      });
+    }
+  }
+
+  Future<void> _saveCredentials(String email, String password) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('savedEmail', email);
+      await prefs.setString('savedPassword', password);
+    } catch (e) {
+      print('Error saving credentials: $e');
+    }
+  }
+
   Future<void> _login() async {
+    setState(() {
+      _errorMessage = null;
+    });
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    // Input validation
+    if (email.isEmpty || !_emailRegex.hasMatch(email)) {
+      _showErrorDialog("Please enter a valid email address.");
+      return;
+    }
+    if (password.isEmpty) {
+      _showErrorDialog("Please enter your password.");
+      return;
+    }
+
     setState(() => _loading = true);
 
     try {
-      final UserCredential userCredential =
-      await _auth.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
       if (userCredential.user != null) {
-        await Firebase.initializeApp();
         final FirebaseFirestore firestore = FirebaseFirestore.instance;
-        final DocumentReference userRef =
-        firestore.collection('users').doc(userCredential.user!.uid);
+        final DocumentReference userRef = firestore.collection('users').doc(userCredential.user!.uid);
         final userData = await userRef.get().then((ds) => ds.data() as Map<String, dynamic>?);
 
         if (userData != null) {
-          String userType = userData['userType'];
+          // First save credentials if needed
+          final prefs = await SharedPreferences.getInstance();
+          final savedEmail = prefs.getString('savedEmail');
+          
+          if (savedEmail != email) {
+            // Show save credentials dialog
+            if (!mounted) return;
+            final shouldSave = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: Text('Save Login Details?'),
+                content: Text('Would you like to save your email and password for faster login next time?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text('Not Now'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal.shade600,
+                    ),
+                    child: Text('Save'),
+                  ),
+                ],
+              ),
+            ) ?? false;
 
+            if (shouldSave) {
+              await _saveCredentials(email, password);
+            }
+          }
+
+          // Then handle navigation based on user type
+          if (!mounted) return;
+          String userType = userData['userType'];
+          
           if (userType == 'adminuser') {
             Navigator.pushReplacement(
               context,
@@ -62,34 +147,34 @@ class _LoginPageState extends State<LoginApp> {
           } else {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(
-                  builder: (context) => HomePage1(user: userCredential.user)),
+              MaterialPageRoute(builder: (context) => HomePage1(user: userCredential.user)),
             );
           }
-
           Fluttertoast.showToast(msg: 'Login Successful');
         } else {
-          Fluttertoast.showToast(msg: 'User data not found');
+          setState(() {
+            _errorMessage = "User data not found.";
+          });
         }
+      }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') {
+        _showErrorDialog("User not found.");
+      } else if (e.code == 'invalid-email') {
+        _showErrorDialog("Invalid email format.");
+      } else if (e.code == 'wrong-password') {
+        _showErrorDialog("Incorrect password.");
+      } else {
+        _showErrorDialog("Login error: ${e.message}");
       }
     } catch (e) {
-      if (e is FirebaseAuthException) {
-        if (e.code == 'user-not-found') {
-          Fluttertoast.showToast(msg: 'User not found');
-        } else if (e.code == 'invalid-email') {
-          Fluttertoast.showToast(msg: 'Invalid email format');
-        } else if (e.code == 'wrong-password') {
-          Fluttertoast.showToast(msg: 'Wrong password');
-        } else {
-          Fluttertoast.showToast(msg: 'Login error: ${e.message}');
-        }
-      }
+      _showErrorDialog("Login error: ${e.toString()}");
     } finally {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
-
-
 
   Future<void> _forgotPassword() async {
     String email = _emailController.text.trim();
@@ -116,30 +201,48 @@ class _LoginPageState extends State<LoginApp> {
     }
   }
 
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Login Error'),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK', style: TextStyle(color: Colors.teal.shade800)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // AppBar with teal background and "TURFY" title
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         centerTitle: true,
         title: Image.asset(
-          'lib/assets/logo.png', // Ensure logo.png is added to assets folder and mentioned in pubspec.yaml
-          height: 40, // Adjust height as needed
+          'lib/assets/logo.png',
+          height: 40,
           fit: BoxFit.contain,
         ),
       ),
-      // White background for a clean, professional look
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
         child: Center(
-          // Center vertically and horizontally
           child: Column(
-            mainAxisSize: MainAxisSize.min, // Minimize vertical space usage
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Heading
               Text(
                 'Login',
                 style: TextStyle(
@@ -147,11 +250,24 @@ class _LoginPageState extends State<LoginApp> {
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                 ),
-                textAlign: TextAlign.center, // Center the text horizontally
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 30),
 
-              // Email TextField
+              // Error message
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+
               _buildTextField(
                 iconData: Icons.email_outlined,
                 hintText: 'Email',
@@ -160,7 +276,6 @@ class _LoginPageState extends State<LoginApp> {
               ),
               const SizedBox(height: 20),
 
-              // Password TextField
               _buildTextField(
                 iconData: Icons.lock_outline,
                 hintText: 'Password',
@@ -169,7 +284,6 @@ class _LoginPageState extends State<LoginApp> {
               ),
               const SizedBox(height: 10),
 
-              // Forgot Password
               GestureDetector(
                 onTap: _forgotPassword,
                 child: Align(
@@ -186,7 +300,6 @@ class _LoginPageState extends State<LoginApp> {
               ),
               const SizedBox(height: 30),
 
-              // Login Button
               ElevatedButton(
                 onPressed: _loading ? null : _login,
                 style: ElevatedButton.styleFrom(
@@ -211,7 +324,6 @@ class _LoginPageState extends State<LoginApp> {
               ),
               const SizedBox(height: 12),
 
-              // Sign Up Button
               OutlinedButton(
                 onPressed: () {
                   HapticFeedback.lightImpact();
@@ -233,6 +345,26 @@ class _LoginPageState extends State<LoginApp> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
+              const SizedBox(height: 20),
+
+              // Continue without login
+              TextButton(
+                onPressed: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => ViewTurfsGuestPage()),
+                  );
+                },
+                child: Text(
+                  'Continue without Login',
+                  style: TextStyle(
+                    color: Colors.teal.shade800,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -240,7 +372,6 @@ class _LoginPageState extends State<LoginApp> {
     );
   }
 
-  // Reusable TextField widget
   Widget _buildTextField({
     required IconData iconData,
     required String hintText,
