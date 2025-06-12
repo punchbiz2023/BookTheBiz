@@ -12,6 +12,8 @@ import 'package:odp/pages/view_turfs_guest.dart';
 // Make sure to import or define SignupPage() in your project.
 import 'package:odp/pages/sign_up_page.dart';
 import 'firebase_options.dart';
+import 'dart:ui';
+import 'package:flutter/material.dart';
 
 // -------------- ADD THIS NEW StartPage() FILE OR CODE SNIPPET BELOW --------------
 
@@ -79,20 +81,17 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         options: DefaultFirebaseOptions.currentPlatform,
       );
       print('Firebase initialized successfully.');
-      
+
       if (mounted) {
         setState(() {
           _isInitialized = true;
         });
         _controller.forward();
-        
-        // Navigate to home page after animation
+
         Future.delayed(Duration(seconds: 3), () {
           if (mounted) {
             Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) => StartPage(), // <-- Show StartPage after splash
-              ),
+              MaterialPageRoute(builder: (context) => AuthWrapper()),
             );
           }
         });
@@ -116,59 +115,77 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     super.dispose();
   }
 
+  Widget _buildGlassIconBox() {
+    return ScaleTransition(
+      scale: _animation,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: 160,
+          height: 160,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(100),
+            gradient: LinearGradient(
+              colors: [Colors.white.withOpacity(0.2), Colors.white.withOpacity(0.05)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.tealAccent.withOpacity(0.3),
+                blurRadius: 20,
+                offset: Offset(0, 8),
+              ),
+            ],
+            border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
+          ),
+          child: Center(
+            child: Icon(Icons.sports_soccer, size: 80, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppName() {
+    return FadeTransition(
+      opacity: _animation,
+      child: ShaderMask(
+        shaderCallback: (bounds) => LinearGradient(
+          colors: [Colors.tealAccent, Colors.white],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ).createShader(bounds),
+        child: Text(
+          'BookTheBiz',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.teal,
+      backgroundColor: Colors.teal[700],
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ScaleTransition(
-              scale: _animation,
-              child: Container(
-                width: 150,
-                height: 150,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 10,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.sports_soccer,
-                    size: 80,
-                    color: Colors.teal,
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(height: 20),
-            if (_isInitialized)
-              FadeTransition(
-                opacity: _animation,
-                child: Text(
-                  'BookTheBiz',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+            _buildGlassIconBox(),
+            SizedBox(height: 30),
+            if (_isInitialized) _buildAppName(),
           ],
         ),
       ),
     );
   }
 }
-
 // ---------------------- AUTH WRAPPER ----------------------
 class AuthWrapper extends StatelessWidget {
   @override

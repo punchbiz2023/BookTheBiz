@@ -47,6 +47,27 @@ class _SignupPageState extends State<SignupPage> {
     });
 
     try {
+      // --- Check for duplicate mobile number before creating user ---
+      String enteredMobile = _mobileController.text.trim().replaceAll(RegExp(r'\D'), '');
+      final usersSnapshot = await _firestore.collection('users').get();
+      bool mobileExists = false;
+      for (var doc in usersSnapshot.docs) {
+        String? mobile = doc['mobile'];
+        if (mobile != null) {
+          String normalizedMobile = mobile.replaceAll(RegExp(r'\D'), '');
+          // Compare only the last 10 digits (for Indian numbers)
+          if (normalizedMobile.endsWith(enteredMobile)) {
+            mobileExists = true;
+            break;
+          }
+        }
+      }
+      if (mobileExists) {
+        setState(() => _loading = false);
+        _showErrorDialog('This mobile number is already registered.');
+        return;
+      }
+
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -72,35 +93,55 @@ class _SignupPageState extends State<SignupPage> {
       final shouldSave = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          backgroundColor: Colors.teal.shade50,
           title: Row(
             children: [
-              Icon(Icons.save_outlined, color: Colors.teal.shade800),
-              SizedBox(width: 8),
-              Text('Save Login Details?'),
+              Icon(Icons.save_alt_rounded, color: Colors.teal.shade700, size: 28),
+              SizedBox(width: 10),
+              Text(
+                'Save Login Details?',
+                style: TextStyle(
+                  color: Colors.teal.shade800,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
             ],
           ),
-          content: Text(
-            'Would you like to save your email and password for faster login next time?',
-            style: TextStyle(fontSize: 16),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Would you like to save your email and password for faster login next time?',
+                style: TextStyle(fontSize: 16, color: Colors.teal.shade900),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 18),
+              Icon(Icons.lock_outline, color: Colors.teal.shade400, size: 40),
+            ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
               child: Text(
                 'Not Now',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal.shade600,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
                 ),
               ),
-              child: Text('Save', style: TextStyle(color: Colors.white)),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: Icon(Icons.save, color: Colors.white),
+              label: Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
           ],
         ),
@@ -142,18 +183,49 @@ class _SignupPageState extends State<SignupPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        backgroundColor: Colors.red.shade50,
         title: Row(
           children: [
-            Icon(Icons.error_outline, color: Colors.red),
-            SizedBox(width: 8),
-            Text('Registration Error'),
+            Icon(Icons.error_outline, color: Colors.red.shade700, size: 28),
+            SizedBox(width: 10),
+            Text(
+              'Registration Error',
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
           ],
         ),
-        content: Text(message),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message,
+              style: TextStyle(
+                color: Colors.red.shade900,
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 18),
+            Icon(Icons.warning_amber_rounded, color: Colors.red.shade300, size: 40),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('OK', style: TextStyle(color: Colors.teal.shade800)),
+            child: Text(
+              'OK',
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
           ),
         ],
       ),

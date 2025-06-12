@@ -11,6 +11,7 @@ import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/sign_up_page.dart';
 import 'package:odp/pages/view_turfs_guest.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'phone_login_page.dart'; // Create this file as shown below
 
 class LoginApp extends StatefulWidget {
   @override
@@ -147,7 +148,7 @@ class _LoginPageState extends State<LoginApp> {
           } else {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => HomePage1(user: userCredential.user)),
+              MaterialPageRoute(builder: (context) => HomePage1()),
             );
           }
           Fluttertoast.showToast(msg: 'Login Successful');
@@ -321,6 +322,31 @@ class _LoginPageState extends State<LoginApp> {
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold),
                       ),
+              ),
+              const SizedBox(height: 12),
+
+              // --- Add this for OTP Login ---
+              OutlinedButton.icon(
+                icon: Icon(Icons.phone_android, color: Colors.teal.shade600),
+                label: Text(
+                  'Login with OTP',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => PhoneLoginPage()),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.teal.shade600, width: 2),
+                  foregroundColor: Colors.teal.shade600,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
 

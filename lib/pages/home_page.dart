@@ -8,7 +8,7 @@ import 'bookings_history_page.dart'; // Import the renamed page
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:async';
-
+import 'package:odp/pages/details.dart';
 class HomePage1 extends StatefulWidget {
   final User? user;
   const HomePage1({Key? key, this.user}) : super(key: key);
@@ -76,11 +76,26 @@ class _HomePage1State extends State<HomePage1>
   // 2. Add this field to your _HomePage1State class:
   String _selectedPriceBucket = 'All';
 
+  // Add this Set to your state:
+  Set<String> _likedTurfs = {};
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _initializeLocation();
+    _loadUserLikes();
+  }
+
+  Future<void> _loadUserLikes() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final likes = userDoc.data()?['likes'] as Map<String, dynamic>? ?? {};
+      setState(() {
+        _likedTurfs = likes.keys.toSet();
+      });
+    }
   }
 
   @override
@@ -455,7 +470,7 @@ Widget build(BuildContext context) {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  ' Turf Booking',
+                  '  Turf Booking',
                   style: TextStyle(
                     color: Colors.teal.shade800,
                     fontWeight: FontWeight.w700,
@@ -492,7 +507,7 @@ Widget build(BuildContext context) {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Search Bar
+            // 1. Search Bar
             Container(
               margin: EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
@@ -508,8 +523,11 @@ Widget build(BuildContext context) {
               ),
               child: _buildSearchBar(),
             ),
-            
-            // Location Filter
+
+            // 2. Most Recently Booked Turf
+            _buildMostRecentBookedTurf(),
+
+            // 3. Area-based Dropdown
             Container(
               margin: EdgeInsets.symmetric(vertical: 10),
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -534,9 +552,8 @@ Widget build(BuildContext context) {
                       isExpanded: true,
                       underline: SizedBox(),
                       items: _getUniqueLocations().map((String location) {
-                        // Extract just the address part for display
-                        final displayText = location == 'All Areas' 
-                            ? 'All Areas' 
+                        final displayText = location == 'All Areas'
+                            ? 'All Areas'
                             : location.split('|')[0];
                         return DropdownMenuItem<String>(
                           value: location,
@@ -559,10 +576,7 @@ Widget build(BuildContext context) {
               ),
             ),
 
-            // Sports Type Filter
-            _buildSportsTypeFilter(),
-
-            // Nearby Turfs Section
+            // 4. Nearby Turfs
             if (_currentPosition != null) ...[
               SizedBox(height: 20),
               Row(
@@ -583,7 +597,13 @@ Widget build(BuildContext context) {
               _buildNearbyTurfs(),
             ],
 
-            // Popular Turfs Section
+            // 5. Favourite Turfs
+            _buildFavouriteTurfs(),
+
+            // 6. Sports Type Filter
+            _buildSportsTypeFilter(),
+
+            // 7. All Turfs
             SizedBox(height: 20),
             Row(
               children: [
@@ -611,15 +631,14 @@ Widget build(BuildContext context) {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => SupportPage(user: widget.user)),
           );
         },
-        icon: Icon(Icons.support_agent, color: Colors.white),
-        label: Text('Contact Support', style: TextStyle(color: Colors.white)),
+        child: Icon(Icons.support_agent, color: Colors.white),
         backgroundColor: Colors.teal,
         elevation: 6,
       ),
@@ -818,70 +837,368 @@ Widget build(BuildContext context) {
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     onTap: () {
-                      // Add navigation to turf details
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DetailsPage(
+                            documentId: doc.id,
+                            documentname: turfData['name'] ?? '',
+                          ),
+                        ),
+                      );
                     },
                     child: Stack(
                       children: [
-                        // Turf Image
+                        // Background image with gradient overlay
                         Container(
                           height: 200,
-                          child: FirebaseImageCard(
-                            imageUrl: turfData['imageUrl'] ?? '',
-                            title: turfData['name'] ?? 'Unknown Turf',
-                            description: turfData['description'] ?? 'No description available',
-                            documentId: doc.id,
-                            docname: turfData['name'] ?? 'Unknown Turf',
-                            chips: List<String>.from(turfData['availableGrounds'] ?? []),
-                            price: priceDisplay,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(22),
+                            image: DecorationImage(
+                              image: NetworkImage(turfData['imageUrl'] ?? ''),
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
-                        // Distance Badge
-                        Positioned(
-                          top: 8,
-                          right: 8,
+                        // Gradient overlay for better text visibility
+                        Positioned.fill(
                           child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.teal.withOpacity(0.9),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(22),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.black.withOpacity(0.75),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Favorite icon (top left)
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          child: GestureDetector(
+                            onTap: () async {
+                              final user = FirebaseAuth.instance.currentUser;
+                              if (user != null) {
+                                final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+                                final isLiked = _likedTurfs.contains(doc.id);
+
+                                if (isLiked) {
+                                  // Unlike: remove from Firestore and local set
+                                  await userRef.set({
+                                    'likes': {doc.id: FieldValue.delete()}
+                                  }, SetOptions(merge: true));
+                                  setState(() {
+                                    _likedTurfs.remove(doc.id);
+                                  });
+                                  await showLikeDialog(
+    context: context,
+    isLiked: false,
+    turfName: turfData['name'] ?? 'Turf',
+  );
+                                } else {
+                                  // Like: add to Firestore and local set
+                                  await userRef.set({
+                                    'likes': {doc.id: true}
+                                  }, SetOptions(merge: true));
+                                  setState(() {
+                                    _likedTurfs.add(doc.id);
+                                  });
+                                  await showLikeDialog(
+    context: context,
+    isLiked: true,
+    turfName: turfData['name'] ?? 'Turf',
+  );
+                                }
+                              }
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: !_likedTurfs.contains(doc.id)
+                                    ? Border.all(color: Colors.teal, width: 2)
+                                    : null,
+                                color: Colors.white.withOpacity(0.92),
+                              ),
+                              padding: EdgeInsets.all(2),
+                              child: Icon(
+                                _likedTurfs.contains(doc.id) ? Icons.favorite : Icons.favorite_border,
+                                color: _likedTurfs.contains(doc.id) ? Colors.red : Colors.teal,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Distance Badge (top right)
+                        Positioned(
+                          top: 12,
+                          right: 12,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.withOpacity(0.92),
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black12,
+                                  blurRadius: 4,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
                             ),
                             child: Text(
                               distanceText,
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
                               ),
                             ),
                           ),
                         ),
-                        // Price Badge
+                        // Turf info at the bottom (no available grounds)
                         Positioned(
-                          bottom: 8,
-                          left: 8,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              priceDisplay,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  turfData['name'] ?? 'Unknown Turf',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                    shadows: [
+                                      Shadow(
+                                        color: Colors.black26,
+                                        blurRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  turfData['description'] ?? 'No description available',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                SizedBox(height: 8),
+                                // Only price badge, no available grounds
+                                Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.85),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Text(
+                                    priceDisplay,
+                                    style: TextStyle(
+                                      color: Colors.teal[800],
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
+                )
               );
             },
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFavouriteTurfs() {
+    // Get all liked turf IDs
+    final likedIds = _likedTurfs;
+    if (likedIds.isEmpty) {
+      return SizedBox.shrink();
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('turfs').where(FieldPath.documentId, whereIn: likedIds.toList()).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return SizedBox.shrink();
+        }
+        final favTurfs = snapshot.data!.docs;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: 20),
+            Row(
+              children: [
+                Icon(Icons.favorite, color: Colors.red, size: 28),
+                SizedBox(width: 8),
+                Text(
+                  'Favourite Turfs',
+                  style: TextStyle(
+                    color: Colors.red[700],
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 15),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              childAspectRatio: 0.75,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              padding: EdgeInsets.all(10),
+              children: favTurfs.map((doc) {
+                final turfData = doc.data() as Map<String, dynamic>;
+                final priceDisplay = _getPriceDisplay(turfData['price']);
+                return AnimatedContainer(
+                  duration: Duration(milliseconds: 400),
+                  curve: Curves.easeInOut,
+                  child: Card(
+                    elevation: 7,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => DetailsPage(
+                              documentId: doc.id,
+                              documentname: turfData['name'] ?? '',
+                            ),
+                          ),
+                        );
+                      },
+                      child: Stack(
+                        children: [
+                          // Background image with gradient overlay
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(22),
+                              image: DecorationImage(
+                                image: NetworkImage(turfData['imageUrl'] ?? ''),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            height: double.infinity,
+                            width: double.infinity,
+                          ),
+                          // Gradient overlay for better text visibility
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(22),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.black.withOpacity(0.75),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          // No favorite icon here!
+                          // Turf info at the bottom
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Padding(
+                              padding: const EdgeInsets.all(14.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    turfData['name'] ?? 'Unknown Turf',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black26,
+                                          blurRadius: 4,
+                                        ),
+                                      ],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    turfData['description'] ?? 'No description available',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  SizedBox(height: 8),
+                                  // Only price badge
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.85),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Text(
+                                      priceDisplay,
+                                      style: TextStyle(
+                                        color: Colors.teal[800],
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
         );
       },
     );
@@ -1104,6 +1421,7 @@ Widget build(BuildContext context) {
   }
 
   Widget _buildTurfCard(DocumentSnapshot doc, Map<String, dynamic> turfData) {
+    final priceDisplay = _getPriceDisplay(turfData['price']);
     return AnimatedContainer(
       duration: Duration(milliseconds: 400),
       curve: Curves.easeInOut,
@@ -1115,28 +1433,168 @@ Widget build(BuildContext context) {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () {
-            // Add navigation to turf details here
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: FirebaseImageCard(
-                  imageUrl: turfData['imageUrl'] ?? '',
-                  title: turfData['name'] ?? 'Unknown Turf',
-                  description: turfData['description'] ?? 'No description available',
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DetailsPage(
                   documentId: doc.id,
-                  docname: turfData['name'] ?? 'Unknown Turf',
-                  chips: List<String>.from(turfData['availableGrounds'] ?? []),
-                  price: turfData['price'],
+                  documentname: turfData['name'] ?? '',
+                ),
+              ),
+            );
+          },
+          child: Stack(
+            children: [
+              // Background image with gradient overlay
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  image: DecorationImage(
+                    image: NetworkImage(turfData['imageUrl'] ?? ''),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                height: double.infinity,
+                width: double.infinity,
+              ),
+              // Gradient overlay for better text visibility
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.75),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Favorite icon (top left)
+              Positioned(
+                top: 12,
+                left: 12,
+                child: GestureDetector(
+                  onTap: () async {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+                      final isLiked = _likedTurfs.contains(doc.id);
+
+                      if (isLiked) {
+                        // Unlike: remove from Firestore and local set
+                        await userRef.set({
+                          'likes': {doc.id: FieldValue.delete()}
+                        }, SetOptions(merge: true));
+                        setState(() {
+                          _likedTurfs.remove(doc.id);
+                        });
+                        await showLikeDialog(
+    context: context,
+    isLiked: false,
+    turfName: turfData['name'] ?? 'Turf',
+  );
+                      } else {
+                        // Like: add to Firestore and local set
+                        await userRef.set({
+                          'likes': {doc.id: true}
+                        }, SetOptions(merge: true));
+                        setState(() {
+                          _likedTurfs.add(doc.id);
+                        });
+                        await showLikeDialog(
+    context: context,
+    isLiked: true,
+    turfName: turfData['name'] ?? 'Turf',
+  );
+                      }
+                    }
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: !_likedTurfs.contains(doc.id)
+                          ? Border.all(color: Colors.teal, width: 2)
+                          : null,
+                      color: Colors.white.withOpacity(0.92),
+                    ),
+                    padding: EdgeInsets.all(2),
+                    child: Icon(
+                      _likedTurfs.contains(doc.id) ? Icons.favorite : Icons.favorite_border,
+                      color: _likedTurfs.contains(doc.id) ? Colors.red : Colors.teal,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+              // Turf info at the bottom (no available grounds, no distance badge)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Padding(
+                  padding: const EdgeInsets.all(14.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        turfData['name'] ?? 'Unknown Turf',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black26,
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        turfData['description'] ?? 'No description available',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 8),
+                      // Only price badge
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          priceDisplay,
+                          style: TextStyle(
+                            color: Colors.teal[800],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
         ),
-      ),
+      )
     );
-  }
+    }
 
   // Add this new method to handle unique locations
   List<String> _getUniqueLocations() {
@@ -1226,6 +1684,72 @@ Widget build(BuildContext context) {
       }
     }
     return filtered;
+  }
+
+  // Add this widget to your _HomePage1State class if not already present:
+  Widget _buildMostRecentBookedTurf() {
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('bookings')
+          .where('userId', isEqualTo: _currentUserId)
+          .get(),
+      builder: (context, bookingSnapshot) {
+        if (bookingSnapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (!bookingSnapshot.hasData || bookingSnapshot.data!.docs.isEmpty) {
+          return SizedBox.shrink();
+        }
+        // Sort bookings by bookingDate string descending
+        final bookings = bookingSnapshot.data!.docs;
+        bookings.sort((a, b) {
+          final aDate = a['bookingDate'] ?? '';
+          final bDate = b['bookingDate'] ?? '';
+          return bDate.compareTo(aDate); // descending
+        });
+        final bookingDoc = bookings.first;
+        final turfId = bookingDoc['turfId'];
+
+        return FutureBuilder<DocumentSnapshot>(
+          future: FirebaseFirestore.instance.collection('turfs').doc(turfId).get(),
+          builder: (context, turfSnapshot) {
+            if (turfSnapshot.connectionState == ConnectionState.waiting) {
+              return Center(child: CircularProgressIndicator());
+            }
+            if (!turfSnapshot.hasData || !turfSnapshot.data!.exists) {
+              return SizedBox.shrink();
+            }
+            final turfDoc = turfSnapshot.data!;
+            final turfData = turfDoc.data() as Map<String, dynamic>;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: 20),
+                Row(
+                  children: [
+                    Icon(Icons.history, color: Colors.teal, size: 28),
+                    SizedBox(width: 8),
+                    Text(
+                      'Most Recently Booked Turf',
+                      style: TextStyle(
+                        color: Colors.teal[700],
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 15),
+                SizedBox(
+                  height: 270,
+                  child: _buildTurfCard(turfDoc, turfData),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }
 
@@ -1414,4 +1938,86 @@ class _SupportPageState extends State<SupportPage> {
       ),
     );
   }
+}
+
+// Use this function for both like and unlike dialogs
+Future<void> showLikeDialog({
+  required BuildContext context,
+  required bool isLiked,
+  required String turfName,
+}) async {
+  await showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      backgroundColor: isLiked ? Colors.teal[50] : Colors.red[50],
+      contentPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      content: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            backgroundColor: isLiked ? Colors.teal : Colors.red,
+            child: Icon(
+              isLiked ? Icons.favorite : Icons.favorite_border,
+              color: Colors.white,
+            ),
+            radius: 22,
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isLiked ? 'Added to Likes' : 'Removed from Likes',
+                  style: TextStyle(
+                    color: isLiked ? Colors.teal[800] : Colors.red[800],
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 6),
+                Text(
+                  turfName,
+                  style: TextStyle(
+                    color: Colors.grey[800],
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 8),
+                Text(
+                  isLiked
+                      ? 'This turf has been added to your likes!'
+                      : 'This turf has been removed from your likes.',
+                  style: TextStyle(
+                    color: isLiked ? Colors.teal[900] : Colors.red[900],
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          child: Text(
+            'OK',
+            style: TextStyle(
+              color: isLiked ? Colors.teal : Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    ),
+  );
 }
