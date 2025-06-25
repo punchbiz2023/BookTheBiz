@@ -223,7 +223,9 @@ class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
   Set<String> _selectedGroundFilters = {};
   String _selectedLocation = 'All Areas';
   List<String> _availableLocations = ['All Areas'];
-  Map<String, String> _locationCache = {}; // Cache for latlng to address
+  Map<String, String> _locationCache = {}; // docId -> address
+  Map<String, String> _localityToLatLng = {}; // locality -> latlng string
+  Map<String, String> _docIdToLocality = {}; // docId -> locality
 
   @override
   void initState() {
@@ -234,23 +236,42 @@ class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
   Future<void> _loadAvailableLocations() async {
     try {
       final turfs = await FirebaseFirestore.instance.collection('turfs').get();
-      final Set<String> locations = {};
+      final Set<String> localities = {};
+      final Map<String, String> docIdToLocality = {};
+
       for (var doc in turfs.docs) {
         final turfData = doc.data();
-        // Prefer location name from address, fallback to latlng string if not available
-        if (turfData['location'] != null && turfData['location'].toString().isNotEmpty) {
-          locations.add(turfData['location'].toString());
-        } else if (turfData['latlng'] != null && turfData['latlng'].toString().isNotEmpty) {
-          // Try to resolve latlng to address for dropdown
-          final docId = doc.id;
-          String? address = await _getAddressFromLatLng(turfData['latlng'], docId);
-          if (address != null && address != 'Location not available') {
-            locations.add(address);
+        String? latlng;
+        if (turfData['latlng'] != null && turfData['latlng'].toString().isNotEmpty) {
+          latlng = turfData['latlng'].toString();
+        } else if (turfData['location'] != null && turfData['location'].toString().isNotEmpty) {
+          latlng = turfData['location'].toString();
+        }
+        if (latlng != null && latlng.contains(',')) {
+          try {
+            final parts = latlng.split(',');
+            final lat = double.parse(parts[0]);
+            final lng = double.parse(parts[1]);
+            final placemarks = await placemarkFromCoordinates(lat, lng);
+            if (placemarks.isNotEmpty) {
+              final locality = placemarks.first.locality ?? '';
+              if (locality.isNotEmpty) {
+                localities.add(locality);
+                docIdToLocality[doc.id] = locality;
+              }
+            }
+          } catch (e) {
+            // ignore
           }
         }
       }
+
       setState(() {
-        _availableLocations = ['All Areas', ...locations];
+        _availableLocations = ['All Areas', ...localities];
+        _docIdToLocality = docIdToLocality;
+        if (!_availableLocations.contains(_selectedLocation)) {
+          _selectedLocation = 'All Areas';
+        }
       });
     } catch (e) {
       // Handle error if needed
@@ -405,7 +426,6 @@ class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
               },
             ),
           ),
-          SizedBox(height: 10),
           // Sports Type Filter
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance.collection('turfs').snapshots(),
@@ -469,18 +489,21 @@ class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
                 }
                 final turfs = snapshot.data!.docs;
 
-                // Filter turfs based on search, ground, and location
+                // --- Filtering logic ---
                 final filteredTurfs = turfs.where((doc) {
                   final turfData = doc.data() as Map<String, dynamic>;
                   final turfName = turfData['name']?.toString().toLowerCase() ?? '';
                   final grounds = List<String>.from(turfData['availableGrounds'] ?? []);
-                  final location = turfData['location']?.toString() ?? '';
-
                   final matchesSearch = turfName.contains(_searchText.toLowerCase());
                   final matchesGround = _selectedGroundFilters.isEmpty ||
                       _selectedGroundFilters.any((g) => grounds.contains(g));
-                  final matchesLocation = _selectedLocation == 'All Areas' ||
-                      location == _selectedLocation;
+
+                  // Location filtering (fuzzy match)
+                  bool matchesLocation = true;
+                  if (_selectedLocation != 'All Areas') {
+                    final locality = _docIdToLocality[doc.id] ?? '';
+                    matchesLocation = locality.toLowerCase().contains(_selectedLocation.toLowerCase());
+                  }
 
                   return matchesSearch && matchesGround && matchesLocation;
                 }).toList();
@@ -494,158 +517,159 @@ class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
                   );
                 }
 
+                
                 return ListView.builder(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: filteredTurfs.length,
-                  itemBuilder: (context, index) {
-                    final doc = filteredTurfs[index];
-                    final turfData = doc.data() as Map<String, dynamic>;
-                    final priceDisplay = _getPriceDisplay(turfData['price']);
-                    final description = turfData['description'] ?? '';
-                    final grounds = (turfData['availableGrounds'] as List?)?.join(', ') ?? '';
-                    final locationData = turfData['latlng'] ?? turfData['location'];
-                    final docId = doc.id;
+  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  itemCount: filteredTurfs.length,
+  itemBuilder: (context, index) {
+    final doc = filteredTurfs[index];
+    final turfData = doc.data() as Map<String, dynamic>;
+    final priceDisplay = _getPriceDisplay(turfData['price']);
+    final description = turfData['description'] ?? '';
+    final grounds = (turfData['availableGrounds'] as List?)?.join(', ') ?? '';
+    final locationData = turfData['latlng'] ?? turfData['location'];
+    final docId = doc.id;
 
-                    return FutureBuilder<String>(
-                      future: _getAddressFromLatLng(locationData, docId),
-                      builder: (context, snapshot) {
-                        final address = snapshot.data ?? 'Loading location...';
-                        return GestureDetector(
-                          onTap: () => _navigateToTurfDetails(turfData, address),
-                          child: Container(
-                            margin: EdgeInsets.only(bottom: 20),
-                            child: Material(
-                              elevation: 4,
-                              borderRadius: BorderRadius.circular(20),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(18.0),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Turf Image
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(16),
-                                        child: turfData['imageUrl'] != null && turfData['imageUrl'].toString().isNotEmpty
-                                            ? Image.network(
-                                                turfData['imageUrl'],
-                                                width: 100,
-                                                height: 100,
-                                                fit: BoxFit.cover,
-                                              )
-                                            : Container(
-                                                width: 100,
-                                                height: 100,
-                                                color: Colors.teal.shade50,
-                                                child: Icon(Icons.sports_soccer, color: Colors.teal, size: 40),
-                                              ),
-                                      ),
-                                      SizedBox(width: 18),
-                                      // Turf Details
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              turfData['name'] ?? 'Unknown Turf',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 20,
-                                                color: Colors.teal.shade900,
-                                              ),
-                                            ),
-                                            SizedBox(height: 6),
-                                            Row(
-                                              children: [
-                                                Icon(Icons.location_on, size: 16, color: Colors.teal.shade400),
-                                                SizedBox(width: 4),
-                                                Flexible(
-                                                  child: Text(
-                                                    address,
-                                                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            if (grounds.isNotEmpty) ...[
-                                              SizedBox(height: 4),
-                                              Row(
-                                                children: [
-                                                  Icon(Icons.sports, size: 16, color: Colors.teal.shade400),
-                                                  SizedBox(width: 4),
-                                                  Flexible(
-                                                    child: Text(
-                                                      grounds,
-                                                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                            if (description.isNotEmpty) ...[
-                                              SizedBox(height: 4),
-                                              Text(
-                                                description,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                                              ),
-                                            ],
-                                            SizedBox(height: 8),
-                                            Row(
-                                              children: [
-                                                Icon(Icons.currency_rupee, size: 16, color: Colors.teal.shade400),
-                                                SizedBox(width: 4),
-                                                Text(
-                                                  priceDisplay,
-                                                  style: TextStyle(fontSize: 15, color: Colors.teal.shade800, fontWeight: FontWeight.bold),
-                                                ),
-                                              ],
-                                            ),
-                                            SizedBox(height: 10),
-                                            Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: ElevatedButton.icon(
-                                                onPressed: () {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text('Please login or register to book this turf.'),
-                                                      backgroundColor: Colors.teal.shade800,
-                                                    ),
-                                                  );
-                                                },
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.teal.shade600,
-                                                  foregroundColor: Colors.white,
-                                                  padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(8),
-                                                  ),
-                                                ),
-                                                icon: Icon(Icons.lock_outline, size: 18),
-                                                label: Text('Book'),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+    return FutureBuilder<String>(
+      future: _getAddressFromLatLng(locationData, docId),
+      builder: (context, snapshot) {
+        final address = snapshot.data ?? 'Loading location...';
+        return GestureDetector(
+          onTap: () => _navigateToTurfDetails(turfData, address),
+          child: Container(
+            margin: EdgeInsets.only(bottom: 20),
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(18.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Turf Image
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: turfData['imageUrl'] != null && turfData['imageUrl'].toString().isNotEmpty
+                            ? Image.network(
+                                turfData['imageUrl'],
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              )
+                            : Container(
+                                width: 100,
+                                height: 100,
+                                color: Colors.teal.shade50,
+                                child: Icon(Icons.sports_soccer, color: Colors.teal, size: 40),
+                              ),
+                      ),
+                      SizedBox(width: 18),
+                      // Turf Details
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              turfData['name'] ?? 'Unknown Turf',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20,
+                                color: Colors.teal.shade900,
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
+                            SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(Icons.location_on, size: 16, color: Colors.teal.shade400),
+                                SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    address,
+                                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (grounds.isNotEmpty) ...[
+                              SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(Icons.sports, size: 16, color: Colors.teal.shade400),
+                                  SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      grounds,
+                                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (description.isNotEmpty) ...[
+                              SizedBox(height: 4),
+                              Text(
+                                description,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                              ),
+                            ],
+                            SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(Icons.currency_rupee, size: 16, color: Colors.teal.shade400),
+                                SizedBox(width: 4),
+                                Text(
+                                  priceDisplay,
+                                  style: TextStyle(fontSize: 15, color: Colors.teal.shade800, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Please login or register to book this turf.'),
+                                      backgroundColor: Colors.teal.shade800,
+                                    ),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.teal.shade600,
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                icon: Icon(Icons.lock_outline, size: 18),
+                                label: Text('Book'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  },
+);
               },
             ),
           ),

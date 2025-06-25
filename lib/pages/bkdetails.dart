@@ -185,20 +185,48 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
                 children: [
                   // Dynamic booking slots
                   ...bookingSlots.map((slot) {
-                    final timeParts = slot.split(' - ');
-                    final bookedStartTime = DateFormat('h:mm a').parse(timeParts[0]);
-                    final bookedEndTime = DateFormat('h:mm a').parse(timeParts[1]);
-                    final bookingDateTime = DateTime(
-                      bookingDate.year,
-                      bookingDate.month,
-                      bookingDate.day,
-                      bookedStartTime.hour,
-                      bookedStartTime.minute,
-                    );
+                    // Normalize slot string to handle various formats
+                    final normalizedSlot = slot
+                        .replaceAll('-', ' - ')
+                        .replaceAll(RegExp(r'\s+'), ' ')
+                        .trim();
 
-                    // Check if cancellation is allowed
-                    bool canCancel = bookingDateTime.isAfter(currentDateTime) &&
-                        bookingDateTime.difference(currentDateTime).inHours >= 8;
+                    final timeParts = normalizedSlot.split(' - ');
+                    DateTime? bookedStartTime;
+                    DateTime? bookedEndTime;
+                    bool canCancel = false;
+                    bool validFormat = false;
+
+                    if (timeParts.length == 2) {
+                      try {
+                        // Try parsing with and without minutes
+                        bookedStartTime = DateFormat('h:mm a').parseLoose(timeParts[0].trim());
+                      } catch (_) {
+                        try {
+                          bookedStartTime = DateFormat('h a').parseLoose(timeParts[0].trim());
+                        } catch (_) {}
+                      }
+                      try {
+                        bookedEndTime = DateFormat('h:mm a').parseLoose(timeParts[1].trim());
+                      } catch (_) {
+                        try {
+                          bookedEndTime = DateFormat('h a').parseLoose(timeParts[1].trim());
+                        } catch (_) {}
+                      }
+
+                      if (bookedStartTime != null && bookedEndTime != null) {
+                        final bookingDateTime = DateTime(
+                          bookingDate.year,
+                          bookingDate.month,
+                          bookingDate.day,
+                          bookedStartTime.hour,
+                          bookedStartTime.minute,
+                        );
+                        canCancel = bookingDateTime.isAfter(currentDateTime) &&
+                            bookingDateTime.difference(currentDateTime).inHours >= 8;
+                        validFormat = true;
+                      }
+                    }
 
                     return Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -213,39 +241,38 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
                             backgroundColor: Colors.teal,
                           ),
                         ),
-                        SizedBox(width: 16), // Spacing between chip and button
+                        SizedBox(width: 16),
+                        if (validFormat)
+                          ElevatedButton(
+                            onPressed: canCancel && !isCancelling
+                                ? () async {
+                                    setState(() {
+                                      isCancelling = true;
+                                    });
 
-                        ElevatedButton(
-                          onPressed: canCancel && !isCancelling
-                              ? () async {
-                            setState(() {
-                              isCancelling = true;
-                            });
+                                    await _cancelBooking(
+                                      documentID,
+                                      bookedStartTime!,
+                                      bookedEndTime!,
+                                    );
 
-                            // Call the _cancelBooking function
-                            await _cancelBooking(
-                              documentID, // Booking ID
-                              bookedStartTime, // Start time
-                              bookedEndTime, // End time
-                            );
-
-                            setState(() {
-                              isCancelling = false;
-                            });
-                          }
-                              : null,
-                          style: ElevatedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            backgroundColor: canCancel ? Colors.red : Colors.grey,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                                    setState(() {
+                                      isCancelling = false;
+                                    });
+                                  }
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              backgroundColor: canCancel ? Colors.red : Colors.grey,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: Text(
+                              'Cancel Booking',
+                              style: TextStyle(fontSize: 14),
                             ),
                           ),
-                          child: Text(
-                            'Cancel Booking',
-                            style: TextStyle(fontSize: 14),
-                          ),
-                        ),
                       ],
                     );
                   }).toList(),

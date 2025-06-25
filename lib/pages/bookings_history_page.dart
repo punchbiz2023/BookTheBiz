@@ -40,94 +40,76 @@ class _BookingsPageState extends State<BookingsPage>
         .map((snapshot) => snapshot.docs);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(110),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.teal.shade700, Colors.teal.shade300],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.teal.withOpacity(0.18),
-                blurRadius: 12,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.history, color: Colors.white, size: 28),
-                      SizedBox(width: 10),
-                      Text(
-                        'My Bookings',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 24,
-                          letterSpacing: 1.1,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black26,
-                              blurRadius: 4,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                TabBar(
-                  controller: _tabController,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white70,
-                  indicatorColor: Colors.white, // Underline color
-                  indicatorWeight: 3.5,         // Underline thickness
-                  labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  tabs: const [
-                    Tab(text: 'Upcoming'),
-                    Tab(text: 'Past'),
-                    Tab(text: 'Cancelled'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      backgroundColor: Colors.grey[100],
-      body: AnimatedSwitcher(
-        duration: Duration(milliseconds: 350),
-        child: TabBarView(
-          controller: _tabController,
-          physics: BouncingScrollPhysics(),
-          children: [
-            _buildBookingsSection('upcoming'),
-            _buildBookingsSection('past'),
-            _buildBookingsSection('cancelled'),
-          ],
-        ),
-      ),
-      floatingActionButton: selectionMode
-          ? FloatingActionButton.extended(
-              backgroundColor: Colors.red.shade600,
-              icon: Icon(Icons.delete),
-              label: Text('Delete (${selectedBookings.length})'),
-              onPressed: _deleteSelectedBookings,
-            )
-          : null,
-    );
+  void _enableSelectionMode(Map<String, dynamic> bookingData, String bookingType) {
+    setState(() {
+      selectionMode = true;
+      selectedBookings = [
+        {
+          'bookID': bookingData['bookID'],
+          'data': bookingData,
+          'type': bookingType,
+        }
+      ];
+    });
+  }
+
+  void _toggleBookingSelection(Map<String, dynamic> bookingData, String bookingType) {
+    setState(() {
+      final existingIndex = selectedBookings.indexWhere((b) => b['bookID'] == bookingData['bookID']);
+      if (existingIndex >= 0) {
+        selectedBookings.removeAt(existingIndex);
+        if (selectedBookings.isEmpty) {
+          selectionMode = false;
+        }
+      } else {
+        selectedBookings.add({
+          'bookID': bookingData['bookID'],
+          'data': bookingData,
+          'type': bookingType,
+        });
+      }
+    });
+  }
+
+  void _resetSelectedBookings() {
+    setState(() {
+      selectedBookings.clear();
+      selectionMode = false;
+    });
+  }
+
+  void _deleteSelectedBookings() async {
+    bool deletionSuccessful = true;
+
+    for (var booking in selectedBookings) {
+      String bookID = booking['bookID'];
+
+      try {
+        var bookingRef =
+            FirebaseFirestore.instance.collection('bookings').doc(bookID);
+        await bookingRef.delete();
+        print('Booking with ID: $bookID has been deleted successfully');
+      } catch (e) {
+        print('Failed to delete booking with ID: $bookID');
+        deletionSuccessful = false;
+      }
+    }
+
+    if (deletionSuccessful) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Selected bookings have been deleted successfully')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Some bookings failed to delete')),
+      );
+    }
+
+    setState(() {
+      selectionMode = false;
+      selectedBookings.clear();
+    });
   }
 
   Widget _buildBookingsSection(String state) {
@@ -200,153 +182,254 @@ class _BookingsPageState extends State<BookingsPage>
           return _buildEmptyState();
         }
 
-        return ListView.separated(
-          itemCount: displayBookings.length,
-          padding: const EdgeInsets.only(top: 18, left: 12, right: 12, bottom: 80),
-          separatorBuilder: (context, index) => SizedBox(height: 14),
-          itemBuilder: (context, index) {
-            var bookingData =
-                displayBookings[index].data() as Map<String, dynamic>;
-            bookingData['bookID'] = displayBookings[index].id;
+        return Stack(
+          children: [
+            ListView.separated(
+              itemCount: displayBookings.length,
+              padding: const EdgeInsets.only(top: 18, left: 12, right: 12, bottom: 80),
+              separatorBuilder: (context, index) => SizedBox(height: 14),
+              itemBuilder: (context, index) {
+                var bookingData =
+                    displayBookings[index].data() as Map<String, dynamic>;
+                bookingData['bookID'] = displayBookings[index].id;
 
-            return Hero(
-              tag: 'booking_${bookingData['bookID']}',
-              child: GestureDetector(
-                onLongPress: () => _enableSelectionMode(bookingData, state),
-                child: AnimatedContainer(
-                  duration: Duration(milliseconds: 250),
-                  curve: Curves.easeInOut,
-                  decoration: BoxDecoration(
-                    color: selectionMode && selectedBookings.any((b) => b['bookID'] == bookingData['bookID'])
-                        ? Colors.teal.shade50
-                        : Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.teal.withOpacity(0.07),
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
+                final isSelected = selectedBookings.any((b) => b['bookID'] == bookingData['bookID']);
+
+                return Hero(
+                  tag: 'booking_${bookingData['bookID']}',
+                  child: GestureDetector(
+                    onLongPress: () {
+                      if (!selectionMode) {
+                        _enableSelectionMode(bookingData, state);
+                      }
+                    },
+                    onTap: () {
+                      if (selectionMode) {
+                        _toggleBookingSelection(bookingData, state);
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => BookingDetailsPage1(
+                              bookingData: bookingData,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: Duration(milliseconds: 250),
+                      curve: Curves.easeInOut,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.teal.shade50
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.teal.withOpacity(0.07),
+                            blurRadius: 10,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: isSelected
+                              ? Colors.teal
+                              : Colors.transparent,
+                          width: 1.2,
+                        ),
                       ),
-                    ],
-                    border: Border.all(
-                      color: selectionMode && selectedBookings.any((b) => b['bookID'] == bookingData['bookID'])
-                          ? Colors.teal
-                          : Colors.transparent,
-                      width: 1.2,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    bookingData['turfName'] ?? 'No Turf Name',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Colors.teal,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                StatusBadge(
+                                    status: bookingData['status'] ?? 'Confirmed'),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                                const SizedBox(width: 6),
+                                Text(
+                                  bookingData['bookingDate'] ?? 'No Booking Date',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                // --- Provider Column ---
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Provider',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    FutureBuilder<DocumentSnapshot>(
+                                      future: (() async {
+                                        // 1. Get turfId from bookingData
+                                        final turfId = bookingData['turfId'];
+                                        if (turfId == null) {
+                                          // Return an empty DocumentSnapshot with exists == false
+                                          return FirebaseFirestore.instance.collection('users').doc('dummy').get();
+                                        }
+                                        // 2. Get turf document
+                                        final turfDoc = await FirebaseFirestore.instance.collection('turfs').doc(turfId).get();
+                                        if (!turfDoc.exists) {
+                                          return FirebaseFirestore.instance.collection('users').doc('dummy').get();
+                                        }
+                                        final turfData = turfDoc.data() as Map<String, dynamic>;
+                                        final ownerId = turfData['ownerId'];
+                                        if (ownerId == null) {
+                                          return FirebaseFirestore.instance.collection('users').doc('dummy').get();
+                                        }
+                                        // 3. Get owner document
+                                        final ownerDoc = await FirebaseFirestore.instance.collection('users').doc(ownerId).get();
+                                        return ownerDoc;
+                                      })(),
+                                      builder: (context, snapshot) {
+                                        if (snapshot.connectionState == ConnectionState.waiting) {
+                                          return Text('Loading...', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey));
+                                        }
+                                        if (!snapshot.hasData || snapshot.data == null || !snapshot.data!.exists) {
+                                          return Text('No Provider', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.red));
+                                        }
+                                        final ownerData = snapshot.data!.data() as Map<String, dynamic>?;
+                                        final ownerName = ownerData?['name'] ?? 'No Provider';
+                                        return Text(
+                                          ownerName,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                // --- Price Column ---
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    const Text(
+                                      'Price',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      bookingData['amount'] != null
+                                          ? '₹${(bookingData['amount'] as num).toStringAsFixed(2)}'
+                                          : 'No Price',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => BookingDetailsPage1(
+                                      bookingData: bookingData,
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.info_outline, size: 16),
+                              label: const Text('Details'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.teal.shade700,
+                                minimumSize: const Size(double.infinity, 36),
+                                textStyle: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                side: const BorderSide(color: Color(0xFFDCECFD)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                );
+              },
+            ),
+            // --- Instruction at the bottom ---
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 10,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200]?.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 6,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                bookingData['turfName'] ?? 'No Turf Name',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: Colors.teal,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            StatusBadge(
-                                status: bookingData['status'] ?? 'Confirmed'),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
-                            const SizedBox(width: 6),
-                            Text(
-                              bookingData['bookingDate'] ?? 'No Booking Date',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Provider',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  bookingData['provider'] ?? 'No Provider',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                const Text(
-                                  'Price',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  bookingData['price'] ?? 'No Price',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => BookingDetailsPage1(
-                                  bookingData: bookingData,
-                                ),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.info_outline, size: 16),
-                          label: const Text('Details'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.teal.shade700,
-                            minimumSize: const Size(double.infinity, 36),
-                            textStyle: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            side: const BorderSide(color: Color(0xFFDCECFD)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                        Icon(Icons.touch_app, size: 16, color: Colors.grey[600]),
+                        SizedBox(width: 8),
+                        Text(
+                          'Long press a booking to select and delete it.',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                            fontStyle: FontStyle.italic,
+                            letterSpacing: 0.1,
                           ),
                         ),
                       ],
@@ -354,8 +437,8 @@ class _BookingsPageState extends State<BookingsPage>
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          ],
         );
       },
     );
@@ -400,59 +483,120 @@ class _BookingsPageState extends State<BookingsPage>
     );
   }
 
-  void _enableSelectionMode(
-      Map<String, dynamic> bookingData, String bookingType) {
-    setState(() {
-      selectionMode = true;
-      selectedBookings.add({
-        'bookID': bookingData['bookID'],
-        'data': bookingData,
-        'type': bookingType,
-      });
-    });
-  }
+    @override
+Widget build(BuildContext context) {
+  return DefaultTabController(
+    length: 3,
+    child: Scaffold(
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.teal.shade700,
+        title: const Text(
+          'My Bookings',
+          style: TextStyle(color:Colors.white,fontWeight: FontWeight.bold, fontSize: 20),
+        ),
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(60),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.teal.shade500,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TabBar(
+                indicator: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8), // soft rectangle
+                ),
+                labelColor: Colors.teal.shade800,
+                unselectedLabelColor: Colors.white,
+                labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                indicatorPadding: EdgeInsets.symmetric(horizontal: 1, vertical: 4),
+                tabs: const [
+                  Tab(text: '   Upcoming    '),
+                  Tab(text: '     Past     '),
+                  Tab(text: '   Cancelled   '),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+      body: TabBarView(
+        children: [
+          _buildBookingsSection('upcoming'),
+          _buildBookingsSection('past'),
+          _buildBookingsSection('cancelled'),
+        ],
+      ),
+      floatingActionButton: selectionMode
+          ? FloatingActionButton.extended(
+              icon: const Icon(Icons.delete_forever,color:Colors.white),
+              backgroundColor: Colors.red.shade600,
+              label: Text(
+                'Delete (${selectedBookings.length})',
+                style: TextStyle(color:Colors.white,fontWeight: FontWeight.bold),
+              ),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+  context: context,
+  builder: (ctx) => AlertDialog(
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+    ),
+    titlePadding: EdgeInsets.fromLTRB(24, 24, 24, 8),
+    contentPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+    actionsPadding: EdgeInsets.only(right: 16, bottom: 12),
 
-  void _resetSelectedBookings() {
-    setState(() {
-      selectedBookings.clear();
-      selectionMode = false;
-    });
-  }
+    title: Row(
+      children: [
+        Icon(Icons.warning_amber_rounded, color: Colors.red.shade400, size: 28),
+        SizedBox(width: 10),
+        Text(
+          "Confirm Deletion",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+      ],
+    ),
+    content: Text(
+      "Are you sure you want to delete ${selectedBookings.length} bookings? This action cannot be undone.",
+      style: TextStyle(fontSize: 15, color: Colors.grey.shade800),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(ctx, false),
+        child: Text(
+          "Cancel",
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      ElevatedButton.icon(
+        onPressed: () => Navigator.pop(ctx, true),
+        icon: Icon(Icons.delete_forever,color:Colors.white, size: 18),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red.shade600,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        label: Text(
+          "Delete",
+          style: TextStyle(color:Colors.white,fontWeight: FontWeight.bold),
+        ),
+      ),
+    ],
+  ),
+);
 
-  void _deleteSelectedBookings() async {
-    bool deletionSuccessful = true;
-
-    for (var booking in selectedBookings) {
-      String bookID = booking['bookID'];
-
-      try {
-        var bookingRef =
-            FirebaseFirestore.instance.collection('bookings').doc(bookID);
-        await bookingRef.delete();
-        print('Booking with ID: $bookID has been deleted successfully');
-      } catch (e) {
-        print('Failed to delete booking with ID: $bookID');
-        deletionSuccessful = false;
-      }
-    }
-
-    if (deletionSuccessful) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Selected bookings have been deleted successfully')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Some bookings failed to delete')),
-      );
-    }
-
-    setState(() {
-      selectionMode = false;
-      selectedBookings.clear();
-    });
-  }
+                if (confirm == true) _deleteSelectedBookings();
+              },
+            )
+          : null,
+    ),
+  );
 }
+
+  }
 
 class StatusBadge extends StatelessWidget {
   final String status;

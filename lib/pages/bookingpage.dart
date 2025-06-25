@@ -588,126 +588,136 @@ class _BookingPageState extends State<BookingPage> {
                   ),
                   Divider(height: 1, color: Colors.grey.shade300),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        TextButton.icon(
-                          icon: Icon(Icons.cancel, color: Colors.red),
-                          label: Text('Cancel', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            _showCancellationDialog();
-                          },
-                        ),
-                        if (isosp)
-                          TextButton.icon(
-                            icon: Icon(Icons.payments, color: Colors.teal),
-                            label: Text('Pay On Spot', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-                            onPressed: () async {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('On-spot payment selected')),
-                              );
-                              try {
-                                Map<String, dynamic> bookingData = {
-                                  'userId': currentUser.uid,
-                                  'userName': userName,
-                                  'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                                  'bookingSlots': selectedSlots,
-                                  'totalHours': totalHours,
-                                  'amount': totalAmount,
-                                  'turfId': widget.documentId,
-                                  'turfName': widget.documentname,
-                                  'selectedGround': selectedGround,
-                                  'paymentMethod': 'On Spot',
-                                };
+  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: TextButton.icon(
+              icon: Icon(Icons.cancel, color: Colors.red),
+              label: Text('Cancel', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showCancellationDialog();
+              },
+            ),
+          ),
+          Expanded(
+            child: TextButton.icon(
+              icon: Icon(Icons.check_circle, color: Colors.green),
+              label: Text('Confirm', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              onPressed: () async {
+                var options = {
+                  'key': 'rzp_test_RmOLs985IPNRVq',
+                  'amount': (totalAmount * 100).toInt(),
+                  'name': 'Turf Booking',
+                  'description': 'Booking fee for your selected slots',
+                  'prefill': {
+                    'contact': 'test',
+                    'email': 'test',
+                  },
+                  'theme': {
+                    'color': '#00FF00',
+                  },
+                };
 
-                                await _firestore
-                                    .collection('turfs')
-                                    .doc(widget.documentId)
-                                    .collection('bookings')
-                                    .add(bookingData);
+                _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
+                  try {
+                    Map<String, dynamic> bookingData = {
+                      'userId': currentUser.uid,
+                      'userName': userName,
+                      'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                      'bookingSlots': selectedSlots,
+                      'totalHours': totalHours,
+                      'amount': totalAmount,
+                      'turfId': widget.documentId,
+                      'turfName': widget.documentname,
+                      'selectedGround': selectedGround,
+                      'paymentMethod': 'Online',
+                      'status': 'confirmed',
+                    };
 
-                                await _firestore.collection('bookings').add(bookingData);
+                    await _firestore
+                        .collection('turfs')
+                        .doc(widget.documentId)
+                        .collection('bookings')
+                        .add(bookingData);
 
-                                await _showSuccessDialog(context, "Booking confirmed successfully!", true);
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to confirm booking: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        TextButton.icon(
-                          icon: Icon(Icons.check_circle, color: Colors.green),
-                          label: Text('Confirm', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                          onPressed: () async {
-                            var options = {
-                              'key': 'rzp_test_RmOLs985IPNRVq',
-                              'amount': (totalAmount * 100).toInt(),
-                              'name': 'Turf Booking',
-                              'description': 'Booking fee for your selected slots',
-                              'prefill': {
-                                'contact': 'test',
-                                'email': 'test',
-                              },
-                              'theme': {
-                                'color': '#00FF00',
-                              },
-                            };
+                    await _firestore.collection('bookings').add(bookingData);
 
-                            _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
-                              try {
-                                Map<String, dynamic> bookingData = {
-                                  'userId': currentUser.uid,
-                                  'userName': userName,
-                                  'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                                  'bookingSlots': selectedSlots,
-                                  'totalHours': totalHours,
-                                  'amount': totalAmount,
-                                  'turfId': widget.documentId,
-                                  'turfName': widget.documentname,
-                                  'selectedGround': selectedGround,
-                                  'paymentMethod': 'Online',
-                                  'status': 'confirmed',
-                                };
+                    await _showSuccessDialog(context, "Booking confirmed successfully!", true);
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to confirm booking: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                });
 
-                                await _firestore
-                                    .collection('turfs')
-                                    .doc(widget.documentId)
-                                    .collection('bookings')
-                                    .add(bookingData);
+                _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) async {
+                  await _showSuccessDialog(context, "Payment failed: ${response.message}", false);
+                });
 
-                                await _firestore.collection('bookings').add(bookingData);
+                try {
+                  _razorpay.open(options);
+                } catch (e) {
+                  print("Error: $e");
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+      SizedBox(height: 12), // Adjust spacing as needed
+      if (isosp)
+        TextButton.icon(
+          icon: Icon(Icons.payments, color: Colors.teal),
+          label: Text('Pay On Spot', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+          onPressed: () async {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('On-spot payment selected')),
+            );
+            try {
+              Map<String, dynamic> bookingData = {
+                'userId': currentUser.uid,
+                'userName': userName,
+                'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                'bookingSlots': selectedSlots,
+                'totalHours': totalHours,
+                'amount': totalAmount,
+                'turfId': widget.documentId,
+                'turfName': widget.documentname,
+                'selectedGround': selectedGround,
+                'paymentMethod': 'On Spot',
+              };
 
-                                await _showSuccessDialog(context, "Booking confirmed successfully!", true);
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to confirm booking: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            });
+              await _firestore
+                  .collection('turfs')
+                  .doc(widget.documentId)
+                  .collection('bookings')
+                  .add(bookingData);
 
-                            _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) async {
-                              await _showSuccessDialog(context, "Payment failed: ${response.message}", false);
-                            });
+              await _firestore.collection('bookings').add(bookingData);
 
-                            try {
-                              _razorpay.open(options);
-                            } catch (e) {
-                              print("Error: $e");
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+              await _showSuccessDialog(context, "Booking confirmed successfully!", true);
+            } catch (e) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to confirm booking: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+        ),
+    ],
+  ),
+),
                 ],
               ),
             ),

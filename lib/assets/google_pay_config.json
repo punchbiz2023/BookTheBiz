@@ -1,0 +1,18 @@
+{
+  "provider": "google",
+  "apiVersion": 2,
+  "apiVersionMinor": 0,
+  "allowedPaymentMethods": [
+    {
+      "type": "UPI",
+      "parameters": {}
+    }
+  ],
+  "transactionInfo": {
+    "totalPriceStatus": "FINAL",
+    "currencyCode": "INR"
+  },
+  "merchantInfo": {
+    "merchantName": "Test User"
+  }
+}

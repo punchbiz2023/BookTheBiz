@@ -68,6 +68,17 @@ class _SignupPageState extends State<SignupPage> {
         return;
       }
 
+      // --- Show Terms and Conditions Dialog ---
+      final agreed = await _showTermsAndConditionsDialog(isTurfOwner: _userType == 'Turf Owner');
+      if (!agreed) {
+        setState(() => _loading = false);
+        Fluttertoast.showToast(
+          msg: 'You must agree to the Terms and Conditions to register.',
+          backgroundColor: Colors.red.shade700,
+        );
+        return;
+      }
+
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -315,6 +326,202 @@ class _SignupPageState extends State<SignupPage> {
       ),
     );
   }
+  
+
+  Future<bool> _showTermsAndConditionsDialog({required bool isTurfOwner}) async {
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          backgroundColor: Colors.white,
+          title: Row(
+            children: [
+              Icon(Icons.article_rounded, color: Colors.teal.shade700, size: 28),
+              SizedBox(width: 10),
+              Text(
+                'Terms & Conditions',
+                style: TextStyle(
+                  color: Colors.teal.shade800,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+            ],
+          ),
+          content: Container(
+            width: double.maxFinite,
+            height: 350,
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(
+                    isTurfOwner ? _turfOwnerTerms : _customerTerms,
+                    style: TextStyle(
+                      color: Colors.teal.shade900,
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(
+                'Decline',
+                style: TextStyle(
+                  color: Colors.red.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: Icon(Icons.check_circle, color: Colors.white),
+              label: Text('Agree', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        );
+      },
+    ) ?? false;
+  }
+
+  // Place these at the top of your _SignupPageState class:
+  final String _turfOwnerTerms = '''
+TERMS AND CONDITIONS FOR TURF OWNERS – BOOKTHEBIZ (INDIA)
+Effective Date: 01/04/2025
+Last Updated: 01/04/2025
+
+1. ELIGIBILITY
+To list your turf on BooktheBiz, you must:
+• Be at least 18 years of age.
+• Be the lawful owner of the property or have legal authority to manage and lease the turf.
+• Provide accurate identity proof and property documentation when requested.
+
+2. TURF LISTING AND RESPONSIBILITIES
+By listing your turf, you agree to:
+• Provide complete, accurate, and up-to-date information including turf name, location, pricing, availability, photos, and features.
+• Ensure the turf is clean, well-maintained, and safe for use.
+• Keep your listing updated with accurate availability and pricing.
+• Comply with all applicable local and state laws.
+
+3. BOOKING PROCESS AND CANCELLATIONS
+• All bookings must be processed exclusively through the BooktheBiz platform.
+• You may choose between auto-approval or manual approval of bookings.
+• You must honour all confirmed bookings unless cancelled under genuine circumstances.
+• Cancellations by turf owners must be made promptly. Frequent cancellations may result in penalties or listing suspension.
+
+4. PRICING, PAYMENTS & TAXES
+• You are free to set your own hourly or slot-based pricing.
+• BooktheBiz will deduct a platform service fee from every successful booking.
+• Payouts will be made within 3–7 business days after the booking is completed.
+• You are solely responsible for declaring and paying any applicable taxes.
+
+5. CUSTOMER EXPERIENCE AND CONDUCT
+• Provide a professional, respectful experience to all users.
+• Avoid discriminatory or inappropriate behavior.
+• Provide access to the turf as per the booked schedule and ensure amenities are functional.
+
+6. LIABILITY AND INSURANCE
+• You are responsible for the safety, maintenance, and management of your premises.
+• BooktheBiz is not liable for any damage, injury, loss, theft, or third-party claims.
+• It is advised to carry appropriate property and liability insurance.
+
+7. REVIEWS AND FEEDBACK
+• Customers may leave reviews after their booking. Turf owners cannot alter or remove reviews.
+• Repeated negative reviews may result in account review or listing deactivation.
+
+8. TERMINATION AND ACCOUNT SUSPENSION
+• Your account or listing may be suspended or terminated for misrepresentation, complaints, non-compliance, safety violations, or misuse.
+
+9. INTELLECTUAL PROPERTY AND MARKETING USE
+• By listing your turf, you allow BooktheBiz to use your turf’s name, images, and description for promotion.
+
+10. DISPUTE RESOLUTION
+• BooktheBiz will mediate disputes. Legal disputes are subject to the courts of Salem, Tamil Nadu, India.
+
+11. CHANGES TO TERMS
+• BooktheBiz may update these Terms at any time. Continued use constitutes acceptance.
+
+12. CONTACT INFORMATION
+Email: bookthebiza@gmail.com
+Phone: +91-8248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
+''';
+
+  final String _customerTerms = '''
+Terms and Conditions for Customers – BooktheBiz (India)
+Effective Date: 01/04/2025
+Last Updated: 01/04/2025
+
+1. ACCOUNT REGISTRATION
+• Be at least 16 years of age. (Minors may participate under adult supervision.)
+• Provide accurate personal details.
+• Maintain the security of your account.
+
+2. BOOKING TERMS
+• All bookings must be made through the BooktheBiz platform.
+• Review turf details, availability, and pricing before confirming.
+• You will receive a confirmation message upon booking.
+• Some turfs may require prepayment.
+
+3. PAYMENT POLICY
+• Prices are set by the turf owner.
+• Payments can be made via UPI, card, wallet, or net banking.
+• A service fee may be added at booking.
+• All payments are processed securely.
+
+4. CANCELLATION AND REFUND POLICY
+• Cancellations must be made within the defined window.
+• Refund eligibility depends on the turf owner’s policy.
+• No-shows or late arrivals are not eligible for refunds.
+• Refunds, if applicable, will be processed within 5–7 business days.
+
+5. USAGE CONDUCT
+• Arrive on time and vacate the turf at the end of your booking.
+• Follow all on-site rules and regulations.
+• Maintain cleanliness and avoid damage.
+• Respect others’ bookings.
+• Avoid illegal or inappropriate activities.
+
+6. LIABILITY
+• BooktheBiz is a booking platform and does not manage turfs.
+• Turf owners are responsible for their facilities.
+• You participate at your own risk.
+
+7. REVIEWS AND RATINGS
+• You may leave honest feedback.
+• Reviews should be respectful and fact-based.
+• BooktheBiz may remove offensive or misleading reviews.
+
+8. TERMINATION OF ACCOUNT
+• Your account may be suspended for repeated no-shows, misuse, or fraudulent activity.
+
+9. PLATFORM USAGE
+• Do not misuse the BooktheBiz app or website.
+• All content is protected intellectual property.
+
+10. CHANGES TO TERMS
+• BooktheBiz may update these Terms at any time. Continued use constitutes acceptance.
+
+11. GOVERNING LAW
+• These Terms are governed by the laws of India. Disputes are subject to the courts of Salem, Tamil Nadu, India.
+
+12. CONTACT US
+Email: customersbtb@gmail.com
+Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
+''';
 
   @override
   Widget build(BuildContext context) {

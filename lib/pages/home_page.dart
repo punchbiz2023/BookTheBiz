@@ -27,12 +27,30 @@ class _HomePage1State extends State<HomePage1>
   DateTime? _customDate;
   bool selectionMode = false;
   List<Map<String, dynamic>> selectedBookings = [];
-  Set<String> _selectedGroundFilters = {};
+  //Set<String> _selectedGroundFilters = {};
   Position? _currentPosition;
   bool _isLoadingLocation = false;
+  bool _showAllTurfs = false;
+  Set<String> _selectedGroundFilters = {};
   String _selectedLocation = 'All Areas';
   List<String> _availableLocations = ['All Areas'];
-  bool _showAllTurfs = false;
+  Map<String, String> _locationCache = {}; // docId -> address
+  Map<String, String> _localityToLatLng = {}; // locality -> latlng string
+
+  // Returns a unique list of available locations (removes duplicates)
+  List<String> _getUniqueLocations() {
+    final seen = <String>{};
+    final unique = <String>[];
+    for (final loc in _availableLocations) {
+      final key = loc.split('|')[0].trim();
+      if (!seen.contains(key)) {
+        seen.add(key);
+        unique.add(loc);
+      }
+    }
+    return unique;
+  }
+
 
   final _currentUserId = FirebaseAuth.instance.currentUser?.uid;
   late TabController _tabController;
@@ -76,6 +94,9 @@ class _HomePage1State extends State<HomePage1>
   // 2. Add this field to your _HomePage1State class:
   String _selectedPriceBucket = 'All';
 
+  // Add this to your _HomePage1State class:
+  Map<String, String> _docIdToLocality = {}; // docId -> locality
+
   // Add this Set to your state:
   Set<String> _likedTurfs = {};
 
@@ -85,6 +106,7 @@ class _HomePage1State extends State<HomePage1>
     _tabController = TabController(length: 3, vsync: this);
     _initializeLocation();
     _loadUserLikes();
+    _loadAvailableLocations(); // Make sure this is called!
   }
 
   Future<void> _loadUserLikes() async {
@@ -168,72 +190,51 @@ class _HomePage1State extends State<HomePage1>
   Future<void> _loadAvailableLocations() async {
     try {
       final turfs = await FirebaseFirestore.instance.collection('turfs').get();
-      final locations = turfs.docs.map((doc) {
-        final location = doc.data()['location']?.toString() ?? '';
-        if (location.isEmpty) return '';
-        
-        try {
-          final coords = location.split(',');
-          if (coords.length != 2) return '';
-          
-          final lat = double.parse(coords[0].trim());
-          final lng = double.parse(coords[1].trim());
-          
-          return '${lat.toStringAsFixed(6)},${lng.toStringAsFixed(6)}';
-        } catch (e) {
-          return '';
+      final Set<String> localities = {};
+      final Map<String, String> localityToLatLng = {};
+      final Map<String, String> docIdToLocality = {};
+
+      for (var doc in turfs.docs) {
+        final turfData = doc.data();
+        String? latlng;
+        if (turfData['latlng'] != null && turfData['latlng'].toString().isNotEmpty) {
+          latlng = turfData['latlng'].toString();
+        } else if (turfData['location'] != null && turfData['location'].toString().isNotEmpty) {
+          latlng = turfData['location'].toString();
         }
-      }).where((loc) => loc.isNotEmpty).toSet().toList();
-      
-      // Convert coordinates to addresses
-      final addresses = await Future.wait(
-        locations.map((loc) async {
+        if (latlng != null && latlng.contains(',')) {
           try {
-            final coords = loc.split(',');
-            final lat = double.parse(coords[0]);
-            final lng = double.parse(coords[1]);
-            
+            final parts = latlng.split(',');
+            final lat = double.parse(parts[0]);
+            final lng = double.parse(parts[1]);
             final placemarks = await placemarkFromCoordinates(lat, lng);
             if (placemarks.isNotEmpty) {
-              final place = placemarks[0];
-              String address = '';
-              
-              // Add sub-locality or locality
-              if (place.subLocality != null && place.subLocality!.isNotEmpty) {
-                address += place.subLocality!;
-              } else if (place.locality != null && place.locality!.isNotEmpty) {
-                address += place.locality!;
+              final locality = placemarks.first.locality ?? '';
+              if (locality.isNotEmpty) {
+                localities.add(locality);
+                localityToLatLng.putIfAbsent(locality, () => latlng!);
+                docIdToLocality[doc.id] = locality;
               }
-              
-              // Add administrative area (city)
-              if (place.subAdministrativeArea != null && place.subAdministrativeArea!.isNotEmpty) {
-                if (address.isNotEmpty) address += ', ';
-                address += place.subAdministrativeArea!;
-              }
-              
-              // Store the coordinates with the address for later matching
-              return '$address|${coords[0]},${coords[1]}';
             }
           } catch (e) {
-            print('Error converting coordinates to address: $e');
+            // ignore
           }
-          return '';
-        })
-      );
-      
-      final uniqueAddresses = addresses.where((addr) => addr.isNotEmpty).toSet().toList();
-      
+        }
+      }
+
       setState(() {
-        _availableLocations = ['All Areas', ...uniqueAddresses];
+        _availableLocations = ['All Areas', ...localities];
+        _localityToLatLng = localityToLatLng;
+        _docIdToLocality = docIdToLocality;
         if (!_availableLocations.contains(_selectedLocation)) {
           _selectedLocation = 'All Areas';
         }
       });
     } catch (e) {
-      print('Error loading locations: $e');
+      // Handle error if needed
     }
   }
-
+  
   Future<void> _getCurrentLocation() async {
     setState(() {
       _isLoadingLocation = true;
@@ -528,6 +529,30 @@ Widget build(BuildContext context) {
             _buildMostRecentBookedTurf(),
 
             // 3. Area-based Dropdown
+            
+            // 4. Nearby Turfs
+            if (_currentPosition != null) ...[
+              SizedBox(height: 20),
+              Row(
+                children: [
+                  Icon(Icons.near_me, color: Colors.teal, size: 28),
+                  SizedBox(width: 8),
+                  Text(
+                    'Nearby Turfs',
+                    style: TextStyle(
+                      color: Colors.teal,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 15),
+              _buildNearbyTurfs(),
+            ],
+
+            // 5. Favourite Turfs
+            _buildFavouriteTurfs(),
             Container(
               margin: EdgeInsets.symmetric(vertical: 10),
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -575,30 +600,6 @@ Widget build(BuildContext context) {
                 ],
               ),
             ),
-
-            // 4. Nearby Turfs
-            if (_currentPosition != null) ...[
-              SizedBox(height: 20),
-              Row(
-                children: [
-                  Icon(Icons.near_me, color: Colors.teal, size: 28),
-                  SizedBox(width: 8),
-                  Text(
-                    'Nearby Turfs',
-                    style: TextStyle(
-                      color: Colors.teal,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 15),
-              _buildNearbyTurfs(),
-            ],
-
-            // 5. Favourite Turfs
-            _buildFavouriteTurfs(),
 
             // 6. Sports Type Filter
             _buildSportsTypeFilter(),
@@ -1596,67 +1597,7 @@ Widget build(BuildContext context) {
     );
     }
 
-  // Add this new method to handle unique locations
-  List<String> _getUniqueLocations() {
-    final seen = <String>{};
-    return _availableLocations.where((loc) {
-      if (loc == 'All Areas') return true;
-      final addressPart = loc.split('|')[0].trim();
-      return seen.add(addressPart); // Returns true if the address wasn't seen before
-    }).toList();
-  }
-
-  // Instead of turfAddress, use a helper to get address from coordinates
-  Future<String> _getAddressFromCoords(String coords) async {
-    try {
-      final parts = coords.split(',');
-      if (parts.length != 2) return '';
-      final lat = double.parse(parts[0]);
-      final lng = double.parse(parts[1]);
-      final placemarks = await placemarkFromCoordinates(lat, lng);
-      if (placemarks.isNotEmpty) {
-        final place = placemarks[0];
-        return (place.locality ?? '').toLowerCase();
-      }
-    } catch (e) {}
-    return '';
-  }
-
-  Future<String> _resolveLocationName(String location) async {
-    if (_locationNameCache.containsKey(location)) {
-      return _locationNameCache[location]!;
-    }
-    // If it's already a name, return as is
-    if (!location.contains(',')) {
-      _locationNameCache[location] = location.toLowerCase();
-      return location.toLowerCase();
-    }
-    // Otherwise, geocode
-    try {
-      final parts = location.split(',');
-      if (parts.length != 2) return location.toLowerCase();
-      final lat = double.parse(parts[0]);
-      final lng = double.parse(parts[1]);
-      final placemarks = await placemarkFromCoordinates(lat, lng);
-      if (placemarks.isNotEmpty) {
-        final place = placemarks[0];
-        // Prefer locality, fallback to subAdministrativeArea, then administrativeArea
-        final name = (place.locality?.isNotEmpty == true)
-            ? place.locality!
-            : (place.subAdministrativeArea?.isNotEmpty == true)
-                ? place.subAdministrativeArea!
-                : (place.administrativeArea ?? '');
-        _locationNameCache[location] = name.toLowerCase();
-        return name.toLowerCase();
-      }
-    } catch (e) {
-      print('Geocoding error: $e');
-    }
-    _locationNameCache[location] = location.toLowerCase();
-    return location.toLowerCase();
-  }
-
-  // Add this async helper:
+  // Update your _filterTurfsByLocation logic as below:
   Future<List<DocumentSnapshot>> _filterTurfsByLocation(List<DocumentSnapshot> turfs) async {
     final selectedLocationName = _selectedLocation == 'All Areas'
         ? null
@@ -1673,13 +1614,14 @@ Widget build(BuildContext context) {
       final matchesGround = _selectedGroundFilters.isEmpty ||
           _selectedGroundFilters.any((g) => grounds.contains(g));
 
+      // Updated location filtering: fuzzy match on locality
+      bool matchesLocation = true;
       if (selectedLocationName != null) {
-        if (location.isEmpty) continue;
-        final resolvedName = await _resolveLocationName(location);
-        if (!resolvedName.contains(selectedLocationName)) continue;
+        final locality = _docIdToLocality[doc.id] ?? '';
+        matchesLocation = locality.toLowerCase().contains(selectedLocationName);
       }
 
-      if (matchesSearch && matchesGround) {
+      if (matchesSearch && matchesGround && matchesLocation) {
         filtered.add(doc);
       }
     }
