@@ -10,10 +10,10 @@ class DetailsPage extends StatefulWidget {
   final String documentname;
 
   const DetailsPage({
-    Key? key,
+    super.key,
     required this.documentId,
     required this.documentname,
-  }) : super(key: key);
+  });
 
   @override
   _DetailsPageState createState() => _DetailsPageState();
@@ -190,7 +190,7 @@ class _DetailsPageState extends State<DetailsPage> {
       context: context,
       builder: (BuildContext context) {
         // Automatically open the date picker when the dialog is built
-        Future<void> _selectDate(BuildContext context) async {
+        Future<void> selectDate(BuildContext context) async {
           DateTime? pickedDate = await showDatePicker(
             context: context,
             initialDate: DateTime.now(),
@@ -206,7 +206,7 @@ class _DetailsPageState extends State<DetailsPage> {
 
         // Immediately call the date picker once the dialog is displayed
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _selectDate(context);
+          selectDate(context);
         });
 
         return AlertDialog(
@@ -217,7 +217,7 @@ class _DetailsPageState extends State<DetailsPage> {
             'Book Now',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
           ),
-          content: Container(
+          content: SizedBox(
             width: 800,
             height: 800,
             child: SingleChildScrollView(
@@ -241,7 +241,7 @@ class _DetailsPageState extends State<DetailsPage> {
                         style: TextStyle(color: Colors.white, fontSize: 16),
                       ),
                       trailing: GestureDetector(
-                        onTap: () => _selectDate(context),
+                        onTap: () => selectDate(context),
                         child: Icon(Icons.calendar_today, color: Colors.white),
                       ),
                     ),
@@ -366,11 +366,11 @@ class _DetailsPageState extends State<DetailsPage> {
                   'turfId': widget.documentId,
                   'turfName': widget.documentname,
                   'totalHoursBooked': totalHours,
-                  'amount': totalHours! * price,
+                  'amount': totalHours * price,
                 };
 
                 try {
-                  if (totalHours != null && totalHours! >= 1) {
+                  if (totalHours >= 1) {
                     await FirebaseFirestore.instance.collection('bookings').add(bookingData);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Booking confirmed!')),
@@ -388,7 +388,6 @@ class _DetailsPageState extends State<DetailsPage> {
                   );
                 }
               },
-              child: Text('Confirm', style: TextStyle(fontSize: 16)),
               style: ElevatedButton.styleFrom(
                 foregroundColor: Colors.white,
                 backgroundColor: Colors.blueAccent,
@@ -396,6 +395,7 @@ class _DetailsPageState extends State<DetailsPage> {
                 elevation: 5,
                 padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
               ),
+              child: Text('Confirm', style: TextStyle(fontSize: 16)),
             ),
           ],
         );
@@ -586,17 +586,13 @@ class _DetailsPageState extends State<DetailsPage> {
                       fit: StackFit.expand,
                       children: [
                         imageUrl.isNotEmpty
-                            ? Transform(
+                            ? Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                color: Colors.black.withOpacity(0.45),
+                                colorBlendMode: BlendMode.darken,
                                 alignment: Alignment.center,
-                                transform: Matrix4.rotationX(3.14159), // 180 degrees in radians
-                                child: Image.network(
-                                  imageUrl,
-                                  fit: BoxFit.cover,
-                                  color: Colors.black.withOpacity(0.45),
-                                  colorBlendMode: BlendMode.darken,
-                                  alignment: Alignment.center,
-                                  filterQuality: FilterQuality.high,
-                                ),
+                                filterQuality: FilterQuality.high,
                               )
                             : Container(
                                 color: Colors.grey[700],

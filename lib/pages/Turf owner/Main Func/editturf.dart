@@ -9,7 +9,7 @@ import 'package:reorderables/reorderables.dart';
 class EditTurfPage extends StatefulWidget {
   final String turfId;
 
-  EditTurfPage({required this.turfId});
+  const EditTurfPage({super.key, required this.turfId});
 
   @override
   _EditTurfPageState createState() => _EditTurfPageState();
@@ -29,7 +29,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
   bool _isGettingLocation = false;
   bool _hasMultipleImages = false;
   Map<String, int> _price = {};
-  Map<String, TextEditingController> _priceControllers = {};
+  final Map<String, TextEditingController> _priceControllers = {};
   List<String> facilities = [
     'Parking',
     'Restroom',
@@ -151,7 +151,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
 
   Future<void> _pickImages() async {
     final pickedImages = await ImagePicker().pickMultiImage();
-    if (pickedImages != null && pickedImages.isNotEmpty) {
+    if (pickedImages.isNotEmpty) {
       setState(() {
         _newImageFiles.addAll(pickedImages.map((x) => File(x.path)));
       });
@@ -376,7 +376,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text('Set Turf Location'),
-          content: Container(
+          content: SizedBox(
             width: double.maxFinite,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -386,7 +386,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
                   title: Text('Use Current Location'),
                   subtitle: Text('Get precise location using GPS'),
                   onTap: () async {
-                    Navigator.pop(context);
+      Navigator.pop(context);
                     await _updateLocation(useCurrentLocation: true);
                   },
                 ),
@@ -818,7 +818,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
                         .toList();
                     _newImageFiles = allImages
                         .skip(1)
-                        .where((e) => e is File)
+                        .whereType<File>()
                         .cast<File>()
                         .toList();
                   });
@@ -962,35 +962,35 @@ class _EditTurfPageState extends State<EditTurfPage> {
               _hasMultipleImages
                   ? _buildImageEditSection()
                   : GestureDetector(
-                      onTap: _pickImage,
-                      child: _newImageFile != null
-                          ? Image.file(
-                              _newImageFile!,
-                              height: 250,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                            )
-                          : _imageUrl != null
-                              ? Image.network(
-                                  _imageUrl!,
-                                  height: 250,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                )
-                              : Container(
-                                  height: 250,
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[300],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    Icons.add_a_photo,
-                                    size: 50,
-                                    color: Colors.grey[700],
-                                  ),
-                                ),
-                    ),
+                onTap: _pickImage,
+                child: _newImageFile != null
+                    ? Image.file(
+                  _newImageFile!,
+                  height: 250,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                )
+                    : _imageUrl != null
+                    ? Image.network(
+                  _imageUrl!,
+                  height: 250,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                )
+                    : Container(
+                  height: 250,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.add_a_photo,
+                    size: 50,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
               SizedBox(height: 16),
               _buildTextField(_nameController, 'Turf Name'),
               SizedBox(height: 16),
@@ -1284,7 +1284,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
               keyboardType: TextInputType.number,
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }

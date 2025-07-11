@@ -5,6 +5,8 @@ import 'home_page_via_otp.dart';
 import 'package:odp/pages/Turf owner/Main Func/owner_home_via_otp.dart';
 
 class PhoneLoginPage extends StatefulWidget {
+  const PhoneLoginPage({super.key});
+
   @override
   _PhoneLoginPageState createState() => _PhoneLoginPageState();
 }
@@ -15,9 +17,9 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
   bool _otpSent = false;
   bool _isLoading = false;
 
-  List<TextEditingController> _otpControllers =
+  final List<TextEditingController> _otpControllers =
       List.generate(6, (_) => TextEditingController());
-  List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
   Future<void> _sendOTP() async {
     setState(() => _isLoading = true);
@@ -219,12 +221,6 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
                       : _otpSent
                           ? _verifyOTP
                           : _sendOTP,
-                  child: _isLoading
-                      ? CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          _otpSent ? 'Verify OTP' : 'Send OTP',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal[600],
                     foregroundColor: Colors.white,
@@ -235,6 +231,12 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
                     elevation: 6,
                     shadowColor: Colors.tealAccent,
                   ),
+                  child: _isLoading
+                      ? CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          _otpSent ? 'Verify OTP' : 'Send OTP',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                 ),
               ),
             ],

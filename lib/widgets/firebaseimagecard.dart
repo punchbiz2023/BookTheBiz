@@ -11,7 +11,7 @@ class FirebaseImageCard extends StatelessWidget {
   final dynamic price;
 
   const FirebaseImageCard({
-    Key? key,
+    super.key,
     required this.imageUrl,
     required this.title,
     required this.description,
@@ -19,7 +19,7 @@ class FirebaseImageCard extends StatelessWidget {
     required this.docname,
     required this.chips,
     required this.price,
-  }) : super(key: key);
+  });
 
   String _getPriceDisplay(dynamic price) {
     if (price is Map<String, dynamic>) {

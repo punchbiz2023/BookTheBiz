@@ -5,14 +5,14 @@ import 'bkuserdetails.dart';
 class BookingDetailsPage extends StatefulWidget {
   final String turfId;
 
-  BookingDetailsPage({required this.turfId, required Map bookingData});
+  const BookingDetailsPage({super.key, required this.turfId, required Map bookingData});
 
   @override
   _BookingDetailsPageState createState() => _BookingDetailsPageState();
 }
 
 class _BookingDetailsPageState extends State<BookingDetailsPage> {
-  TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String? _selectedDate;
   String _sortOrder = 'Ascending'; // Default sort order
@@ -119,7 +119,7 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
                 _sortOrder = newValue!;
               });
             },
-            items: [
+            items: const [
               DropdownMenuItem<String>(
                 value: 'Ascending',
                 child: Row(
@@ -173,7 +173,7 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center, // Center the icon and text
-        children: [
+        children: const [
           Icon(
             Icons.clear_all,
             color: Colors.teal,
@@ -248,7 +248,7 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
               ...activeBookings.map((doc) {
                 var bookingData = doc.data() as Map<String, dynamic>;
                 return _buildBookingCard(bookingData, doc.id);
-              }).toList(),
+              }),
             ],
             if (pastBookings.isNotEmpty) ...[
               Padding(
@@ -261,7 +261,7 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
               ...pastBookings.map((doc) {
                 var bookingData = doc.data() as Map<String, dynamic>;
                 return _buildBookingCard(bookingData, doc.id);
-              }).toList(),
+              }),
             ],
           ],
         );

@@ -8,7 +8,7 @@ import 'booking_details.dart';
 class TurfDetails extends StatefulWidget {
   final String turfId;
 
-  TurfDetails({required this.turfId});
+  const TurfDetails({super.key, required this.turfId});
 
   @override
   _TurfDetailsState createState() => _TurfDetailsState();
@@ -339,7 +339,7 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
               indicatorSize: TabBarIndicatorSize.label, // Keeps it tight to text width
               labelStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               unselectedLabelStyle: TextStyle(fontSize: 16),
-              tabs: [
+              tabs: const [
                 Tab(text: 'Details'),
                 Tab(text: 'Bookings'),
                 Tab(text: 'Stats'),
@@ -358,7 +358,7 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
           controller: _tabController,
           children: [
             _buildTurfDetails(context),
-            BookingDetailsPage(turfId: widget.turfId, bookingData: {}),
+            BookingDetailsPage(turfId: widget.turfId, bookingData: const {}),
             Turfstats(turfId: widget.turfId),
           ],
         ),

@@ -3,23 +3,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'statusfile.dart';
-import '../../bookingpage.dart';
-import '../../home_page.dart';
 import '../../login.dart';
 import '../../profile_via_otp.dart';
-import '../../settings.dart';
 import 'turfadd.dart';
 import '../Display- turfs/turf_details.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:geocoding/geocoding.dart';
 import 'dart:async';
 
 class HomePage2 extends StatefulWidget {
   final Map<String, dynamic> userData;
 
-  HomePage2({Key? key, required this.userData}) : super(key: key);
+  const HomePage2({super.key, required this.userData});
 
   @override
   _HomePage2State createState() => _HomePage2State();
@@ -93,7 +88,7 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         title: Row(
-          children: [
+          children: const [
             Text(
               "Turf Owner ",
               style: TextStyle(
@@ -225,7 +220,7 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
                                           borderRadius: BorderRadius.circular(15),
                                         ),
                                         child: Row(
-                                          children: [
+                                          children: const [
                                             Icon(
                                               Icons.sports_soccer,
                                               color: Colors.white,
@@ -247,7 +242,7 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
                                   ),
                                 ),
                                 // Enhanced Stats Cards
-                                Container(
+                                SizedBox(
                                   height: 180,
                                   child: Stack(
                                     children: [
@@ -330,7 +325,7 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
 
                   // Enhanced Add Turf Button
                   Center(
-                    child: Container(
+                    child: SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () {
@@ -365,7 +360,7 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+                          children: const [
                             Icon(Icons.add_circle_outline, color: Colors.white),
                             SizedBox(width: 10),
                             Text(
@@ -710,7 +705,7 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
                                     ),
                                   ),
                                   child: Row(
-                                    children: [
+                                    children: const [
                                       Icon(Icons.help_outline, color: Colors.white, size: 28),
                                       SizedBox(width: 10),
                                       Text(
@@ -903,10 +898,10 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
                         ),
                         TextButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: Text('Logout'),
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.red,
                           ),
+                          child: Text('Logout'),
                         ),
                       ],
                     ),
@@ -1210,7 +1205,7 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text('Set Turf Location'),
-          content: Container(
+          content: SizedBox(
             width: double.maxFinite,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1324,10 +1319,10 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: Text('Open Settings'),
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.teal,
                   ),
+                  child: Text('Open Settings'),
                 ),
               ],
             ),

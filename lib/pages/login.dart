@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -14,6 +13,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'phone_login_page.dart'; // Create this file as shown below
 
 class LoginApp extends StatefulWidget {
+  const LoginApp({super.key});
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -108,19 +109,63 @@ class _LoginPageState extends State<LoginApp> {
             final shouldSave = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
-                title: Text('Save Login Details?'),
-                content: Text('Would you like to save your email and password for faster login next time?'),
+                backgroundColor: Colors.teal.shade700,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                title: Row(
+                  children: const [
+                    Icon(Icons.lock_person_rounded, color: Colors.white, size: 28),
+                    SizedBox(width: 10),
+                    Text(
+                      'Save Login Details?',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 22,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+                content: Text(
+                  'Would you like us to securely remember your email and password for faster login next time?\n\n'
+                  'This is recommended only on your personal device.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.95),
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context, false),
-                    child: Text('Not Now'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade600,
+                    child: Text(
+                      'Not Now',
+                      style: TextStyle(
+                        color: Colors.teal.shade100,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                    child: Text('Save'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context, true),
+                    icon: Icon(Icons.save_alt_rounded, color: Colors.white, size: 20),
+                    label: Text(
+                      'Save',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal.shade900,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                      elevation: 2,
+                    ),
                   ),
                 ],
               ),
@@ -207,7 +252,7 @@ class _LoginPageState extends State<LoginApp> {
       context: context,
       builder: (context) => AlertDialog(
         title: Row(
-          children: [
+          children: const [
             Icon(Icons.error_outline, color: Colors.red),
             SizedBox(width: 8),
             Text('Login Error'),

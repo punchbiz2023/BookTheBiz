@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 class FirebaseImageCard extends StatelessWidget {
   final String imagePath;
 
-  FirebaseImageCard({required this.imagePath});
+  const FirebaseImageCard({super.key, required this.imagePath});
 
   @override
   Widget build(BuildContext context) {

@@ -3,7 +3,7 @@ import 'package:odp/pages/login.dart';
 import 'package:odp/pages/sign_up_page.dart';
 
 class StartPage extends StatelessWidget {
-  const StartPage({Key? key}) : super(key: key);
+  const StartPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +19,7 @@ class StartPage extends StatelessWidget {
           CustomPaint(
             painter: TealSwirlPainter(),
             // Fill the entire screen to paint the swirl
-            child: Container(
+            child: SizedBox(
               height: size.height,
               width: size.width,
             ),

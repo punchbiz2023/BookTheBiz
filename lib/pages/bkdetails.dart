@@ -6,8 +6,7 @@ import 'package:intl/intl.dart';
 class BookingDetailsPage1 extends StatefulWidget {
   final Map<String, dynamic> bookingData;
 
-  const BookingDetailsPage1({Key? key, required this.bookingData})
-      : super(key: key);
+  const BookingDetailsPage1({super.key, required this.bookingData});
 
   @override
   _BookingDetailsPage1State createState() => _BookingDetailsPage1State();
@@ -76,7 +75,7 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: Container(
+          child: SizedBox(
             height: 250,
             width: double.infinity,
             child: Image.network(
@@ -275,7 +274,7 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
                           ),
                       ],
                     );
-                  }).toList(),
+                  }),
 
                   // Dynamic booking status
                   ...bookingStatus.map((status) {
@@ -286,7 +285,7 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
                       ),
                       backgroundColor: Colors.red,
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
             ],

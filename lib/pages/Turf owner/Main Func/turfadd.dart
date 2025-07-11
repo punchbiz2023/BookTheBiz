@@ -7,10 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:reorderables/reorderables.dart';
 
 class AddTurfPage extends StatefulWidget {
+  const AddTurfPage({super.key});
+
   @override
   _AddTurfPageState createState() => _AddTurfPageState();
 }
@@ -19,7 +20,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
-  List<File> _imageFiles = [];
+  final List<File> _imageFiles = [];
   bool _isLoading = false;
   Position? _currentPosition;
   bool _isGettingLocation = false;
@@ -88,7 +89,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
   }
 
   Future<void> _getCurrentLocation() async {
-    setState(() {
+      setState(() {
       _isGettingLocation = true;
     });
 
@@ -171,7 +172,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
   Future<void> _pickImages() async {
     final pickedImages = await _picker.pickMultiImage();
-    if (pickedImages != null && pickedImages.isNotEmpty) {
+    if (pickedImages.isNotEmpty) {
       setState(() {
         _imageFiles.addAll(pickedImages.map((x) => File(x.path)));
         if (_anchorImageIndex == null && _imageFiles.isNotEmpty) {
@@ -257,17 +258,17 @@ class _AddTurfPageState extends State<AddTurfPage> {
     List<String> urls = [];
     for (int i = 0; i < images.length; i++) {
       final image = images[i];
-      try {
-        Reference storageRef = _firebaseStorage
-            .ref()
+    try {
+      Reference storageRef = _firebaseStorage
+          .ref()
             .child('turf_images/${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
-        UploadTask uploadTask = storageRef.putFile(image);
-        TaskSnapshot snapshot = await uploadTask;
+      UploadTask uploadTask = storageRef.putFile(image);
+      TaskSnapshot snapshot = await uploadTask;
         String url = await snapshot.ref.getDownloadURL();
         urls.add(url);
-      } catch (e) {
-        throw Exception('Failed to upload image: $e');
-      }
+    } catch (e) {
+      throw Exception('Failed to upload image: $e');
+    }
     }
     return urls;
   }
@@ -349,7 +350,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text('Choose Location'),
-          content: Container(
+          content: SizedBox(
             width: double.maxFinite,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -372,7 +373,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
                   ),
                 ),
                 SizedBox(height: 8),
-                Container(
+                SizedBox(
                   height: 200,
                   child: SingleChildScrollView(
                     child: Column(
@@ -887,22 +888,22 @@ class _AddTurfPageState extends State<AddTurfPage> {
               // Spotlight image (always the first image)
               Container(
                 width: double.infinity,
-                height: 180,
+        height: 180,
                 margin: EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
+        decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: Colors.amber, width: 3),
-                  boxShadow: [
-                    BoxShadow(
+          boxShadow: [
+            BoxShadow(
                       color: Colors.teal.shade900.withOpacity(0.15),
                       blurRadius: 16,
-                      spreadRadius: 2,
-                      offset: Offset(2, 4),
-                    ),
-                  ],
-                ),
+              spreadRadius: 2,
+              offset: Offset(2, 4),
+            ),
+          ],
+        ),
                 child: Stack(
-                  children: [
+          children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(15),
                       child: Image.file(
@@ -922,18 +923,18 @@ class _AddTurfPageState extends State<AddTurfPage> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
-                          children: [
+                          children: const [
                             Icon(Icons.star, color: Colors.white, size: 20),
                             SizedBox(width: 6),
-                            Text(
+            Text(
                               'Spotlight Image',
-                              style: TextStyle(
+              style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 15,
-                              ),
-                            ),
-                          ],
+              ),
+            ),
+          ],
                         ),
                       ),
                     ),
@@ -959,10 +960,10 @@ class _AddTurfPageState extends State<AddTurfPage> {
                       key: ValueKey(img.path),
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(
                             img,
-                            fit: BoxFit.cover,
+            fit: BoxFit.cover,
                             width: 80,
                             height: 80,
                           ),
@@ -1221,7 +1222,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
                 side: BorderSide(color: Colors.red, width: 2), // Red border
               ),
               title: Row(
-                children: [
+                children: const [
                   Icon(Icons.warning, color: Colors.red), // Warning icon
                   SizedBox(width: 8),
                   Text(
@@ -1392,12 +1393,12 @@ class _PriceInputDialog extends StatelessWidget {
   final String groundName;
   final double? previousPrice;
 
-  _PriceInputDialog({required this.groundName, this.previousPrice});
+  const _PriceInputDialog({required this.groundName, this.previousPrice});
 
   @override
   Widget build(BuildContext context) {
-    final TextEditingController _priceController = TextEditingController();
-    bool _isChecked = false;
+    final TextEditingController priceController = TextEditingController();
+    bool isChecked = false;
 
     return StatefulBuilder(
       builder: (context, setState) {
@@ -1420,7 +1421,7 @@ class _PriceInputDialog extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                  controller: _priceController,
+                  controller: priceController,
                   keyboardType: TextInputType.number,
                   style: TextStyle(fontSize: 16),
                   decoration: InputDecoration(
@@ -1440,14 +1441,14 @@ class _PriceInputDialog extends StatelessWidget {
                   Row(
                     children: [
                       Checkbox(
-                        value: _isChecked,
+                        value: isChecked,
                         onChanged: (value) {
                           setState(() {
-                            _isChecked = value ?? false;
-                            if (_isChecked) {
-                              _priceController.text = previousPrice!.toStringAsFixed(2);
+                            isChecked = value ?? false;
+                            if (isChecked) {
+                              priceController.text = previousPrice!.toStringAsFixed(2);
                             } else {
-                              _priceController.clear();
+                              priceController.clear();
                             }
                           });
                         },
@@ -1475,7 +1476,7 @@ class _PriceInputDialog extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () {
-                double? price = double.tryParse(_priceController.text);
+                double? price = double.tryParse(priceController.text);
                 if (price != null) {
                   Navigator.pop(context, price);
                 }

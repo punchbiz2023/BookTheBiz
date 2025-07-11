@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class Turfstats extends StatefulWidget {
   final String turfId;
 
-  Turfstats({required this.turfId});
+  const Turfstats({super.key, required this.turfId});
 
   @override
   _BookingCalendarState createState() => _BookingCalendarState();
@@ -33,7 +33,7 @@ class _BookingCalendarState extends State<Turfstats> {
         .then((snapshot) {
       setState(() {
         _occupiedSlots = snapshot.docs
-            .map((doc) => (doc.data() as Map<String, dynamic>)['bookingSlots'])
+            .map((doc) => (doc.data())['bookingSlots'])
             .expand((slot) => slot)
             .toList()
             .cast<String>();

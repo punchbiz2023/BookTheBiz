@@ -2,10 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:odp/pages/Turf%20owner/Display-%20turfs/bkuserdetails.dart';
 import 'package:odp/pages/bkdetails.dart';
 
 class BookingsPage extends StatefulWidget {
+  const BookingsPage({super.key});
+
   @override
   _BookingsPageState createState() => _BookingsPageState();
 }
@@ -410,7 +411,7 @@ class _BookingsPageState extends State<BookingsPage>
                     decoration: BoxDecoration(
                       color: Colors.grey[200]?.withOpacity(0.95),
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
+                      boxShadow: const [
                         BoxShadow(
                           color: Colors.black12,
                           blurRadius: 6,
@@ -446,39 +447,35 @@ class _BookingsPageState extends State<BookingsPage>
 
   Widget _buildEmptyState() {
     return Center(
-      child: AnimatedSwitcher(
-        duration: Duration(milliseconds: 350),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: SvgPicture.asset(
-                'assets/static/undraw_empty_4zx0.svg',
-                width: 180,
-                height: 180,
-                fit: BoxFit.contain,
-              ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.event_busy,
+            color: Colors.teal.shade200,
+            size: 100,
+          ),
+          SizedBox(height: 28),
+          Text(
+            'No bookings found',
+            style: TextStyle(
+              color: Colors.teal.shade700,
+              fontWeight: FontWeight.bold,
+              fontSize: 22,
+              letterSpacing: 0.1,
             ),
-            SizedBox(height: 24),
-            Text(
-              'No bookings found',
-              style: TextStyle(
-                color: Colors.teal.shade700,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
+          ),
+          SizedBox(height: 10),
+          Text(
+            'You have no bookings in this category.',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
             ),
-            SizedBox(height: 8),
-            Text(
-              'You have no bookings in this category.',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -489,16 +486,12 @@ Widget build(BuildContext context) {
     length: 3,
     child: Scaffold(
       backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.teal.shade700,
-        title: const Text(
-          'My Bookings',
-          style: TextStyle(color:Colors.white,fontWeight: FontWeight.bold, fontSize: 20),
-        ),
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(60),
-          child: Padding(
+      // AppBar removed
+      body: Column(
+        children: [
+          SizedBox(height: 18),
+          // TabBar remains at the top
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
             child: Container(
               decoration: BoxDecoration(
@@ -508,7 +501,7 @@ Widget build(BuildContext context) {
               child: TabBar(
                 indicator: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(8), // soft rectangle
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 labelColor: Colors.teal.shade800,
                 unselectedLabelColor: Colors.white,
@@ -522,72 +515,72 @@ Widget build(BuildContext context) {
               ),
             ),
           ),
-        ),
-      ),
-      body: TabBarView(
-        children: [
-          _buildBookingsSection('upcoming'),
-          _buildBookingsSection('past'),
-          _buildBookingsSection('cancelled'),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildBookingsSection('upcoming'),
+                _buildBookingsSection('past'),
+                _buildBookingsSection('cancelled'),
+              ],
+            ),
+          ),
         ],
       ),
       floatingActionButton: selectionMode
           ? FloatingActionButton.extended(
-              icon: const Icon(Icons.delete_forever,color:Colors.white),
+              icon: const Icon(Icons.delete_forever, color: Colors.white),
               backgroundColor: Colors.red.shade600,
               label: Text(
                 'Delete (${selectedBookings.length})',
-                style: TextStyle(color:Colors.white,fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
               onPressed: () async {
                 final confirm = await showDialog<bool>(
-  context: context,
-  builder: (ctx) => AlertDialog(
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-    ),
-    titlePadding: EdgeInsets.fromLTRB(24, 24, 24, 8),
-    contentPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-    actionsPadding: EdgeInsets.only(right: 16, bottom: 12),
-
-    title: Row(
-      children: [
-        Icon(Icons.warning_amber_rounded, color: Colors.red.shade400, size: 28),
-        SizedBox(width: 10),
-        Text(
-          "Confirm Deletion",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-      ],
-    ),
-    content: Text(
-      "Are you sure you want to delete ${selectedBookings.length} bookings? This action cannot be undone.",
-      style: TextStyle(fontSize: 15, color: Colors.grey.shade800),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(ctx, false),
-        child: Text(
-          "Cancel",
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-      ElevatedButton.icon(
-        onPressed: () => Navigator.pop(ctx, true),
-        icon: Icon(Icons.delete_forever,color:Colors.white, size: 18),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.red.shade600,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        label: Text(
-          "Delete",
-          style: TextStyle(color:Colors.white,fontWeight: FontWeight.bold),
-        ),
-      ),
-    ],
-  ),
-);
-
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    titlePadding: EdgeInsets.fromLTRB(24, 24, 24, 8),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    actionsPadding: EdgeInsets.only(right: 16, bottom: 12),
+                    title: Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Colors.red.shade400, size: 28),
+                        SizedBox(width: 10),
+                        Text(
+                          "Confirm Deletion",
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                        ),
+                      ],
+                    ),
+                    content: Text(
+                      "Are you sure you want to delete ${selectedBookings.length} bookings? This action cannot be undone.",
+                      style: TextStyle(fontSize: 15, color: Colors.grey.shade800),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: Text(
+                          "Cancel",
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        icon: Icon(Icons.delete_forever, color: Colors.white, size: 18),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade600,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        label: Text(
+                          "Delete",
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
                 if (confirm == true) _deleteSelectedBookings();
               },
             )
@@ -602,9 +595,9 @@ class StatusBadge extends StatelessWidget {
   final String status;
 
   const StatusBadge({
-    Key? key,
+    super.key,
     required this.status,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

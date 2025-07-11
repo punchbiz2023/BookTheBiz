@@ -7,7 +7,7 @@ class bkUserDetails extends StatelessWidget {
   final String turfId; // Turf ID
 
   // Constructor to accept bookingId, userId, and turfId
-  bkUserDetails({required this.bookingId, required this.userId, required this.turfId});
+  const bkUserDetails({super.key, required this.bookingId, required this.userId, required this.turfId});
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +94,7 @@ class bkUserDetails extends StatelessWidget {
   // Method to build the user details DataTable
   Widget _buildUserDataTable(Map<String, dynamic> userData) {
     return DataTable(
-      columns: [
+      columns: const [
         DataColumn(label: Text('Field', style: TextStyle(fontWeight: FontWeight.bold))),
         DataColumn(label: Text('Value', style: TextStyle(fontWeight: FontWeight.bold))),
       ],
@@ -118,7 +118,7 @@ class bkUserDetails extends StatelessWidget {
   // Method to build the booking details DataTable
   Widget _buildBookingDataTable(Map<String, dynamic> bookingData) {
     return DataTable(
-      columns: [
+      columns: const [
         DataColumn(label: Text('Field', style: TextStyle(fontWeight: FontWeight.bold))),
         DataColumn(label: Text('Value', style: TextStyle(fontWeight: FontWeight.bold))),
       ],

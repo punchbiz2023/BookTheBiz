@@ -6,7 +6,7 @@ class FirestoreListView extends StatelessWidget {
   final Widget Function(DocumentSnapshot)
       itemBuilder; // Function to build each item
 
-  FirestoreListView({
+  const FirestoreListView({super.key, 
     required this.collectionPath,
     required this.itemBuilder,
   });

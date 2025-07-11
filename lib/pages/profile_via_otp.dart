@@ -13,7 +13,7 @@ class DottedBackgroundPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // Draw a vertical gradient
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    final gradient = const LinearGradient(
+    const gradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: [
@@ -43,7 +43,7 @@ class DottedBackgroundPainter extends CustomPainter {
 class ProfilePage extends StatefulWidget {
   final Map<String, dynamic> userData; // Change from User? to Map
 
-  const ProfilePage({Key? key, required this.userData}) : super(key: key);
+  const ProfilePage({super.key, required this.userData});
 
   @override
   _ProfilePageState createState() => _ProfilePageState();
@@ -65,9 +65,9 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _pickImage() async {
-    final ImagePicker _picker = ImagePicker();
+    final ImagePicker picker = ImagePicker();
     try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
         setState(() {
           _profileImage = File(image.path);

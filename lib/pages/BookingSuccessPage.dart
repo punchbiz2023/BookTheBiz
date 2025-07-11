@@ -3,6 +3,8 @@ import 'package:lottie/lottie.dart'; // Import Lottie package
 import 'home_page.dart';
 
 class BookingSuccessPage extends StatelessWidget {
+  const BookingSuccessPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

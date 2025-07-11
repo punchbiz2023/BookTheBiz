@@ -42,8 +42,8 @@ class _BookingPageState extends State<BookingPage> {
 
   // 1. Add these fields to your _BookingPageState:
   Map<String, dynamic>? _turfData;
-  Map<DateTime, int> _bookingCounts = {};
-  Map<String, List<String>> _bookedSlotsMap = {};
+  final Map<DateTime, int> _bookingCounts = {};
+  final Map<String, List<String>> _bookedSlotsMap = {};
   bool _isLoadingTurf = true;
   bool _isLoadingBookings = true;
 
@@ -447,7 +447,7 @@ class _BookingPageState extends State<BookingPage> {
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(vertical: 22),
                     child: Column(
-                      children: [
+                      children: const [
                         Icon(Icons.verified, color: Colors.white, size: 38),
                         SizedBox(height: 8),
                         Text(
@@ -562,7 +562,7 @@ class _BookingPageState extends State<BookingPage> {
                               style: TextStyle(fontWeight: FontWeight.w600, color: Colors.deepPurple),
                             ),
                             Text(
-                              '${totalHours.toStringAsFixed(0)}',
+                              totalHours.toStringAsFixed(0),
                               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple, fontSize: 16),
                             ),
                           ],
@@ -578,7 +578,7 @@ class _BookingPageState extends State<BookingPage> {
                               style: TextStyle(fontWeight: FontWeight.w600, color: Colors.green),
                             ),
                             Text(
-                              '${totalAmount.toStringAsFixed(2)}',
+                              totalAmount.toStringAsFixed(2),
                               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 17),
                             ),
                           ],
@@ -1202,7 +1202,7 @@ class _BookingPageState extends State<BookingPage> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           backgroundColor: Colors.red[50],
           title: Row(
-            children: [
+            children: const [
               Icon(Icons.error_outline, color: Colors.red),
               SizedBox(width: 8),
               Text('Slot Unavailable', style: TextStyle(color: Colors.red)),
@@ -1348,7 +1348,7 @@ class _BookingPageState extends State<BookingPage> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           backgroundColor: Colors.orange[50],
           title: Row(
-            children: [
+            children: const [
               Icon(Icons.event_busy, color: Colors.deepOrange, size: 28),
               SizedBox(width: 8),
               Text('Slot Unavailable', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)),

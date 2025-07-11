@@ -7,7 +7,7 @@ class TurfDetailsGuestPage extends StatelessWidget {
   final Map<String, dynamic> turfData;
   final String address;
 
-  const TurfDetailsGuestPage({Key? key, required this.turfData, required this.address}) : super(key: key);
+  const TurfDetailsGuestPage({super.key, required this.turfData, required this.address});
 
   String _getPriceDisplay(dynamic price) {
     if (price is Map<String, dynamic>) {
@@ -56,7 +56,7 @@ class TurfDetailsGuestPage extends StatelessWidget {
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
-                  shadows: [Shadow(color: Colors.black45, blurRadius: 6)],
+                  shadows: const [Shadow(color: Colors.black45, blurRadius: 6)],
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -85,7 +85,7 @@ class TurfDetailsGuestPage extends StatelessWidget {
                           Colors.transparent,
                           Colors.black.withOpacity(0.7),
                         ],
-                        stops: [0.5, 1.0],
+                        stops: const [0.5, 1.0],
                       ),
                     ),
                   ),
@@ -214,17 +214,19 @@ class TurfDetailsGuestPage extends StatelessWidget {
 
 // --- Main Guest Turfs Page ---
 class ViewTurfsGuestPage extends StatefulWidget {
+  const ViewTurfsGuestPage({super.key});
+
   @override
   _ViewTurfsGuestPageState createState() => _ViewTurfsGuestPageState();
 }
 
 class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
   String _searchText = '';
-  Set<String> _selectedGroundFilters = {};
+  final Set<String> _selectedGroundFilters = {};
   String _selectedLocation = 'All Areas';
   List<String> _availableLocations = ['All Areas'];
-  Map<String, String> _locationCache = {}; // docId -> address
-  Map<String, String> _localityToLatLng = {}; // locality -> latlng string
+  final Map<String, String> _locationCache = {}; // docId -> address
+  final Map<String, String> _localityToLatLng = {}; // locality -> latlng string
   Map<String, String> _docIdToLocality = {}; // docId -> locality
 
   @override
@@ -351,9 +353,9 @@ class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
       appBar: AppBar(
         title: Text('Explore Turfs',style: TextStyle(color: Colors.white),),
         backgroundColor: Colors.teal.shade800,
-        actions: [
+        actions: const [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            padding: EdgeInsets.symmetric(horizontal: 12.0),
             child: Center(
               child: Text(
                 'Guest Mode',

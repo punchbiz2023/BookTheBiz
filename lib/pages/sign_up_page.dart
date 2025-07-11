@@ -6,6 +6,8 @@ import 'package:odp/pages/login.dart'; // Import your login page
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SignupPage extends StatefulWidget {
+  const SignupPage({super.key});
+
   @override
   _SignupPageState createState() => _SignupPageState();
 }
@@ -350,7 +352,7 @@ class _SignupPageState extends State<SignupPage> {
               ),
             ],
           ),
-          content: Container(
+          content: SizedBox(
             width: double.maxFinite,
             height: 350,
             child: Scrollbar(

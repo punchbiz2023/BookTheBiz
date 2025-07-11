@@ -10,10 +10,8 @@ import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/login.dart';
 import 'package:odp/pages/view_turfs_guest.dart';
 // Make sure to import or define SignupPage() in your project.
-import 'package:odp/pages/sign_up_page.dart';
 import 'firebase_options.dart';
 import 'dart:ui';
-import 'package:flutter/material.dart';
 
 // -------------- ADD THIS NEW StartPage() FILE OR CODE SNIPPET BELOW --------------
 
@@ -32,6 +30,8 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -52,6 +52,8 @@ class MyApp extends StatelessWidget {
 }
 
 class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
   @override
   _SplashScreenState createState() => _SplashScreenState();
 }
@@ -152,7 +154,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       opacity: _animation,
       child: ShaderMask(
         shaderCallback: (bounds) => LinearGradient(
-          colors: [Colors.tealAccent, Colors.white],
+          colors: const [Colors.tealAccent, Colors.white],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ).createShader(bounds),
@@ -188,6 +190,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 }
 // ---------------------- AUTH WRAPPER ----------------------
 class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
   @override
   Widget build(BuildContext context) {
     User? user = FirebaseAuth.instance.currentUser;

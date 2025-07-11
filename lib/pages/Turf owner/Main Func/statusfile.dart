@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 class StatusFilePage extends StatefulWidget {
+  const StatusFilePage({super.key});
+
   @override
   _StatusFilePageState createState() => _StatusFilePageState();
 }

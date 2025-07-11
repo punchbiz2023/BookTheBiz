@@ -7,6 +7,8 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'login.dart';
 
 class AdminControllersPage extends StatefulWidget {
+  const AdminControllersPage({super.key});
+
   @override
   _AdminControllersPageState createState() => _AdminControllersPageState();
 }
@@ -46,8 +48,8 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
       if (documentData != null) {
         userData['userId'] = userId;
         userData['gst'] = documentData['gst'] ?? 'Not Provided';
-        userData['aadhar'] = documentData['aadhar'] ?? null;
-        userData['pan'] = documentData['pan'] ?? null;
+        userData['aadhar'] = documentData['aadhar'];
+        userData['pan'] = documentData['pan'];
       }
 
       if (userData['status'] == 'Not Confirmed') {
@@ -269,7 +271,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
                         final currentUser = FirebaseAuth.instance.currentUser;
                         if (currentUser != null) {
                           final userDoc = await _firestore.collection('users').doc(currentUser.uid).get();
-                          final userData = userDoc.data() as Map<String, dynamic>?;
+                          final userData = userDoc.data();
 
                           if (userData != null) {
                             // Update with map including name and mobile
@@ -305,7 +307,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
                         final currentUser = FirebaseAuth.instance.currentUser;
                         if (currentUser != null) {
                           final userDoc = await _firestore.collection('users').doc(currentUser.uid).get();
-                          final userData = userDoc.data() as Map<String, dynamic>?;
+                          final userData = userDoc.data();
 
                           if (userData != null) {
                             // Update with map including name and mobile
@@ -357,7 +359,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
-          tabs: [
+          tabs: const [
             Tab(text: 'Not Confirmed'),
             Tab(text: 'Confirmed'),
           ],
@@ -370,7 +372,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
           labelStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           unselectedLabelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
           indicatorSize: TabBarIndicatorSize.tab,
-          overlayColor: MaterialStateProperty.all(Colors.transparent),
+          overlayColor: WidgetStateProperty.all(Colors.transparent),
         ),
         actions: [
           IconButton(
