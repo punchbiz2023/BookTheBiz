@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart'; // Add this import
 import 'login.dart';
-import 'package:mailer/mailer.dart';
-import 'package:mailer/smtp_server.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 /// This painter draws a gradient from teal to dark,
 /// plus a subtle dotted pattern on top.
@@ -72,19 +72,21 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _fetchUserData() {
     final user = widget.user ?? FirebaseAuth.instance.currentUser;
-    FirebaseFirestore.instance
-        .collection('users')
-        .where('email', isEqualTo: user?.email)
-        .get()
-        .then((snapshot) {
-      if (snapshot.docs.isNotEmpty) {
-        setState(() {
-          _userData = snapshot.docs.first.data();
-          _nameController.text = _userData?['name'] ?? '';
-          _mobileController.text = _userData?['mobile'] ?? '';
-        });
-      }
-    });
+    if (user != null) {
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get()
+          .then((doc) {
+        if (doc.exists) {
+          setState(() {
+            _userData = doc.data();
+            _nameController.text = _userData?['name'] ?? '';
+            _mobileController.text = _userData?['mobile'] ?? '';
+          });
+        }
+      });
+    }
   }
 
   Future<void> _pickImage() async {
@@ -187,19 +189,18 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _sendSupportAcknowledgementEmail(String email, String subject) async {
-    // TODO: Replace with your SMTP credentials
-    String username = 'bookthebiza@gmail.com';
-    String password = 'bogq cosg kibq ulqs';
-    final smtpServer = gmail(username, password);
-    final message = Message()
-      ..from = Address(username, 'BookTheBiz Support')
-      ..recipients.add(email)
-      ..subject = 'Support Ticket Received'
-      ..text = 'Dear user,\n\nWe have received your support ticket (Subject: $subject). Our team will respond within 3 business days to your registered email/phone number.\n\nThank you for contacting us!\n\n- BookTheBiz Support';
+    final url = Uri.parse('https://cloud-functions-vnxv.onrender.com/sendSupportAck');
     try {
-      await send(message, smtpServer);
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email, 'subject': subject}),
+      );
+      if (response.statusCode != 200) {
+        print('Failed to send acknowledgement email: ${response.body}');
+      }
     } catch (e) {
-      print('Failed to send acknowledgement email: $e');
+      print('Failed to send acknowledgement email: ${e.toString()}');
     }
   }
 
@@ -282,356 +283,374 @@ class _ProfilePageState extends State<ProfilePage> {
       body: Stack(
         children: [
           CustomPaint(
-            painter: DottedBackgroundPainter(),
+        painter: DottedBackgroundPainter(),
             child: Container(),
           ),
           SafeArea(
-            child: SingleChildScrollView(
-              child: Padding(
+          child: SingleChildScrollView(
+            child: Padding(
                 padding: EdgeInsets.only(top: extraTopPadding, bottom: 90),
-                child: Column(
-                  children: [
+              child: Column(
+                children: [
                     // Top section with profile info
-                    Container(
-                      width: double.infinity,
+                  Container(
+                    width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 16),
-                      child: Column(
-                        children: [
-                          Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              CircleAvatar(
-                                radius: 50,
-                                backgroundImage: _profileImage != null
-                                    ? FileImage(_profileImage!)
-                                    : (_userData?['imageUrl'] != null && _userData!['imageUrl'] != ""
-                                        ? NetworkImage(_userData!['imageUrl'])
+                    child: Column(
+                      children: [
+                        Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            CircleAvatar(
+                              radius: 50,
+                              backgroundImage: _profileImage != null
+                                  ? FileImage(_profileImage!)
+                                  : (_userData?['imageUrl'] != null && _userData!['imageUrl'] != ""
+                                      ? NetworkImage(_userData!['imageUrl'])
                                         : const AssetImage('lib/assets/profile.png') as ImageProvider),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          _isEditing
-                              ? Container(
-                                  width: double.infinity,
-                                  alignment: Alignment.center,
-                                  child: TextField(
-                                    controller: _nameController,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    decoration: const InputDecoration(
-                                      hintText: 'Username',
-                                      hintStyle: TextStyle(color: Colors.white),
-                                      border: UnderlineInputBorder(
-                                        borderSide: BorderSide(color: Colors.white),
+                            ),
+                            if (_isEditing)
+                                Positioned(
+                                  bottom: 0,
+                                  right: 4,
+                                  child: GestureDetector(
+                                onTap: _pickImage,
+                                child: CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: Colors.black54,
+                                  child: const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.white,
+                                    size: 18,
                                       ),
-                                      enabledBorder: UnderlineInputBorder(
-                                        borderSide: BorderSide(color: Colors.white),
-                                      ),
-                                      focusedBorder: UnderlineInputBorder(
-                                        borderSide: BorderSide(color: Colors.white),
-                                      ),
-                                      contentPadding: EdgeInsets.symmetric(vertical: 8),
-                                    ),
                                   ),
-                                )
-                              : Text(
-                                  _userData?['name'] ?? 'Username',
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _isEditing
+                            ? Container(
+                                width: double.infinity,
+                                alignment: Alignment.center,
+                                child: TextField(
+                                  controller: _nameController,
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
                                     fontSize: 22,
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                   ),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Username',
+                                    hintStyle: TextStyle(color: Colors.white),
+                                    border: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.white),
+                                    ),
+                                    enabledBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.white),
+                                    ),
+                                    focusedBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.white),
+                                    ),
+                                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+                                  ),
                                 ),
-                          const SizedBox(height: 4),
-                        ],
-                      ),
+                              )
+                            : Text(
+                                _userData?['name'] ?? 'Username',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                        const SizedBox(height: 4),
+                      ],
                     ),
-                    // Card-like section for Personal Information
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
+                  ),
+                  // Card-like section for Personal Information
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
                         boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Personal Information',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          // Full Name
-                          const Text(
-                            'FULL NAME',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          _isEditing
-                              ? TextField(
-                                  controller: _nameController,
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 16,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    border: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: Colors.teal),
-                                    ),
-                                    enabledBorder: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: Colors.teal),
-                                    ),
-                                    focusedBorder: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: Colors.teal),
-                                    ),
-                                  ),
-                                )
-                              : Text(
-                                  _userData?['name'] ?? 'Username',
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                          const SizedBox(height: 16),
-                          // Email Address
-                          const Text(
-                            'EMAIL ADDRESS',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            user?.email ?? 'email@example.com',
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          // Phone Number
-                          const Text(
-                            'PHONE NUMBER',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          _isEditing
-                              ? TextField(
-                                  controller: _mobileController,
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 16,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    border: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: Colors.teal),
-                                    ),
-                                    enabledBorder: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: Colors.teal),
-                                    ),
-                                    focusedBorder: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: Colors.teal),
-                                    ),
-                                  ),
-                                )
-                              : Text(
-                                  _userData?['mobile'] ?? 'Mobile number not available',
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                          const SizedBox(height: 24),
-                          // "SAVE CHANGES" button
-                          _isEditing
-                              ? SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    onPressed: _saveChanges,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF0C6157),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                    ),
-                                    child: const Text(
-                                      'SAVE CHANGES',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                              : Container(),
-                        ],
-                      ),
                     ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Personal Information',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // Full Name
+                        const Text(
+                          'FULL NAME',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        _isEditing
+                            ? TextField(
+                                controller: _nameController,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 16,
+                                ),
+                                decoration: const InputDecoration(
+                                  border: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                  enabledBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                _userData?['name'] ?? 'Username',
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 16,
+                                ),
+                              ),
+                        const SizedBox(height: 16),
+                        // Email Address
+                        const Text(
+                          'EMAIL ADDRESS',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          user?.email ?? 'email@example.com',
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Phone Number
+                        const Text(
+                          'PHONE NUMBER',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        _isEditing
+                            ? TextField(
+                                controller: _mobileController,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 16,
+                                ),
+                                decoration: const InputDecoration(
+                                  border: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                  enabledBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.teal),
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                  _userData?['mobile'] ?? 'Mobile number not available',
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 16,
+                                ),
+                              ),
+                        const SizedBox(height: 24),
+                        // "SAVE CHANGES" button
+                        _isEditing
+                            ? SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: _saveChanges,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0C6157),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                  child: const Text(
+                                    'SAVE CHANGES',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : Container(),
+                      ],
+                    ),
+                  ),
                     const SizedBox(height: 24),
-                    // Support Section
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        child: ExpansionTile(
-                          initiallyExpanded: _showSupport,
-                          onExpansionChanged: (expanded) => setState(() => _showSupport = expanded),
-                          leading: Icon(Icons.support_agent, color: Colors.teal[700]),
-                          title: Text('Support', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[800])),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Form(
-                                key: _supportFormKey,
+                    // Support Section (hide when editing)
+                    if (!_isEditing)
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          child: ExpansionTile(
+                            initiallyExpanded: _showSupport,
+                            onExpansionChanged: (expanded) => setState(() => _showSupport = expanded),
+                            leading: Icon(Icons.support_agent, color: Colors.teal[700]),
+                            title: Text('Support', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[800])),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Form(
+                                  key: _supportFormKey,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      TextFormField(
+                                        controller: _supportSubjectController,
+                                        decoration: InputDecoration(
+                                          labelText: 'Subject',
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                          prefixIcon: Icon(Icons.subject),
+                                          filled: true,
+                                          fillColor: Colors.grey[100],
+                                        ),
+                                        validator: (value) => value == null || value.trim().isEmpty ? 'Please enter a subject' : null,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      TextFormField(
+                                        controller: _supportMessageController,
+                                        decoration: InputDecoration(
+                                          labelText: 'Message',
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                          prefixIcon: Icon(Icons.message),
+                                          filled: true,
+                                          fillColor: Colors.grey[100],
+                                        ),
+                                        minLines: 4,
+                                        maxLines: 8,
+                                        validator: (value) => value == null || value.trim().isEmpty ? 'Please enter your message' : null,
+                                      ),
+                                      const SizedBox(height: 20),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton.icon(
+                                          icon: _isSubmittingSupport
+                                              ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                              : Icon(Icons.send),
+                                          label: Text(_isSubmittingSupport ? 'Submitting...' : 'Submit Ticket', style: TextStyle(fontWeight: FontWeight.bold)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.teal,
+                                            foregroundColor: Colors.white,
+                                            padding: EdgeInsets.symmetric(vertical: 16),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          ),
+                                          onPressed: _isSubmittingSupport ? null : _submitSupportTicket,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              // Previous Tickets Section
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    TextFormField(
-                                      controller: _supportSubjectController,
-                                      decoration: InputDecoration(
-                                        labelText: 'Subject',
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                        prefixIcon: Icon(Icons.subject),
-                                        filled: true,
-                                        fillColor: Colors.grey[100],
-                                      ),
-                                      validator: (value) => value == null || value.trim().isEmpty ? 'Please enter a subject' : null,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextFormField(
-                                      controller: _supportMessageController,
-                                      decoration: InputDecoration(
-                                        labelText: 'Message',
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                        prefixIcon: Icon(Icons.message),
-                                        filled: true,
-                                        fillColor: Colors.grey[100],
-                                      ),
-                                      minLines: 4,
-                                      maxLines: 8,
-                                      validator: (value) => value == null || value.trim().isEmpty ? 'Please enter your message' : null,
-                                    ),
-                                    const SizedBox(height: 20),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton.icon(
-                                        icon: _isSubmittingSupport
-                                            ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                            : Icon(Icons.send),
-                                        label: Text(_isSubmittingSupport ? 'Submitting...' : 'Submit Ticket', style: TextStyle(fontWeight: FontWeight.bold)),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.teal,
-                                          foregroundColor: Colors.white,
-                                          padding: EdgeInsets.symmetric(vertical: 16),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                        ),
-                                        onPressed: _isSubmittingSupport ? null : _submitSupportTicket,
-                                      ),
+                                    Divider(),
+                                    Text('Previous Tickets', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[800], fontSize: 16)),
+                                    const SizedBox(height: 8),
+                                    StreamBuilder<QuerySnapshot>(
+                                      stream: FirebaseFirestore.instance
+                                          .collection('support_tickets')
+                                          .where('userId', isEqualTo: user?.uid ?? '')
+                                          .orderBy('createdAt', descending: true)
+                                          .snapshots(),
+                                      builder: (context, snapshot) {
+                                        if (!snapshot.hasData) {
+                                          return Center(child: Padding(
+                                            padding: EdgeInsets.all(8),
+                                            child: CircularProgressIndicator(),
+                                          ));
+                                        }
+                                        final tickets = snapshot.data!.docs;
+                                        if (tickets.isEmpty) {
+                                          return Padding(
+                                            padding: const EdgeInsets.all(8.0),
+                                            child: Text("No previous tickets found."),
+                                          );
+                                        }
+                                        return ListView.builder(
+                                          shrinkWrap: true,
+                                          physics: NeverScrollableScrollPhysics(),
+                                          itemCount: tickets.length,
+                                          itemBuilder: (context, index) {
+                                            final ticket = tickets[index];
+                                            final createdAt = ticket['createdAt'] != null && ticket['createdAt'] is Timestamp
+                                                ? (ticket['createdAt'] as Timestamp).toDate()
+                                                : null;
+                                            return Card(
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                              margin: EdgeInsets.only(bottom: 12),
+                                              child: ListTile(
+                                                leading: Icon(Icons.support_agent, color: Colors.teal),
+                                                title: Text(ticket['subject'] ?? 'No Subject'),
+                                                subtitle: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    SizedBox(height: 4),
+                                                    Text(ticket['message'] ?? ''),
+                                                    SizedBox(height: 4),
+                                                    Text(
+                                                      "Status: "+(ticket['status'] ?? 'open'),
+                                                      style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                                                    ),
+                                                    if (createdAt != null)
+                                                      Text(
+                                                        "Created: "+createdAt.toString(),
+                                                        style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),
                               ),
-                            ),
-                            // Previous Tickets Section
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Divider(),
-                                  Text('Previous Tickets', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[800], fontSize: 16)),
-                                  const SizedBox(height: 8),
-                                  StreamBuilder<QuerySnapshot>(
-                                    stream: FirebaseFirestore.instance
-                                        .collection('support_tickets')
-                                        .where('userId', isEqualTo: user?.uid ?? '')
-                                        .orderBy('createdAt', descending: true)
-                                        .snapshots(),
-                                    builder: (context, snapshot) {
-                                      if (!snapshot.hasData) {
-                                        return Center(child: Padding(
-                                          padding: EdgeInsets.all(8),
-                                          child: CircularProgressIndicator(),
-                                        ));
-                                      }
-                                      final tickets = snapshot.data!.docs;
-                                      if (tickets.isEmpty) {
-                                        return Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Text("No previous tickets found."),
-                                        );
-                                      }
-                                      return ListView.builder(
-                                        shrinkWrap: true,
-                                        physics: NeverScrollableScrollPhysics(),
-                                        itemCount: tickets.length,
-                                        itemBuilder: (context, index) {
-                                          final ticket = tickets[index];
-                                          final createdAt = ticket['createdAt'] != null && ticket['createdAt'] is Timestamp
-                                              ? (ticket['createdAt'] as Timestamp).toDate()
-                                              : null;
-                                          return Card(
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                            margin: EdgeInsets.only(bottom: 12),
-                                            child: ListTile(
-                                              leading: Icon(Icons.support_agent, color: Colors.teal),
-                                              title: Text(ticket['subject'] ?? 'No Subject'),
-                                              subtitle: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  SizedBox(height: 4),
-                                                  Text(ticket['message'] ?? ''),
-                                                  SizedBox(height: 4),
-                                                  Text(
-                                                    "Status: "+(ticket['status'] ?? 'open'),
-                                                    style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                                                  ),
-                                                  if (createdAt != null)
-                                                    Text(
-                                                      "Created: "+createdAt.toString(),
-                                                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                                                    ),
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -654,9 +673,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   elevation: 6,
                 ),
                 onPressed: _showLogoutDialog,
-              ),
             ),
           ),
+        ),
         ],
       ),
     );

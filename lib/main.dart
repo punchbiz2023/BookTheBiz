@@ -215,7 +215,7 @@ class AuthWrapper extends StatelessWidget {
           if (snapshot.hasData && snapshot.data != null) {
             var userType = snapshot.data!.get('userType');
             if (userType == 'Turf Owner') {
-              return HomePage2();
+              return HomePage2(user: user);
             } else {
               return HomePage1(user: user);
             }

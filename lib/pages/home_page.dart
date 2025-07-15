@@ -57,7 +57,7 @@ class _HomePage1State extends State<HomePage1>
   }
 
 
-  final _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+  String? get _currentUserId => widget.user?.uid;
   late TabController _tabController;
 
   // Cache for location names
@@ -130,7 +130,7 @@ class _HomePage1State extends State<HomePage1>
   }
 
   Future<void> _loadUserLikes() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = widget.user;
     if (user != null) {
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final likes = userDoc.data()?['likes'] as Map<String, dynamic>? ?? {};
@@ -625,95 +625,115 @@ class _HomePage1State extends State<HomePage1>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(64),
-        child: AppBar(
-          elevation: 0.5,
-          backgroundColor: Colors.white,
-          automaticallyImplyLeading: false,
-          titleSpacing: 0,
-          title: Row(
-            children: [
-              SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  'Turf Booking',
-                  style: TextStyle(
-                    color: Color(0xFF17494D), // deep teal/dark gray
-                    fontWeight: FontWeight.w800,
-                    fontSize: 26,
-                    letterSpacing: 0.5,
-                    fontFamily: 'Montserrat', // Use GoogleFonts if available
-                    shadows: [
-                      Shadow(
-                        color: Colors.teal.withOpacity(0.08),
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
+    return FutureBuilder<DocumentSnapshot>(
+      future: widget.user != null
+          ? FirebaseFirestore.instance.collection('users').doc(widget.user!.uid).get()
+          : null,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: Colors.grey[100],
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return Scaffold(
+            backgroundColor: Colors.grey[100],
+            body: Center(child: Text('User data not found. Please contact support.')),
+          );
+        }
+        // User data exists, show the main UI
+        return Scaffold(
+          backgroundColor: Colors.grey[100],
+          appBar: PreferredSize(
+            preferredSize: Size.fromHeight(64),
+            child: AppBar(
+              elevation: 0.5,
+              backgroundColor: Colors.white,
+              automaticallyImplyLeading: false,
+              titleSpacing: 0,
+              title: Row(
+                children: [
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      'Turf Booking',
+                      style: TextStyle(
+                        color: Color(0xFF17494D),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 26,
+                        letterSpacing: 0.5,
+                        fontFamily: 'Montserrat',
+                        shadows: [
+                          Shadow(
+                            color: Colors.teal.withOpacity(0.08),
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ProfilePage(user: widget.user),
                     ),
-                  );
-                },
-                child: Container(
-                  margin: const EdgeInsets.only(right: 16),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.teal.shade100, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 6,
-                        offset: Offset(0, 2),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProfilePage(user: widget.user),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 16),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.teal.shade100, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ],
+                      child: CircleAvatar(
+                        backgroundColor: Colors.teal.shade50,
+                        radius: 22,
+                        child: Icon(Icons.person, color: Colors.teal.shade700, size: 28),
+                      ),
+                    ),
                   ),
-                  child: CircleAvatar(
-                    backgroundColor: Colors.teal.shade50,
-                    radius: 22,
-                    child: Icon(Icons.person, color: Colors.teal.shade700, size: 28),
+                ],
+              ),
+              bottom: PreferredSize(
+                preferredSize: Size.fromHeight(1.5),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.teal.shade50, Colors.grey.shade200],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
                   ),
+                  height: 1.5,
                 ),
               ),
-            ],
-          ),
-          bottom: PreferredSize(
-            preferredSize: Size.fromHeight(1.5),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.teal.shade50, Colors.grey.shade200],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-              ),
-              height: 1.5,
             ),
           ),
-        ),
-      ),
-      body: SafeArea(
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: [
-            _buildDashboardTab(),
-            _buildSearchTab(),
-            _buildDiscoverTurfsTab(),
-            BookingsPage(),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNavigationBar(),
+          body: SafeArea(
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: [
+                _buildDashboardTab(),
+                _buildSearchTab(),
+                _buildDiscoverTurfsTab(),
+                BookingsPage(),
+              ],
+            ),
+          ),
+          bottomNavigationBar: _buildBottomNavigationBar(),
+        );
+      },
     );
   }
 
@@ -1431,25 +1451,68 @@ class _HomePage1State extends State<HomePage1>
         if (nearbyTurfs.isEmpty) {
           return Center(child: Text('No turfs with location data available', style: TextStyle(color: Colors.grey[600], fontSize: 16)));
         }
+        final showTurfs = nearbyTurfs.take(4).toList();
         return SizedBox(
-          height: 200,
-          child: ListView.builder(
+          height: 240,
+          child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: nearbyTurfs.length,
+            itemCount: showTurfs.length + 1,
+            separatorBuilder: (context, index) => SizedBox(width: 18),
             itemBuilder: (context, index) {
-              final doc = nearbyTurfs[index];
+              if (index == showTurfs.length) {
+                // View More Turfs card
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AllNearbyTurfsPage(
+                          nearbyTurfs: nearbyTurfs,
+                          likedTurfs: _likedTurfs,
+                          currentUserId: widget.user?.uid ?? '',
+                          getPriceDisplay: _getPriceDisplay,
+                          calculateDistance: _calculateDistance,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 170,
+                    margin: EdgeInsets.only(right: 12),
+                    child: Card(
+                      elevation: 8,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                      color: Colors.teal.shade50,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.arrow_forward, color: Colors.teal, size: 36),
+                            SizedBox(height: 10),
+                            Text('View More Turfs', style: TextStyle(color: Colors.teal[800], fontWeight: FontWeight.bold, fontSize: 16)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+              final doc = showTurfs[index];
               final turfData = doc.data() as Map<String, dynamic>;
               final priceDisplay = _getPriceDisplay(turfData['price']);
               final distance = _calculateDistance(turfData['location'] ?? '');
               final distanceText = distance < 1000 ? '${distance.toStringAsFixed(0)}m' : '${(distance / 1000).toStringAsFixed(1)}km';
+              final isLiked = _likedTurfs.contains(doc.id);
               return Container(
-                width: 200,
-                margin: EdgeInsets.only(right: 16),
+                width: 170,
+                margin: EdgeInsets.only(left: index == 0 ? 12 : 0, right: 0),
                 child: Card(
-                  elevation: 7,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                  elevation: 10,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                   clipBehavior: Clip.antiAlias,
+                  shadowColor: Colors.teal.withOpacity(0.18),
                   child: InkWell(
+                    borderRadius: BorderRadius.circular(24),
                     onTap: () {
                       Navigator.push(
                         context,
@@ -1460,51 +1523,92 @@ class _HomePage1State extends State<HomePage1>
                     },
                     child: Stack(
                       children: [
-                        Container(
-                          height: 200,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(22),
-                            image: DecorationImage(
-                              image: NetworkImage(turfData['imageUrl'] ?? ''),
+                        SizedBox(
+                          height: 240,
+                          width: double.infinity,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: FadeInImage.assetNetwork(
+                              placeholder: 'lib/assets/static/undraw_empty_4zx0.png',
+                              image: turfData['imageUrl'] ?? '',
                               fit: BoxFit.cover,
+                              fadeInDuration: Duration(milliseconds: 400),
+                              fadeOutDuration: Duration(milliseconds: 200),
                             ),
                           ),
                         ),
                         Positioned.fill(
                           child: Container(
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(22),
+                              borderRadius: BorderRadius.circular(24),
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                                colors: [Colors.transparent, Colors.black.withOpacity(0.82)],
                               ),
                             ),
                           ),
                         ),
                         Positioned(
-                          top: 12,
-                          left: 12,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withOpacity(0.92),
+                          top: 14,
+                          left: 14,
+                          child: GestureDetector(
+                            onTap: () async {
+                              final user = widget.user;
+                              if (user == null) return;
+                              final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+                              if (isLiked) {
+                                await userDoc.update({'likes.${doc.id}': FieldValue.delete()});
+                                setState(() {
+                                  _likedTurfs.remove(doc.id);
+                                });
+                                await showLikeDialog(
+                                  context: context,
+                                  isLiked: false,
+                                  turfName: turfData['name'] ?? '',
+                                );
+                              } else {
+                                await userDoc.set({'likes': {doc.id: true}}, SetOptions(merge: true));
+                                setState(() {
+                                  _likedTurfs.add(doc.id);
+                                });
+                                await showLikeDialog(
+                                  context: context,
+                                  isLiked: true,
+                                  turfName: turfData['name'] ?? '',
+                                );
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: Duration(milliseconds: 200),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withOpacity(0.95),
+                                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                              ),
+                              padding: EdgeInsets.all(4),
+                              child: Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.red : Colors.teal, size: 22),
                             ),
-                            padding: EdgeInsets.all(2),
-                            child: Icon(Icons.favorite_border, color: Colors.teal, size: 20),
                           ),
                         ),
                         Positioned(
-                          top: 12,
-                          right: 12,
+                          top: 14,
+                          right: 14,
                           child: Container(
                             padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
-                              color: Colors.teal.withOpacity(0.92),
+                              color: Colors.teal.withOpacity(0.95),
                               borderRadius: BorderRadius.circular(14),
                               boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
                             ),
-                            child: Text(distanceText, style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.2)),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.location_on, color: Colors.white, size: 15),
+                                SizedBox(width: 3),
+                                Text(distanceText, style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.2)),
+                              ],
+                            ),
                           ),
                         ),
                         Positioned(
@@ -1512,19 +1616,52 @@ class _HomePage1State extends State<HomePage1>
                           right: 0,
                           bottom: 0,
                           child: Padding(
-                            padding: const EdgeInsets.all(14.0),
+                            padding: const EdgeInsets.all(16.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(turfData['name'] ?? 'Unknown Turf', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                                Text(
+                                  turfData['name'] ?? 'Unknown Turf',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 19,
+                                    letterSpacing: 0.1,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                 SizedBox(height: 4),
-                                Text(turfData['description'] ?? 'No description available', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w400), maxLines: 2, overflow: TextOverflow.ellipsis),
-                                SizedBox(height: 8),
-                                Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.85), borderRadius: BorderRadius.circular(14)),
-                                  child: Text(priceDisplay, style: TextStyle(color: Colors.teal[800], fontWeight: FontWeight.bold, fontSize: 13)),
+                                Text(
+                                  turfData['description'] ?? 'No description available',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                SizedBox(height: 10),
+                                Align(
+                                  alignment: Alignment.bottomRight,
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.92),
+                                      borderRadius: BorderRadius.circular(16),
+                                      boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))],
+                                    ),
+                                    child: Text(
+                                      priceDisplay,
+                                      style: TextStyle(
+                                        color: Colors.teal[800],
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1766,7 +1903,7 @@ class _HomePage1State extends State<HomePage1>
                 left: 12,
                 child: GestureDetector(
                   onTap: () async {
-                    final user = FirebaseAuth.instance.currentUser;
+                    final user = widget.user;
                     if (user == null) return;
                     final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
                     if (isLiked) {
@@ -2678,6 +2815,212 @@ class _SportTypeCardState extends State<_SportTypeCard> with SingleTickerProvide
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class AllNearbyTurfsPage extends StatefulWidget {
+  final List<DocumentSnapshot> nearbyTurfs;
+  final Set<String> likedTurfs;
+  final String currentUserId;
+  final String Function(dynamic price) getPriceDisplay;
+  final double Function(String location) calculateDistance;
+  const AllNearbyTurfsPage({Key? key, required this.nearbyTurfs, required this.likedTurfs, required this.currentUserId, required this.getPriceDisplay, required this.calculateDistance}) : super(key: key);
+
+  @override
+  State<AllNearbyTurfsPage> createState() => _AllNearbyTurfsPageState();
+}
+
+class _AllNearbyTurfsPageState extends State<AllNearbyTurfsPage> {
+  late Set<String> _likedTurfs;
+
+  @override
+  void initState() {
+    super.initState();
+    _likedTurfs = Set<String>.from(widget.likedTurfs);
+  }
+
+  Future<void> _toggleLike(String turfId, Map<String, dynamic> turfData) async {
+    final userDoc = FirebaseFirestore.instance.collection('users').doc(widget.currentUserId);
+    final isLiked = _likedTurfs.contains(turfId);
+    if (isLiked) {
+      await userDoc.update({'likes.$turfId': FieldValue.delete()});
+      setState(() {
+        _likedTurfs.remove(turfId);
+      });
+      await showLikeDialog(context: context, isLiked: false, turfName: turfData['name'] ?? '');
+    } else {
+      await userDoc.set({'likes': {turfId: true}}, SetOptions(merge: true));
+      setState(() {
+        _likedTurfs.add(turfId);
+      });
+      await showLikeDialog(context: context, isLiked: true, turfName: turfData['name'] ?? '');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        iconTheme: IconThemeData(color: Colors.teal.shade800),
+        title: Text('All Nearby Turfs', style: TextStyle(color: Colors.teal.shade800, fontWeight: FontWeight.bold, fontSize: 22)),
+        centerTitle: true,
+      ),
+      backgroundColor: Colors.grey[100],
+      body: ListView.separated(
+        padding: EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+        itemCount: widget.nearbyTurfs.length,
+        separatorBuilder: (context, index) => SizedBox(height: 18),
+        itemBuilder: (context, index) {
+          final doc = widget.nearbyTurfs[index];
+          final turfData = doc.data() as Map<String, dynamic>;
+          final priceDisplay = widget.getPriceDisplay(turfData['price']);
+          final distance = widget.calculateDistance(turfData['location']?.toString() ?? '');
+          final distanceText = distance < 1000 ? '${distance.toStringAsFixed(0)}m' : '${(distance / 1000).toStringAsFixed(1)}km';
+          final isLiked = _likedTurfs.contains(doc.id);
+          return Card(
+            elevation: 7,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DetailsPage(documentId: doc.id, documentname: turfData['name'] ?? ''),
+                  ),
+                );
+              },
+              child: Stack(
+                children: [
+                  SizedBox(
+                    height: 180,
+                    width: double.infinity,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(22),
+                      child: FadeInImage.assetNetwork(
+                        placeholder: 'lib/assets/static/undraw_empty_4zx0.png',
+                        image: turfData['imageUrl'] ?? '',
+                        fit: BoxFit.cover,
+                        fadeInDuration: Duration(milliseconds: 400),
+                        fadeOutDuration: Duration(milliseconds: 200),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(22),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.transparent, Colors.black.withOpacity(0.82)],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 14,
+                    left: 14,
+                    child: GestureDetector(
+                      onTap: () => _toggleLike(doc.id, turfData),
+                      child: AnimatedContainer(
+                        duration: Duration(milliseconds: 200),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withOpacity(0.95),
+                          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                        ),
+                        padding: EdgeInsets.all(4),
+                        child: Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.red : Colors.teal, size: 22),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 14,
+                    right: 14,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withOpacity(0.95),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.location_on, color: Colors.white, size: 15),
+                          SizedBox(width: 3),
+                          Text(distanceText, style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.2)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            turfData['name'] ?? 'Unknown Turf',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 19,
+                              letterSpacing: 0.1,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            turfData['description'] ?? 'No description available',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.bottomRight,
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.92),
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))],
+                              ),
+                              child: Text(
+                                priceDisplay,
+                                style: TextStyle(
+                                  color: Colors.teal[800],
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

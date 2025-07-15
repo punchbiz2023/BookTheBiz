@@ -188,12 +188,12 @@ class _LoginPageState extends State<LoginApp> {
           } else if (userType == 'Turf Owner') {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => HomePage2()),
+              MaterialPageRoute(builder: (context) => HomePage2(user: FirebaseAuth.instance.currentUser)),
             );
           } else {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => HomePage1()),
+              MaterialPageRoute(builder: (context) => HomePage1(user: FirebaseAuth.instance.currentUser)),
             );
           }
           Fluttertoast.showToast(msg: 'Login Successful');
