@@ -10,7 +10,7 @@ import 'turfadd.dart';
 import '../Display- turfs/turf_details.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
-
+import 'package:odp/pages/profile_via_otp.dart';
 class HomePage2 extends StatefulWidget {
   final Map<String, dynamic> userData;
 
@@ -671,7 +671,7 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
                       Navigator.pop(context); // Close drawer
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => ProfilePage(userData: widget.userData)),
+                        MaterialPageRoute(builder: (context) => ProfilePageViaOtp(userData: widget.userData)),
                       );
                     },
                   ),

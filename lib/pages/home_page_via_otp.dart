@@ -19,7 +19,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:async';
 import 'package:odp/pages/details.dart';
-
+import 'package:odp/pages/profile_via_otp.dart';
 class HomePage1 extends StatefulWidget {
   final Map<String, dynamic> userData;
   const HomePage1({super.key, required this.userData});
@@ -156,7 +156,7 @@ class _HomePage1State extends State<HomePage1>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ProfilePage(userData: widget.userData),
+        builder: (context) => ProfilePageViaOtp(userData: widget.userData),
       ),
     );
   }
@@ -2164,7 +2164,7 @@ class _SupportPageState extends State<SupportPage> with SingleTickerProviderStat
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => ProfilePage(userData: widget.userData),
+                      builder: (context) => ProfilePageViaOtp(userData: widget.userData),
                     ),
                   );
                 },
