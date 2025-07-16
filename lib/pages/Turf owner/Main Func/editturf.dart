@@ -77,6 +77,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
   Set<String> selectedCustomSlots = {};
   Set<String> selectedMorningSlots = {};
   Set<String> selectedEveningSlots = {};
+  List<dynamic> _allImages = [];
 
   @override
   void initState() {
@@ -134,9 +135,26 @@ class _EditTurfPageState extends State<EditTurfPage> {
         selectedCustomSlots = fetchedSlots != null
             ? Set<String>.from(fetchedSlots.where((slot) => !_morningSlots.contains(slot) && !_eveningSlots.contains(slot)))
             : {};
+
+        // Build _allImages list
+        _allImages = [];
+        if (_imageUrl != null && _imageUrl!.isNotEmpty) _allImages.add(_imageUrl!);
+        _allImages.addAll(_turfImages);
+        _allImages.addAll(_newImageFiles);
       });
     } catch (e) {
       debugPrint('Error loading turf details: $e');
+    }
+  }
+
+  Future<void> _pickImages() async {
+    final pickedImages = await ImagePicker().pickMultiImage();
+    if (pickedImages.isNotEmpty) {
+      setState(() {
+        final files = pickedImages.map((x) => File(x.path)).toList();
+        _newImageFiles.addAll(files);
+        _allImages.addAll(files);
+      });
     }
   }
 
@@ -145,15 +163,10 @@ class _EditTurfPageState extends State<EditTurfPage> {
     if (pickedFile != null) {
       setState(() {
         _newImageFile = File(pickedFile.path);
-      });
-    }
-  }
-
-  Future<void> _pickImages() async {
-    final pickedImages = await ImagePicker().pickMultiImage();
-    if (pickedImages.isNotEmpty) {
-      setState(() {
-        _newImageFiles.addAll(pickedImages.map((x) => File(x.path)));
+        // If only one image mode, replace spotlight
+        if (!_hasMultipleImages) {
+          _allImages = [_newImageFile!];
+        }
       });
     }
   }
@@ -179,41 +192,40 @@ class _EditTurfPageState extends State<EditTurfPage> {
 
   Future<void> _saveTurfDetails() async {
     try {
-      String? newImageUrl = _imageUrl;
-      List<String> newTurfImages = List.from(_turfImages);
-
-      // Upload new images if any
-      if (_newImageFiles.isNotEmpty) {
-        List<String> uploadedUrls = await _uploadImages(_newImageFiles);
-        newTurfImages.addAll(uploadedUrls);
-        _newImageFiles.clear();
+      // --- Refactored image save logic ---
+      // Separate images into URLs and Files
+      List<String> urlImages = _allImages.whereType<String>().toList();
+      List<File> fileImages = _allImages.whereType<File>().toList();
+      // Upload new images
+      List<String> uploadedUrls = [];
+      if (fileImages.isNotEmpty) {
+        uploadedUrls = await _uploadImages(fileImages);
       }
-
-      // The first image is always the spotlight image
-      if (_hasMultipleImages && (newTurfImages.isNotEmpty || newImageUrl != null)) {
-        List<String> allUrls = [];
-        if (newImageUrl != null && newImageUrl.isNotEmpty) allUrls.add(newImageUrl);
-        allUrls.addAll(newTurfImages);
-        newImageUrl = allUrls.first;
-        newTurfImages = allUrls.length > 1 ? allUrls.sublist(1) : [];
+      // Merge URLs: keep order, replace File with uploaded URL
+      List<String> finalImages = [];
+      int uploadIdx = 0;
+      for (var img in _allImages) {
+        if (img is String) {
+          finalImages.add(img);
+        } else if (img is File) {
+          finalImages.add(uploadedUrls[uploadIdx]);
+          uploadIdx++;
+        }
       }
-
+      String? newImageUrl = finalImages.isNotEmpty ? finalImages.first : null;
+      List<String> newTurfImages = finalImages.length > 1 ? finalImages.sublist(1) : [];
       // Save price as either a single number or a map of ground prices
       dynamic priceData;
       if (_price.isEmpty && _priceController.text.isNotEmpty) {
         priceData = double.tryParse(_priceController.text) ?? 0.0;
       } else {
-        priceData = _price; // Store price as a map if multiple prices exist
+        priceData = _price;
       }
-
-      // Merge all selected slots
       List<String> allSelectedSlots = [
         ...selectedMorningSlots,
         ...selectedEveningSlots,
         ...selectedCustomSlots,
       ];
-
-      // Prepare Firestore update data
       Map<String, dynamic> updateData = {
         'name': _nameController.text,
         'description': _descriptionController.text,
@@ -223,9 +235,8 @@ class _EditTurfPageState extends State<EditTurfPage> {
         'isosp': _isosp,
         if (newImageUrl != null) 'imageUrl': newImageUrl,
         if (_hasMultipleImages) 'turfimages': newTurfImages,
-        if (allSelectedSlots.isNotEmpty) 'selectedSlots': allSelectedSlots, // ✅ Only update if not empty
+        if (allSelectedSlots.isNotEmpty) 'selectedSlots': allSelectedSlots,
       };
-
       await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update(updateData);
 
       // Show success dialog instead of snackbar
@@ -743,11 +754,6 @@ class _EditTurfPageState extends State<EditTurfPage> {
   }
 
   Widget _buildImageEditSection() {
-    List<dynamic> allImages = [];
-    if (_imageUrl != null && _imageUrl!.isNotEmpty) allImages.add(_imageUrl!);
-    allImages.addAll(_turfImages);
-    allImages.addAll(_newImageFiles);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -760,7 +766,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
           ),
         ),
         SizedBox(height: 8),
-        if (allImages.isNotEmpty)
+        if (_allImages.isNotEmpty)
           Column(
             children: [
               // Spotlight image (first image, shown big)
@@ -782,15 +788,15 @@ class _EditTurfPageState extends State<EditTurfPage> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(15),
-                  child: allImages.first is String
+                  child: _allImages.first is String
                       ? Image.network(
-                          allImages.first,
+                          _allImages.first,
                           fit: BoxFit.cover,
                           width: double.infinity,
                           height: 180,
                         )
                       : Image.file(
-                          allImages.first,
+                          _allImages.first,
                           fit: BoxFit.cover,
                           width: double.infinity,
                           height: 180,
@@ -804,27 +810,12 @@ class _EditTurfPageState extends State<EditTurfPage> {
                 needsLongPressDraggable: true,
                 onReorder: (oldIndex, newIndex) {
                   setState(() {
-                    final img = allImages.removeAt(oldIndex);
-                    allImages.insert(newIndex, img);
-
-                    // Update _imageUrl, _turfImages, _newImageFiles
-                    _imageUrl = allImages.first is String && (allImages.first as String).startsWith('http')
-                        ? allImages.first
-                        : null;
-                    _turfImages = allImages
-                        .skip(1)
-                        .whereType<String>()
-                        .where((e) => e.startsWith('http'))
-                        .toList();
-                    _newImageFiles = allImages
-                        .skip(1)
-                        .whereType<File>()
-                        .cast<File>()
-                        .toList();
+                    final img = _allImages.removeAt(oldIndex);
+                    _allImages.insert(newIndex, img);
                   });
                 },
                 children: [
-                  ...allImages.asMap().entries.map((entry) {
+                  ..._allImages.asMap().entries.map((entry) {
                     int idx = entry.key;
                     var img = entry.value;
                     return Stack(
@@ -852,13 +843,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
                           child: GestureDetector(
                             onTap: () {
                               setState(() {
-                                if (img is String && idx == 0) {
-                                  // Don't allow removing spotlight image
-                                } else if (img is String) {
-                                  _turfImages.remove(img);
-                                } else if (img is File) {
-                                  _newImageFiles.remove(img);
-                                }
+                                _allImages.removeAt(idx);
                               });
                             },
                             child: Container(
@@ -870,7 +855,6 @@ class _EditTurfPageState extends State<EditTurfPage> {
                             ),
                           ),
                         ),
-                        // Drag handle
                         Positioned(
                           bottom: 4,
                           left: 4,
