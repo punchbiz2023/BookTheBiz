@@ -25,7 +25,10 @@ class _SignupPageState extends State<SignupPage> {
 
   bool _loading = false;
   String _userType = 'User';
-  String? _errorMessage; // <-- Add this line
+  String? _errorMessage;
+  bool _showOtpStep = false;
+  String? _verificationId;
+  final TextEditingController _otpController = TextEditingController();
 
   @override
   void dispose() {
@@ -57,7 +60,6 @@ class _SignupPageState extends State<SignupPage> {
         String? mobile = doc['mobile'];
         if (mobile != null) {
           String normalizedMobile = mobile.replaceAll(RegExp(r'\D'), '');
-          // Compare only the last 10 digits (for Indian numbers)
           if (normalizedMobile.endsWith(enteredMobile)) {
             mobileExists = true;
             break;
@@ -81,115 +83,98 @@ class _SignupPageState extends State<SignupPage> {
         return;
       }
 
+      // 1. Create user with email/password
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
-      // Send email verification
-      await userCredential.user!.sendEmailVerification();
-
-      // Save user data in Firestore
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name': _nameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'mobile': _mobileController.text.trim(),
-        'userType': _userType,
-      });
-
-      Fluttertoast.showToast(
-        msg: 'Verification email sent. Please check your inbox.',
+      // 2. Start phone verification
+      await _auth.verifyPhoneNumber(
+        phoneNumber: "+91${_mobileController.text.trim()}",
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          // Auto-verification (rare)
+          await userCredential.user!.linkWithCredential(credential);
+          await _saveUserData(userCredential.user!);
+          _showSuccess();
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          setState(() {
+            _loading = false;
+            _errorMessage = 'Phone verification failed: \n${e.message}';
+          });
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          setState(() {
+            _loading = false;
+            _showOtpStep = true;
+            _verificationId = verificationId;
+          });
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          setState(() {
+            _verificationId = verificationId;
+          });
+        },
       );
-
-      // Ask to save credentials
-      if (!mounted) return;
-      final shouldSave = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          backgroundColor: Colors.teal.shade50,
-          title: Row(
-            children: [
-              Icon(Icons.save_alt_rounded, color: Colors.teal.shade700, size: 28),
-              SizedBox(width: 10),
-              Text(
-                'Save Login Details?',
-                style: TextStyle(
-                  color: Colors.teal.shade800,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Would you like to save your email and password for faster login next time?',
-                style: TextStyle(fontSize: 16, color: Colors.teal.shade900),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 18),
-              Icon(Icons.lock_outline, color: Colors.teal.shade400, size: 40),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(
-                'Not Now',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: Icon(Icons.save, color: Colors.white),
-              label: Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal.shade700,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ],
-        ),
-      ) ?? false;
-
-      if (shouldSave) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('savedEmail', _emailController.text.trim());
-        await prefs.setString('savedPassword', _passwordController.text.trim());
-        Fluttertoast.showToast(
-          msg: 'Login details saved successfully',
-          backgroundColor: Colors.teal.shade800,
-        );
-      }
-
-      _nameController.clear();
-      _emailController.clear();
-      _passwordController.clear();
-      _mobileController.clear();
-
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        _showErrorDialog('This email is already registered.');
-      } else if (e.code == 'invalid-email') {
-        _showErrorDialog('Invalid email format.');
-      } else if (e.code == 'weak-password') {
-        _showErrorDialog('Password is too weak.');
-      } else {
-        _showErrorDialog('Signup Failed: ${e.message}');
-      }
-    } catch (e) {
-      _showErrorDialog('Signup Failed: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _errorMessage = e.message;
+      });
     }
+  }
+
+  Future<void> _verifyOtpAndLink() async {
+    if (_verificationId == null) return;
+    setState(() => _loading = true);
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception("User not found");
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId!,
+        smsCode: _otpController.text.trim(),
+      );
+      await user.linkWithCredential(credential);
+      await _saveUserData(user);
+      _showSuccess();
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _loading = false;
+        _errorMessage = "OTP verification failed: \n${e.message}";
+      });
+    }
+  }
+
+  Future<void> _saveUserData(User user) async {
+    await _firestore.collection('users').doc(user.uid).set({
+      'name': _nameController.text.trim(),
+      'email': _emailController.text.trim(),
+      'mobile': _mobileController.text.trim(),
+      'userType': _userType,
+      'uid': user.uid,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  void _showSuccess() {
+    setState(() {
+      _loading = false;
+      _showOtpStep = false;
+    });
+    Fluttertoast.showToast(
+      msg: 'Signup successful! You can now login.',
+      backgroundColor: Colors.teal,
+    );
+    _nameController.clear();
+    _emailController.clear();
+    _passwordController.clear();
+    _mobileController.clear();
+    _otpController.clear();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => LoginApp()),
+    );
   }
 
   void _showErrorDialog(String message) {
@@ -600,7 +585,13 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
             const SizedBox(height: 30),
 
             ElevatedButton(
-              onPressed: _loading ? null : _signup,
+              onPressed: _loading ? null : () {
+                if (_showOtpStep) {
+                  _verifyOtpAndLink();
+                } else {
+                  _signup();
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal.shade600,
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -614,8 +605,8 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
                 height: 20,
                 child: CircularProgressIndicator(color: Colors.white),
               )
-                  : const Text(
-                'Sign Up',
+                  : Text(
+                _showOtpStep ? 'Verify OTP' : 'Sign Up',
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.white,
@@ -640,6 +631,36 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
                 ),
               ),
             ),
+            if (_showOtpStep)
+              Column(
+                children: [
+                  SizedBox(height: 20),
+                  Text(
+                    'Enter the OTP sent to +91 ${_mobileController.text.trim()}',
+                    style: TextStyle(color: Colors.teal.shade700, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 14),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: TextField(
+                      controller: _otpController,
+                      keyboardType: TextInputType.number,
+                      style: TextStyle(color: Colors.teal.shade900),
+                      cursorColor: Colors.teal.shade900,
+                      decoration: InputDecoration(
+                        prefixIcon: Icon(Icons.lock_clock, color: Colors.teal.shade800),
+                        hintText: 'OTP',
+                        hintStyle: TextStyle(color: Colors.teal.shade400),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),

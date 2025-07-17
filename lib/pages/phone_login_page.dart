@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'home_page_via_otp.dart';
-import 'package:odp/pages/Turf owner/Main Func/owner_home_via_otp.dart';
+import 'home_page.dart';
+import 'package:odp/pages/Turf owner/Main Func/owner_home.dart';
 
 class PhoneLoginPage extends StatefulWidget {
   const PhoneLoginPage({super.key});
@@ -76,152 +76,38 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
       return;
     }
 
-    String enteredNumber = _phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
-
-    // 1. Search for user by phone number
-    final usersSnapshot = await FirebaseFirestore.instance.collection('users').get();
-    DocumentSnapshot? matchedDoc;
-    for (var doc in usersSnapshot.docs) {
-      String? mobile = doc['mobile'];
-      if (mobile != null) {
-        String normalizedMobile = mobile.replaceAll(RegExp(r'\D'), '');
-        if (normalizedMobile.endsWith(enteredNumber)) {
-          matchedDoc = doc;
-          break;
-        }
-      }
-    }
-
-    if (matchedDoc != null) {
-      final userType = matchedDoc['userType'] ?? 'User';
-      setState(() => _isLoading = false);
-      if (userType == 'Turf Owner') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => HomePage2(userData: matchedDoc!.data() as Map<String, dynamic>),
-          ),
-        );
-      } else if (userType == 'User') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => HomePage1(userData: matchedDoc!.data() as Map<String, dynamic>),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('User type not recognized. Please contact support.')),
-        );
-      }
-      return;
-    }
-
-    // 2. If not found, prompt for user details
-    final newUserData = await _showUserRegistrationDialog(user.uid, enteredNumber);
-    if (newUserData == null) {
-      setState(() => _isLoading = false);
-      return;
-    }
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set(newUserData);
+    // Fetch user document from Firestore using UID
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
     setState(() => _isLoading = false);
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => HomePage1(userData: newUserData),
-      ),
-    );
-  }
 
-  Future<Map<String, dynamic>?> _showUserRegistrationDialog(String uid, String mobile) async {
-    final nameController = TextEditingController();
-    final emailController = TextEditingController();
-    final passwordController = TextEditingController();
-    String userType = 'User';
-    bool acceptedTerms = false;
-    return await showDialog<Map<String, dynamic>>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: Text('Complete Registration'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nameController,
-                      decoration: InputDecoration(labelText: 'Name'),
-                    ),
-                    TextField(
-                      controller: emailController,
-                      decoration: InputDecoration(labelText: 'Email'),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    TextField(
-                      controller: passwordController,
-                      decoration: InputDecoration(labelText: 'Password'),
-                      obscureText: true,
-                    ),
-                    DropdownButton<String>(
-                      value: userType,
-                      items: ['User', 'Turf Owner']
-                          .map((type) => DropdownMenuItem(
-                                value: type,
-                                child: Text(type),
-                              ))
-                          .toList(),
-                      onChanged: (val) => setState(() => userType = val ?? 'User'),
-                    ),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: acceptedTerms,
-                          onChanged: (val) => setState(() => acceptedTerms = val ?? false),
-                        ),
-                        Expanded(child: Text('I accept the terms and conditions')),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(null),
-                  child: Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (nameController.text.isEmpty ||
-                        emailController.text.isEmpty ||
-                        passwordController.text.isEmpty ||
-                        !acceptedTerms) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Please fill all fields and accept terms.')),
-                      );
-                      return;
-                    }
-                    Navigator.of(context).pop({
-                      'uid': uid,
-                      'mobile': mobile,
-                      'userType': userType,
-                      'name': nameController.text.trim(),
-                      'email': emailController.text.trim(),
-                      'acceptedTerms': acceptedTerms,
-                      'imageUrl': '',
-                      'likes': {},
-                    });
-                  },
-                  child: Text('Register'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+    if (!userDoc.exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No user profile found. Please sign up first.')),
+      );
+      return;
+    }
+
+    final userType = userDoc['userType'] ?? 'User';
+
+    if (userType == 'Turf Owner') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomePage2(),
+        ),
+      );
+    } else if (userType == 'User') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomePage1(user: user),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('User type not recognized. Please contact support.')),
+      );
+    }
   }
 
   Widget _buildOtpBox(int index) {
