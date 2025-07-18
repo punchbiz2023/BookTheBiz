@@ -46,6 +46,7 @@ class _SignupPageState extends State<SignupPage> {
   }
 
   Future<void> _signup() async {
+    print('Signup started');
     setState(() {
       _loading = true;
       _errorMessage = null;
@@ -54,58 +55,82 @@ class _SignupPageState extends State<SignupPage> {
     try {
       // --- Check for duplicate mobile number before creating user ---
       String enteredMobile = _mobileController.text.trim().replaceAll(RegExp(r'\D'), '');
+      print('Checking for duplicate mobile: ' + enteredMobile);
       final usersSnapshot = await _firestore.collection('users').get();
       bool mobileExists = false;
       for (var doc in usersSnapshot.docs) {
-        String? mobile = doc['mobile'];
-        if (mobile != null) {
-          String normalizedMobile = mobile.replaceAll(RegExp(r'\D'), '');
-          if (normalizedMobile.endsWith(enteredMobile)) {
-            mobileExists = true;
-            break;
+        final data = doc.data();
+        if (data != null && data.containsKey('mobile')) {
+          String? mobile = data['mobile'];
+          if (mobile != null) {
+            String normalizedMobile = mobile.replaceAll(RegExp(r'\D'), '');
+            if (normalizedMobile.endsWith(enteredMobile)) {
+              mobileExists = true;
+              break;
+            }
           }
         }
       }
+      print('Mobile exists: ' + mobileExists.toString());
       if (mobileExists) {
         setState(() => _loading = false);
+        print('Duplicate mobile found, showing error dialog');
         _showErrorDialog('This mobile number is already registered.');
         return;
       }
 
       // --- Show Terms and Conditions Dialog ---
+      print('Showing Terms and Conditions dialog');
       final agreed = await _showTermsAndConditionsDialog(isTurfOwner: _userType == 'Turf Owner');
+      print('User agreed to terms: ' + agreed.toString());
       if (!agreed) {
         setState(() => _loading = false);
         Fluttertoast.showToast(
           msg: 'You must agree to the Terms and Conditions to register.',
           backgroundColor: Colors.red.shade700,
         );
+        print('User did not agree to terms, aborting signup');
         return;
       }
 
       // 1. Create user with email/password
+      print('Creating user with email: ' + _emailController.text.trim());
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+      print('User created: ' + userCredential.user!.uid);
 
       // 2. Start phone verification
+      print('Starting phone verification for: +91${_mobileController.text.trim()}');
       await _auth.verifyPhoneNumber(
-        phoneNumber: "+91${_mobileController.text.trim()}",
+        phoneNumber: "+91"+_mobileController.text.trim(),
         timeout: const Duration(seconds: 60),
         verificationCompleted: (PhoneAuthCredential credential) async {
-          // Auto-verification (rare)
-          await userCredential.user!.linkWithCredential(credential);
-          await _saveUserData(userCredential.user!);
-          _showSuccess();
+          print('Phone verification completed (auto-verification)');
+          try {
+            await userCredential.user!.linkWithCredential(credential);
+            print('Phone credential linked to user');
+            await _saveUserData(userCredential.user!);
+            print('User data saved after auto-verification');
+            _showSuccess();
+          } catch (e) {
+            print('Error during auto-verification: ' + e.toString());
+            setState(() {
+              _loading = false;
+              _errorMessage = 'Auto-verification failed: ' + e.toString();
+            });
+          }
         },
         verificationFailed: (FirebaseAuthException e) {
+          print('Phone verification failed: ' + (e.message ?? e.code));
           setState(() {
             _loading = false;
             _errorMessage = 'Phone verification failed: \n${e.message}';
           });
         },
         codeSent: (String verificationId, int? resendToken) {
+          print('OTP code sent. VerificationId: ' + verificationId);
           setState(() {
             _loading = false;
             _showOtpStep = true;
@@ -113,36 +138,60 @@ class _SignupPageState extends State<SignupPage> {
           });
         },
         codeAutoRetrievalTimeout: (String verificationId) {
+          print('Code auto retrieval timeout. VerificationId: ' + verificationId);
           setState(() {
             _verificationId = verificationId;
           });
         },
       );
+      print('verifyPhoneNumber call finished');
     } on FirebaseAuthException catch (e) {
+      print('FirebaseAuthException: ' + (e.message ?? e.code));
       setState(() {
         _loading = false;
         _errorMessage = e.message;
+      });
+    } catch (e) {
+      print('Exception during signup: ' + e.toString());
+      setState(() {
+        _loading = false;
+        _errorMessage = e.toString();
       });
     }
   }
 
   Future<void> _verifyOtpAndLink() async {
-    if (_verificationId == null) return;
+    print('Verifying OTP and linking phone');
+    if (_verificationId == null) {
+      print('No verificationId present');
+      return;
+    }
     setState(() => _loading = true);
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception("User not found");
+      print('Current user: ' + user.uid);
       final credential = PhoneAuthProvider.credential(
         verificationId: _verificationId!,
         smsCode: _otpController.text.trim(),
       );
+      print('Linking credential to user');
       await user.linkWithCredential(credential);
+      print('Credential linked, saving user data');
       await _saveUserData(user);
+      print('User data saved, showing success');
       _showSuccess();
     } on FirebaseAuthException catch (e) {
+      print('OTP verification failed: ' + (e.message ?? e.code));
       setState(() {
         _loading = false;
         _errorMessage = "OTP verification failed: \n${e.message}";
+      });
+    } catch (e) {
+      print('Exception during OTP verification: ' + e.toString());
+      setState(() {
+        _loading = false;
+        _errorMessage = e.toString();
       });
     }
   }
@@ -399,51 +448,63 @@ To list your turf on BooktheBiz, you must:
 
 2. TURF LISTING AND RESPONSIBILITIES
 By listing your turf, you agree to:
-• Provide complete, accurate, and up-to-date information including turf name, location, pricing, availability, photos, and features.
+• Provide complete, accurate, and up-to-date information including:
+  - Turf name and location
+  - Pricing, availability, photos
+  - Features (lighting, seating, washrooms, etc.)
 • Ensure the turf is clean, well-maintained, and safe for use.
 • Keep your listing updated with accurate availability and pricing.
-• Comply with all applicable local and state laws.
+• Comply with all applicable local and state laws, including zoning, fire safety, noise restrictions, and municipal approvals.
 
 3. BOOKING PROCESS AND CANCELLATIONS
 • All bookings must be processed exclusively through the BooktheBiz platform.
 • You may choose between auto-approval or manual approval of bookings.
-• You must honour all confirmed bookings unless cancelled under genuine circumstances.
-• Cancellations by turf owners must be made promptly. Frequent cancellations may result in penalties or listing suspension.
+• You must honour all confirmed bookings unless cancelled under genuine circumstances (e.g., weather, maintenance, natural disaster and so on).
+• Cancellations by turf owners must be made promptly and full refunds should be initiated immediately. Frequent cancellations may result in penalties or listing suspension.
 
 4. PRICING, PAYMENTS & TAXES
 • You are free to set your own hourly or slot-based pricing.
-• BooktheBiz will deduct a platform service fee from every successful booking.
-• Payouts will be made within 3–7 business days after the booking is completed.
-• You are solely responsible for declaring and paying any applicable taxes.
+• BooktheBiz will deduct a platform service fee (percentage to be communicated separately) from every successful booking.
+• Payouts will be made via UPI, bank transfer, or other supported methods within 3–7 business days after the booking is completed.
+• You are solely responsible for declaring and paying any applicable GST, income tax, or other government levies related to your earnings.
 
 5. CUSTOMER EXPERIENCE AND CONDUCT
+You agree to:
 • Provide a professional, respectful experience to all users.
 • Avoid discriminatory or inappropriate behavior.
-• Provide access to the turf as per the booked schedule and ensure amenities are functional.
+• Provide access to the turf as per the booked schedule and ensure that amenities listed are functional.
 
 6. LIABILITY AND INSURANCE
 • You are responsible for the safety, maintenance, and management of your premises.
-• BooktheBiz is not liable for any damage, injury, loss, theft, or third-party claims.
-• It is advised to carry appropriate property and liability insurance.
+• BooktheBiz is not liable for any damage, injury, loss, theft, or third-party claims arising from incidents on your property.
+• It is advised to carry appropriate property and liability insurance to cover unforeseen events.
 
 7. REVIEWS AND FEEDBACK
 • Customers may leave reviews after their booking. Turf owners cannot alter or remove reviews.
-• Repeated negative reviews may result in account review or listing deactivation.
+• Repeated negative reviews may result in account review or listing deactivation after internal verification.
 
 8. TERMINATION AND ACCOUNT SUSPENSION
-• Your account or listing may be suspended or terminated for misrepresentation, complaints, non-compliance, safety violations, or misuse.
+Your account or listing may be suspended or terminated under the following circumstances:
+• Misrepresentation or fraudulent listings
+• Multiple user complaints
+• Non-compliance with Indian laws or platform policies
+• Safety or hygiene violations
+• Repeated booking failures or misuse of the platform
 
 9. INTELLECTUAL PROPERTY AND MARKETING USE
-• By listing your turf, you allow BooktheBiz to use your turf’s name, images, and description for promotion.
+• By listing your turf, you allow BooktheBiz to use your turf’s name, images, and description for platform promotion, advertisements, and social media marketing.
+• You retain ownership of your content but grant us a non-exclusive license to use it for the duration of your listing.
 
 10. DISPUTE RESOLUTION
-• BooktheBiz will mediate disputes. Legal disputes are subject to the courts of Salem, Tamil Nadu, India.
+• In case of disputes between turf owners and users, BooktheBiz will mediate to the best of its ability.
+• Any legal disputes shall be subject to the jurisdiction of the courts of Salem, Tamil Nadu, India.
 
 11. CHANGES TO TERMS
-• BooktheBiz may update these Terms at any time. Continued use constitutes acceptance.
+• BooktheBiz reserves the right to update or modify these Terms at any time. You will be notified through the app or email. Continued use of the platform constitutes acceptance of the revised Terms.
 
 12. CONTACT INFORMATION
-Email: bookthebiza@gmail.com
+For queries, assistance, or complaints, please contact us at:
+Email: btbowners@gmail.com
 Phone: +91-8248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
 ''';
 
@@ -451,62 +512,71 @@ Phone: +91-8248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
 Terms and Conditions for Customers – BooktheBiz (India)
 Effective Date: 01/04/2025
 Last Updated: 01/04/2025
+These Terms and Conditions ("Terms") govern the use of the BooktheBiz platform ("we", "us", "our") by customers ("you", "your", "user") who wish to book sports turfs and recreational spaces listed by turf owners. By using the BooktheBiz app or website, you agree to comply with these Terms.
 
 1. ACCOUNT REGISTRATION
+To book a turf on BooktheBiz, you must:
 • Be at least 16 years of age. (Minors may participate under adult supervision.)
-• Provide accurate personal details.
-• Maintain the security of your account.
+• Provide accurate personal details (name, contact info, payment method).
+• Maintain the security of your account and not share your login credentials.
 
 2. BOOKING TERMS
 • All bookings must be made through the BooktheBiz platform.
-• Review turf details, availability, and pricing before confirming.
-• You will receive a confirmation message upon booking.
-• Some turfs may require prepayment.
+• You are responsible for reviewing turf details, availability, and pricing before confirming a booking.
+• Upon booking, you will receive a confirmation message via SMS, email, or in-app notification.
+• Some turfs may require prepayment or partial payment to confirm your slot.
 
 3. PAYMENT POLICY
-• Prices are set by the turf owner.
-• Payments can be made via UPI, card, wallet, or net banking.
-• A service fee may be added at booking.
-• All payments are processed securely.
+• Prices are displayed per hour or per slot as set by the turf owner.
+• Payments can be made via UPI, debit/credit card, wallet, or net banking.
+• A service fee may be added at the time of booking.
+• All payments are processed securely through our payment partners.
 
 4. CANCELLATION AND REFUND POLICY
-• Cancellations must be made within the defined window.
-• Refund eligibility depends on the turf owner’s policy.
+• Cancellations must be made within the cancellation window defined on the turf listing.
+• Refund eligibility depends on the turf owner’s policy (e.g., full refund if cancelled 8 hours in advance).
 • No-shows or late arrivals are not eligible for refunds.
 • Refunds, if applicable, will be processed within 5–7 business days.
 
 5. USAGE CONDUCT
+By using a turf through BooktheBiz, you agree to:
 • Arrive on time and vacate the turf at the end of your booking.
-• Follow all on-site rules and regulations.
-• Maintain cleanliness and avoid damage.
-• Respect others’ bookings.
-• Avoid illegal or inappropriate activities.
+• Follow all on-site rules and regulations as set by the turf owner or staff.
+• Maintain cleanliness and avoid damaging property or equipment.
+• Respect others’ bookings and not engage in disruptive behavior.
+• Avoid illegal, hazardous, or inappropriate activities on the premises.
 
 6. LIABILITY
-• BooktheBiz is a booking platform and does not manage turfs.
-• Turf owners are responsible for their facilities.
-• You participate at your own risk.
+• BooktheBiz is a booking platform and does not manage or operate the turfs.
+• Turf owners are solely responsible for the safety and maintenance of their facilities.
+• You acknowledge that any injuries, accidents, or losses incurred on-site are not the liability of BooktheBiz.
+• You participate at your own risk and are encouraged to wear proper sports gear.
 
 7. REVIEWS AND RATINGS
-• You may leave honest feedback.
+• You may leave honest feedback about your turf experience.
 • Reviews should be respectful and fact-based.
-• BooktheBiz may remove offensive or misleading reviews.
+• BooktheBiz may remove reviews that contain offensive, defamatory, or misleading content.
 
 8. TERMINATION OF ACCOUNT
-• Your account may be suspended for repeated no-shows, misuse, or fraudulent activity.
+Your account may be suspended or terminated for:
+• Repeated no-shows or cancellations
+• Misuse of turfs or abusive behavior
+• Attempting to bypass the platform to book directly
+• Providing false information or fraudulent activity
 
 9. PLATFORM USAGE
-• Do not misuse the BooktheBiz app or website.
-• All content is protected intellectual property.
+• You agree not to misuse the BooktheBiz app or website (e.g., hacking, scraping, spamming).
+• All app content, listings, logos, and systems are protected intellectual property of BooktheBiz.
 
 10. CHANGES TO TERMS
-• BooktheBiz may update these Terms at any time. Continued use constitutes acceptance.
+• BooktheBiz reserves the right to update these Terms at any time. Updated versions will be made available on the platform, and continued use constitutes your acceptance of the changes.
 
 11. GOVERNING LAW
-• These Terms are governed by the laws of India. Disputes are subject to the courts of Salem, Tamil Nadu, India.
+• These Terms are governed by the laws of India. Any disputes shall be subject to the jurisdiction of the courts of Salem, Tamil Nadu, India.
 
 12. CONTACT US
-Email: customersbtb@gmail.com
+For support or complaints, reach out to:
+Email: btbcustomers@gmail.com
 Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
 ''';
 
@@ -584,37 +654,112 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
             ),
             const SizedBox(height: 30),
 
-            ElevatedButton(
-              onPressed: _loading ? null : () {
-                if (_showOtpStep) {
-                  _verifyOtpAndLink();
-                } else {
-                  _signup();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal.shade600,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            // OTP Step: Show OTP input and button together, else show Sign Up button
+            if (_showOtpStep) ...[
+              SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.teal.shade200),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.teal.shade100.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Enter the OTP sent to +91 ${_mobileController.text.trim()}',
+                      style: TextStyle(
+                        color: Colors.teal.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 14),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.teal.shade100),
+                      ),
+                      child: TextField(
+                        controller: _otpController,
+                        keyboardType: TextInputType.number,
+                        style: TextStyle(color: Colors.teal.shade900, letterSpacing: 2, fontWeight: FontWeight.bold),
+                        cursorColor: Colors.teal.shade900,
+                        decoration: InputDecoration(
+                          prefixIcon: Icon(Icons.lock_clock, color: Colors.teal.shade800),
+                          hintText: 'OTP',
+                          hintStyle: TextStyle(color: Colors.teal.shade400),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 18),
+                    ElevatedButton(
+                      onPressed: _loading ? null : _verifyOtpAndLink,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade600,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: _loading
+                          ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(color: Colors.white),
+                      )
+                          : Text(
+                        'Verify OTP',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: _loading
-                  ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(color: Colors.white),
-              )
-                  : Text(
-                _showOtpStep ? 'Verify OTP' : 'Sign Up',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+              const SizedBox(height: 20),
+            ] else ...[
+              ElevatedButton(
+                onPressed: _loading ? null : _signup,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal.shade600,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: _loading
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(color: Colors.white),
+                )
+                    : Text(
+                  'Sign Up',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
+            ],
 
             TextButton(
               onPressed: () {
@@ -631,36 +776,6 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
                 ),
               ),
             ),
-            if (_showOtpStep)
-              Column(
-                children: [
-                  SizedBox(height: 20),
-                  Text(
-                    'Enter the OTP sent to +91 ${_mobileController.text.trim()}',
-                    style: TextStyle(color: Colors.teal.shade700, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 14),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.teal.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: TextField(
-                      controller: _otpController,
-                      keyboardType: TextInputType.number,
-                      style: TextStyle(color: Colors.teal.shade900),
-                      cursorColor: Colors.teal.shade900,
-                      decoration: InputDecoration(
-                        prefixIcon: Icon(Icons.lock_clock, color: Colors.teal.shade800),
-                        hintText: 'OTP',
-                        hintStyle: TextStyle(color: Colors.teal.shade400),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
           ],
         ),
       ),

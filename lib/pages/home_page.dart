@@ -809,11 +809,12 @@ class _HomePage1State extends State<HomePage1>
 
   Widget _buildDashboardTab() {
     return SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-          SizedBox(height: 10),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildWelcomeSection(),
+          SizedBox(height: 24),
           _buildMostRecentBookedTurf(),
           SizedBox(height: 20),
           Row(
@@ -828,6 +829,148 @@ class _HomePage1State extends State<HomePage1>
           _buildFavouriteTurfs(),
         ],
       ),
+    );
+  }
+
+  Widget _buildWelcomeSection() {
+    return Card(
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              height: 167,
+              width: double.infinity,
+              margin: EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Image.asset(
+                  'lib/assets/dashboard.jpg',
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
+                ),
+              ),
+            ),
+            SizedBox(height: 18),
+            Text(
+              'Welcome to BooktheBiz!',
+              style: TextStyle(
+                color: Colors.teal.shade800,
+                fontWeight: FontWeight.w900,
+                fontSize: 26,
+                letterSpacing: 0.2,
+                fontFamily: 'Montserrat',
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Book your first turf in just a few taps. Discover, compare, and reserve the best sports venues near you!',
+              style: TextStyle(
+                color: Colors.teal.shade700,
+                fontWeight: FontWeight.w500,
+                fontSize: 16,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 22),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _selectedIndex = 2; // Go to Discover Turfs tab
+                });
+              },
+              icon: Icon(Icons.explore, color: Colors.white),
+              label: Text('Explore Turfs', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade700,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 2,
+              ),
+            ),
+            SizedBox(height: 28),
+            Divider(height: 1, color: Colors.teal.shade100),
+            SizedBox(height: 18),
+            Text(
+              'How BooktheBiz Works',
+              style: TextStyle(
+                color: Colors.teal.shade900,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildHowItWorksStep(
+                  icon: Icons.search,
+                  label: 'Find Turfs',
+                  asset: 'lib/assets/img.png',
+                ),
+                _buildHowItWorksStep(
+                  icon: Icons.calendar_month,
+                  label: 'Book Instantly',
+                  asset: 'lib/assets/placeholder_image.jpeg',
+                ),
+                _buildHowItWorksStep(
+                  icon: Icons.sports_soccer,
+                  label: 'Play & Enjoy',
+                  asset: 'lib/assets/badminton.png',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHowItWorksStep({required IconData icon, required String label, required String asset}) {
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.teal.withOpacity(0.10),
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+            border: Border.all(color: Colors.teal.shade100, width: 2),
+          ),
+          padding: EdgeInsets.all(4),
+          child: ClipOval(
+            child: Image.asset(
+              asset,
+              width: 56,
+              height: 56,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+        SizedBox(height: 10),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.teal.shade800,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
+      ],
     );
   }
 
