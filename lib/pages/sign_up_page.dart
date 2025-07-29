@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:odp/pages/login.dart'; // Import your login page
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async'; // Import for Timer
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -30,12 +31,72 @@ class _SignupPageState extends State<SignupPage> {
   String? _verificationId;
   final TextEditingController _otpController = TextEditingController();
 
+  // Add these fields to _SignUpPageState:
+  int _otpSecondsRemaining = 60;
+  Timer? _otpTimer;
+  bool _canResendOtp = false;
+
+  void _startOtpTimer() {
+    _otpTimer?.cancel();
+    setState(() {
+      _otpSecondsRemaining = 60;
+      _canResendOtp = false;
+    });
+    _otpTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (_otpSecondsRemaining == 1) {
+        timer.cancel();
+        setState(() {
+          _canResendOtp = true;
+          _otpSecondsRemaining = 0;
+        });
+      } else {
+        setState(() {
+          _otpSecondsRemaining--;
+        });
+      }
+    });
+  }
+
+  void _resendOtp() async {
+    setState(() { _loading = true; });
+    try {
+      await _auth.verifyPhoneNumber(
+        phoneNumber: "+91" + _mobileController.text.trim(),
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (PhoneAuthCredential credential) async {},
+        verificationFailed: (FirebaseAuthException e) {
+          setState(() {
+            _loading = false;
+            _errorMessage = 'Phone verification failed: \n"+(e.message ?? e.code);';
+          });
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          setState(() {
+            _loading = false;
+            _verificationId = verificationId;
+            _showOtpStep = true;
+            _errorMessage = null;
+          });
+          _startOtpTimer();
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          setState(() {
+            _verificationId = verificationId;
+          });
+        },
+      );
+    } catch (e) {
+      setState(() { _loading = false; _errorMessage = e.toString(); });
+    }
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _mobileController.dispose();
+    _otpTimer?.cancel(); // Add this line
     super.dispose();
   }
 
@@ -135,7 +196,9 @@ class _SignupPageState extends State<SignupPage> {
             _loading = false;
             _showOtpStep = true;
             _verificationId = verificationId;
+            _errorMessage = null; // Clear previous error
           });
+          _startOtpTimer(); // Add this line
         },
         codeAutoRetrievalTimeout: (String verificationId) {
           print('Code auto retrieval timeout. VerificationId: ' + verificationId);
@@ -365,70 +428,86 @@ class _SignupPageState extends State<SignupPage> {
   
 
   Future<bool> _showTermsAndConditionsDialog({required bool isTurfOwner}) async {
+    bool hasScrolledToEnd = false;
+    final ScrollController scrollController = ScrollController();
     return await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          backgroundColor: Colors.white,
-          title: Row(
-            children: [
-              Icon(Icons.article_rounded, color: Colors.teal.shade700, size: 28),
-              SizedBox(width: 10),
-              Text(
-                'Terms & Conditions',
-                style: TextStyle(
-                  color: Colors.teal.shade800,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 350,
-            child: Scrollbar(
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: Text(
-                    isTurfOwner ? _turfOwnerTerms : _customerTerms,
+        return StatefulBuilder(
+          builder: (context, setState) {
+            void _onScroll() {
+              if (!hasScrolledToEnd && scrollController.position.atEdge && scrollController.position.pixels == scrollController.position.maxScrollExtent) {
+                setState(() {
+                  hasScrolledToEnd = true;
+                });
+              }
+            }
+            scrollController.removeListener(_onScroll);
+            scrollController.addListener(_onScroll);
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              backgroundColor: Colors.white,
+              title: Row(
+                children: [
+                  Icon(Icons.article_rounded, color: Colors.teal.shade700, size: 28),
+                  SizedBox(width: 10),
+                  Text(
+                    'Terms & Conditions',
                     style: TextStyle(
-                      color: Colors.teal.shade900,
-                      fontSize: 15,
-                      height: 1.5,
+                      color: Colors.teal.shade800,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 350,
+                child: Scrollbar(
+                  thumbVisibility: true,
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: Text(
+                        isTurfOwner ? _turfOwnerTerms : _customerTerms,
+                        style: TextStyle(
+                          color: Colors.teal.shade900,
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(
-                'Decline',
-                style: TextStyle(
-                  color: Colors.red.shade700,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text(
+                    'Decline',
+                    style: TextStyle(
+                      color: Colors.red.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: Icon(Icons.check_circle, color: Colors.white),
-              label: Text('Agree', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal.shade700,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ],
+                ElevatedButton.icon(
+                  onPressed: hasScrolledToEnd ? () => Navigator.pop(context, true) : null,
+                  icon: Icon(Icons.check_circle, color: Colors.white),
+                  label: Text('Agree', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hasScrolledToEnd ? Colors.teal.shade700 : Colors.teal.shade200,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     ) ?? false;
@@ -657,79 +736,135 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
             // OTP Step: Show OTP input and button together, else show Sign Up button
             if (_showOtpStep) ...[
               SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.teal.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.teal.shade200),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.teal.shade100.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: Offset(0, 2),
+              AnimatedContainer(
+                duration: Duration(milliseconds: 500),
+                curve: Curves.easeOutExpo,
+                padding: const EdgeInsets.all(0),
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.teal.shade50, Colors.teal.shade100, Colors.white],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Enter the OTP sent to +91 ${_mobileController.text.trim()}',
-                      style: TextStyle(
-                        color: Colors.teal.shade700,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.teal.shade200),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.teal.shade100.withOpacity(0.18),
+                        blurRadius: 16,
+                        offset: Offset(0, 4),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 14),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.teal.shade100),
-                      ),
-                      child: TextField(
-                        controller: _otpController,
-                        keyboardType: TextInputType.number,
-                        style: TextStyle(color: Colors.teal.shade900, letterSpacing: 2, fontWeight: FontWeight.bold),
-                        cursorColor: Colors.teal.shade900,
-                        decoration: InputDecoration(
-                          prefixIcon: Icon(Icons.lock_clock, color: Colors.teal.shade800),
-                          hintText: 'OTP',
-                          hintStyle: TextStyle(color: Colors.teal.shade400),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 18),
-                    ElevatedButton(
-                      onPressed: _loading ? null : _verifyOtpAndLink,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal.shade600,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: _loading
-                          ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(color: Colors.white),
-                      )
-                          : Text(
-                        'Verify OTP',
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Icon(Icons.lock_clock, color: Colors.teal.shade400, size: 38),
+                      SizedBox(height: 10),
+                      Text(
+                        'Enter the OTP sent to +91 ${_mobileController.text.trim()}',
                         style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
+                          color: Colors.teal.shade700,
                           fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 10),
+                      AnimatedSwitcher(
+                        duration: Duration(milliseconds: 400),
+                        child: _otpSecondsRemaining > 0
+                            ? Text(
+                                'Expires in 00:${_otpSecondsRemaining.toString().padLeft(2, '0')}',
+                                key: ValueKey(_otpSecondsRemaining),
+                                style: TextStyle(
+                                  color: Colors.red.shade400,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                  letterSpacing: 1.2,
+                                ),
+                                textAlign: TextAlign.center,
+                              )
+                            : Text(
+                                'OTP expired',
+                                key: ValueKey('expired'),
+                                style: TextStyle(
+                                  color: Colors.red.shade700,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                      ),
+                      SizedBox(height: 14),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.teal.shade100),
+                        ),
+                        child: TextField(
+                          controller: _otpController,
+                          keyboardType: TextInputType.number,
+                          style: TextStyle(color: Colors.teal.shade900, letterSpacing: 2, fontWeight: FontWeight.bold),
+                          cursorColor: Colors.teal.shade900,
+                          decoration: InputDecoration(
+                            prefixIcon: Icon(Icons.lock_clock, color: Colors.teal.shade800),
+                            hintText: 'OTP',
+                            hintStyle: TextStyle(color: Colors.teal.shade400),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      SizedBox(height: 18),
+                      ElevatedButton(
+                        onPressed: _loading ? null : _verifyOtpAndLink,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: _loading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(color: Colors.white),
+                              )
+                            : Text(
+                                'Verify OTP',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                      SizedBox(height: 10),
+                      AnimatedOpacity(
+                        opacity: _canResendOtp ? 1.0 : 0.5,
+                        duration: Duration(milliseconds: 400),
+                        child: ElevatedButton.icon(
+                          onPressed: _canResendOtp && !_loading ? _resendOtp : null,
+                          icon: Icon(Icons.refresh, color: Colors.white),
+                          label: Text('Retry OTP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal.shade400,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 20),

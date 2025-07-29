@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
 import 'login.dart';
+import 'AdminSupportTicketsPage.dart';
 
 class AdminControllersPage extends StatefulWidget {
   const AdminControllersPage({super.key});
@@ -375,6 +376,16 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
           overlayColor: WidgetStateProperty.all(Colors.transparent),
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.support_agent, color: Colors.amberAccent, size: 28),
+            tooltip: 'Support Tickets',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AdminSupportTicketsPage()),
+              );
+            },
+          ),
           IconButton(
             icon: Icon(Icons.logout, color: Colors.red),
             tooltip: 'Logout',

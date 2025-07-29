@@ -809,10 +809,10 @@ class _HomePage1State extends State<HomePage1>
 
   Widget _buildDashboardTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           _buildWelcomeSection(),
           SizedBox(height: 24),
           _buildMostRecentBookedTurf(),
@@ -1438,8 +1438,48 @@ class _HomePage1State extends State<HomePage1>
               }
               if (filteredTurfs.isEmpty) {
                 return Center(
-                  child: Text('No turfs found in selected location or price range',
-                      style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  child: Card(
+                    elevation: 6,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    color: Colors.white,
+                    margin: EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'lib/assets/static/undraw_empty_4zx0.png',
+                            height: 120,
+                            fit: BoxFit.contain,
+                          ),
+                          SizedBox(height: 24),
+                          Text(
+                            'No Turfs Found',
+                            style: TextStyle(
+                              color: Colors.teal.shade800,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 22,
+                              letterSpacing: 0.2,
+                              fontFamily: 'Montserrat',
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 10),
+                          Text(
+                            'We couldn\'t find any turfs in this area or price range. Try changing your filters or check back later!',
+                            style: TextStyle(
+                              color: Colors.teal.shade700,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 15,
+                              height: 1.4,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 );
               }
               return GridView.count(
@@ -1576,7 +1616,50 @@ class _HomePage1State extends State<HomePage1>
           return Center(child: CircularProgressIndicator());
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(child: Text('No turfs available nearby', style: TextStyle(color: Colors.grey[600], fontSize: 16)));
+          return Center(
+            child: Card(
+              elevation: 6,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              color: Colors.white,
+              margin: EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'lib/assets/static/undraw_empty_4zx0.png',
+                      height: 120,
+                      fit: BoxFit.contain,
+                    ),
+                    SizedBox(height: 24),
+                    Text(
+                      'No Turfs Found',
+                      style: TextStyle(
+                        color: Colors.teal.shade800,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 22,
+                        letterSpacing: 0.2,
+                        fontFamily: 'Montserrat',
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'We couldn\'t find any turfs in this area or price range. Try changing your filters or check back later!',
+                      style: TextStyle(
+                        color: Colors.teal.shade700,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
         }
         final turfs = snapshot.data!.docs;
         final nearbyTurfs = turfs.where((doc) {
@@ -2720,9 +2803,47 @@ class SportTypeTurfsPage extends StatelessWidget {
                 }).toList();
                 if (turfs.isEmpty) {
                   return Center(
-                    child: Text(
-                      'No turfs found for $sportType',
-                      style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold),
+                    child: Card(
+                      elevation: 6,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                      color: Colors.white,
+                      margin: EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Image.asset(
+                              'lib/assets/static/undraw_empty_4zx0.png',
+                              height: 120,
+                              fit: BoxFit.contain,
+                            ),
+                            SizedBox(height: 24),
+                            Text(
+                              'No Turfs for $sportType',
+                              style: TextStyle(
+                                color: Colors.teal.shade800,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 22,
+                                letterSpacing: 0.2,
+                                fontFamily: 'Montserrat',
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 10),
+                            Text(
+                              'We couldn\'t find any turfs for this sport type. Try another sport or check back later!',
+                              style: TextStyle(
+                                color: Colors.teal.shade700,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 15,
+                                height: 1.4,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   );
                 }

@@ -231,7 +231,52 @@ class _LoginPageState extends State<LoginApp> {
 
     try {
       await _auth.sendPasswordResetEmail(email: email);
-      Fluttertoast.showToast(msg: 'Password reset email sent!');
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          backgroundColor: Colors.teal.shade50,
+          title: Row(
+            children: [
+              Icon(Icons.email_outlined, color: Colors.teal.shade700),
+              SizedBox(width: 10),
+              Text('Check Your Email', style: TextStyle(color: Colors.teal.shade800, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'We\'ve sent a password reset link to:',
+                style: TextStyle(color: Colors.teal.shade900, fontWeight: FontWeight.w500, fontSize: 16),
+              ),
+              SizedBox(height: 8),
+              SelectableText(email, style: TextStyle(color: Colors.teal.shade900, fontWeight: FontWeight.bold, fontSize: 16)),
+              SizedBox(height: 18),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange.shade700, size: 22),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'If you don\'t see the email in your inbox, please check your Spam or Junk folder. Mark it as "Not Spam" to receive future emails in your inbox.',
+                      style: TextStyle(color: Colors.teal.shade800, fontSize: 15, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK', style: TextStyle(color: Colors.teal.shade700, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
       if (e is FirebaseAuthException) {
         if (e.code == 'user-not-found') {
