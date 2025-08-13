@@ -696,10 +696,31 @@ class _HomePage1State extends State<HomePage1>
                           ),
                         ],
                       ),
-                      child: CircleAvatar(
-                        backgroundColor: Colors.teal.shade50,
-                        radius: 22,
-                        child: Icon(Icons.person, color: Colors.teal.shade700, size: 28),
+                      child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        stream: (widget.user != null)
+                            ? FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(widget.user!.uid)
+                                .snapshots()
+                            : const Stream.empty(),
+                        builder: (context, snapshot) {
+                          String? imageUrl;
+                          if (snapshot.hasData && snapshot.data!.exists) {
+                            final data = snapshot.data!.data();
+                            final dynamic url = data?['imageUrl'] ?? data?['profileImageUrl'] ?? data?['photoUrl'];
+                            if (url is String && url.trim().isNotEmpty) {
+                              imageUrl = url;
+                            }
+                          }
+                          return CircleAvatar(
+                            backgroundColor: Colors.teal.shade50,
+                            radius: 22,
+                            backgroundImage: (imageUrl != null) ? NetworkImage(imageUrl) : null,
+                            child: (imageUrl == null)
+                                ? Icon(Icons.person, color: Colors.teal.shade700, size: 28)
+                                : null,
+                          );
+                        },
                       ),
                     ),
                   ),

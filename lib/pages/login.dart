@@ -367,14 +367,14 @@ class _LoginPageState extends State<LoginApp> {
               ),
               const SizedBox(height: 20),
 
-              _buildTextField(
-                iconData: Icons.lock_outline,
-                hintText: 'Password',
-                controller: _passwordController,
-                isObscure: true,
+              CustomTextField(
+              iconData: Icons.lock,
+              hintText: "Enter Password",
+              controller: _passwordController,
+              isPassword: true,
               ),
               const SizedBox(height: 10),
-
+              
               GestureDetector(
                 onTap: _forgotPassword,
                 child: Align(

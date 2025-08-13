@@ -5,7 +5,6 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:odp/pages/login.dart'; // Import your login page
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; // Import for Timer
-
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
 
@@ -113,18 +112,55 @@ class _SignupPageState extends State<SignupPage> {
       _errorMessage = null;
     });
 
+    // Input validation before checking for duplicate mobile
+    String name = _nameController.text.trim();
+    String email = _emailController.text.trim();
+    String password = _passwordController.text.trim();
+    String mobile = _mobileController.text.trim();
+
+    if (name.isEmpty) {
+      setState(() => _loading = false);
+      _showErrorDialog('Please enter your name.');
+      return;
+    }
+    if (email.isEmpty) {
+      setState(() => _loading = false);
+      _showErrorDialog('Please enter your email.');
+      return;
+    }
+    if (!RegExp(r'^.+@.+\..+').hasMatch(email)) {
+      setState(() => _loading = false);
+      _showErrorDialog('Please enter a valid email address.');
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() => _loading = false);
+      _showErrorDialog('Please enter your password.');
+      return;
+    }
+    if (mobile.isEmpty) {
+      setState(() => _loading = false);
+      _showErrorDialog('Please enter your mobile number.');
+      return;
+    }
+    if (!RegExp(r'^[0-9]{10}$').hasMatch(mobile)) {
+      setState(() => _loading = false);
+      _showErrorDialog('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
     try {
       // --- Check for duplicate mobile number before creating user ---
-      String enteredMobile = _mobileController.text.trim().replaceAll(RegExp(r'\D'), '');
+      String enteredMobile = mobile.replaceAll(RegExp(r'\D'), '');
       print('Checking for duplicate mobile: ' + enteredMobile);
       final usersSnapshot = await _firestore.collection('users').get();
       bool mobileExists = false;
       for (var doc in usersSnapshot.docs) {
         final data = doc.data();
         if (data != null && data.containsKey('mobile')) {
-          String? mobile = data['mobile'];
-          if (mobile != null) {
-            String normalizedMobile = mobile.replaceAll(RegExp(r'\D'), '');
+          String? mob = data['mobile'];
+          if (mob != null) {
+            String normalizedMobile = mob.replaceAll(RegExp(r'\D'), '');
             if (normalizedMobile.endsWith(enteredMobile)) {
               mobileExists = true;
               break;
@@ -155,17 +191,17 @@ class _SignupPageState extends State<SignupPage> {
       }
 
       // 1. Create user with email/password
-      print('Creating user with email: ' + _emailController.text.trim());
+      print('Creating user with email: ' + email);
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        email: email,
+        password: password,
       );
       print('User created: ' + userCredential.user!.uid);
 
       // 2. Start phone verification
-      print('Starting phone verification for: +91${_mobileController.text.trim()}');
+      print('Starting phone verification for: +91$mobile');
       await _auth.verifyPhoneNumber(
-        phoneNumber: "+91"+_mobileController.text.trim(),
+        phoneNumber: "+91"+mobile,
         timeout: const Duration(seconds: 60),
         verificationCompleted: (PhoneAuthCredential credential) async {
           print('Phone verification completed (auto-verification)');
@@ -343,31 +379,55 @@ class _SignupPageState extends State<SignupPage> {
   }
 
   Widget _buildTextField({
-    required IconData iconData,
-    required String hintText,
-    required TextEditingController controller,
-    bool isPassword = false,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.teal.shade50,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: TextField(
-        controller: controller,
-        obscureText: isPassword,
-        style: TextStyle(color: Colors.teal.shade900),
-        cursorColor: Colors.teal.shade900,
-        decoration: InputDecoration(
-          prefixIcon: Icon(iconData, color: Colors.teal.shade800),
-          hintText: hintText,
-          hintStyle: TextStyle(color: Colors.teal.shade400),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+  required IconData iconData,
+  required String hintText,
+  required TextEditingController controller,
+  bool isPassword = false,
+}) {
+  return StatefulBuilder(
+    builder: (context, setState) {
+      bool _obscureText = isPassword;
+
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.teal.shade50,
+          borderRadius: BorderRadius.circular(10),
         ),
-      ),
-    );
-  }
+        child: TextField(
+          controller: controller,
+          obscureText: isPassword ? _obscureText : false,
+          style: TextStyle(color: Colors.teal.shade900),
+          cursorColor: Colors.teal.shade900,
+          decoration: InputDecoration(
+            prefixIcon: Icon(iconData, color: Colors.teal.shade800),
+            suffixIcon: isPassword
+                ? StatefulBuilder(
+                    builder: (context, setIconState) {
+                      return GestureDetector(
+                        onTap: () {
+                          setIconState(() {
+                            _obscureText = !_obscureText;
+                          });
+                          setState(() {}); // rebuild textfield with new obscureText
+                        },
+                        child: Icon(
+                          _obscureText ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.teal.shade800,
+                        ),
+                      );
+                    },
+                  )
+                : null,
+            hintText: hintText,
+            hintStyle: TextStyle(color: Colors.teal.shade400),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          ),
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildUserTypeSelector() {
     return Container(
@@ -718,17 +778,18 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
             ),
             const SizedBox(height: 20),
 
-            _buildTextField(
-              iconData: Icons.lock_outline,
-              hintText: 'Password',
-              controller: _passwordController,
-              isPassword: true,
-            ),
+            CustomTextField(
+  iconData: Icons.lock,
+  hintText: "Enter Password",
+  controller: _passwordController,
+  isPassword: true,
+),
+
             const SizedBox(height: 20),
 
             _buildTextField(
               iconData: Icons.phone_outlined,
-              hintText: 'Mobile Number',
+              hintText: 'Enter only 10 digits',
               controller: _mobileController,
             ),
             const SizedBox(height: 30),
@@ -912,6 +973,102 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class CustomTextField extends StatelessWidget {
+  final IconData iconData;
+  final String hintText;
+  final TextEditingController controller;
+  final bool isPassword;
+
+  const CustomTextField({
+    super.key,
+    required this.iconData,
+    required this.hintText,
+    required this.controller,
+    this.isPassword = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return isPassword
+        ? _PasswordField(
+            iconData: iconData,
+            hintText: hintText,
+            controller: controller,
+          )
+        : Container(
+            decoration: BoxDecoration(
+              color: Colors.teal.shade50,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: TextField(
+              controller: controller,
+              style: TextStyle(color: Colors.teal.shade900),
+              cursorColor: Colors.teal.shade900,
+              decoration: InputDecoration(
+                prefixIcon: Icon(iconData, color: Colors.teal.shade800),
+                hintText: hintText,
+                hintStyle: TextStyle(color: Colors.teal.shade400),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              ),
+            ),
+          );
+  }
+}
+
+class _PasswordField extends StatefulWidget {
+  final IconData iconData;
+  final String hintText;
+  final TextEditingController controller;
+
+  const _PasswordField({
+    required this.iconData,
+    required this.hintText,
+    required this.controller,
+  });
+
+  @override
+  State<_PasswordField> createState() => _PasswordFieldState();
+}
+
+class _PasswordFieldState extends State<_PasswordField> {
+  bool _obscureText = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.teal.shade50,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: TextField(
+        controller: widget.controller,
+        obscureText: _obscureText,
+        style: TextStyle(color: Colors.teal.shade900),
+        cursorColor: Colors.teal.shade900,
+        decoration: InputDecoration(
+          prefixIcon: Icon(widget.iconData, color: Colors.teal.shade800),
+          suffixIcon: GestureDetector(
+            onTap: () {
+              setState(() {
+                _obscureText = !_obscureText;
+              });
+            },
+            child: Icon(
+              _obscureText ? Icons.visibility_off : Icons.visibility,
+              color: Colors.teal.shade800,
+            ),
+          ),
+          hintText: widget.hintText,
+          hintStyle: TextStyle(color: Colors.teal.shade400),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         ),
       ),
     );

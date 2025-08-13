@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart'; // Import Lottie package
 import 'home_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class BookingFailedPage extends StatelessWidget {
   const BookingFailedPage({super.key});
@@ -31,7 +32,7 @@ class BookingFailedPage extends StatelessWidget {
               onPressed: () {
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (context) => HomePage1()),
+                  MaterialPageRoute(builder: (context) => HomePage1(user: FirebaseAuth.instance.currentUser)),
                 );
               },
             ),

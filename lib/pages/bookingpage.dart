@@ -38,7 +38,7 @@ class _BookingPageState extends State<BookingPage> {
   List<String> ownerselectedSlots = [];
   double selectedGroundPrice = 0.0;
   double runningTotalAmount = 0.0;
-  int runningTotalHours = 0;
+  double runningTotalHours = 0.0;
 
   // 1. Add these fields to your _BookingPageState:
   Map<String, dynamic>? _turfData;
@@ -89,8 +89,12 @@ class _BookingPageState extends State<BookingPage> {
         String bookingDateStr = doc.data()['bookingDate'];
         DateTime bookingDate = DateTime.parse(bookingDateStr);
 
-        // Count slots per date
-        _bookingCounts[bookingDate] = (_bookingCounts[bookingDate] ?? 0) + slots.length;
+        // Count total booked hours per date (custom slots contribute their full duration)
+        double hoursForDoc = 0.0;
+        for (var slot in slots) {
+          hoursForDoc += _getHoursForSlot(slot);
+        }
+        _bookingCounts[bookingDate] = (_bookingCounts[bookingDate] ?? 0) + hoursForDoc.round();
 
         // Map of ground+date to slots
         String groundDateKey = '$selectedGround|$bookingDateStr';
@@ -960,46 +964,54 @@ class _BookingPageState extends State<BookingPage> {
 
   Column _buildSlotSelectionColumn(
       List<String> bookedSlots, List<String> ownerSelectedSlots) {
-    // Use _turfData and _bookedSlotsMap for slot availability
+    // Default hour slots as fallback only
     final defaultSlots = {
-      'Early Morning': [
+      '1. Night (12 AM - 5 AM)': [
         '12:00 AM - 1:00 AM',
         '1:00 AM - 2:00 AM',
         '2:00 AM - 3:00 AM',
         '3:00 AM - 4:00 AM',
         '4:00 AM - 5:00 AM',
       ],
-      'Morning': [
+      '2. Morning (5 AM - 12 PM)': [
         '5:00 AM - 6:00 AM',
         '6:00 AM - 7:00 AM',
         '7:00 AM - 8:00 AM',
         '8:00 AM - 9:00 AM',
         '9:00 AM - 10:00 AM',
         '10:00 AM - 11:00 AM',
+        '11:00 AM - 12:00 PM',
       ],
-      'Afternoon': [
+      '3. Afternoon (12 PM - 5 PM)': [
         '12:00 PM - 1:00 PM',
         '1:00 PM - 2:00 PM',
         '2:00 PM - 3:00 PM',
         '3:00 PM - 4:00 PM',
         '4:00 PM - 5:00 PM',
       ],
-      'Evening': [
+      '4. Evening (5 PM - 12 AM)': [
         '5:00 PM - 6:00 PM',
         '6:00 PM - 7:00 PM',
         '7:00 PM - 8:00 PM',
         '8:00 PM - 9:00 PM',
         '9:00 PM - 10:00 PM',
         '10:00 PM - 11:00 PM',
+        '11:00 PM - 12:00 AM',
       ],
     };
 
-    Map<String, List<String>> slots = {};
-    if (ownerSelectedSlots.isNotEmpty) {
-      slots['Choose your best play time'] = ownerSelectedSlots;
-    } else {
-      slots = defaultSlots;
-    }
+    // Use selectedSlots from turf when provided; otherwise fallback to default
+    final bool hasOwnerSelected = ownerSelectedSlots.isNotEmpty;
+    final List<String> normalOwnerSlots = hasOwnerSelected
+        ? ownerSelectedSlots
+            .where((s) => _getHoursForSlot(s) <= 1.0)
+            .toList()
+        : [];
+    final List<String> specialOwnerSlots = hasOwnerSelected
+        ? ownerSelectedSlots
+            .where((s) => _getHoursForSlot(s) > 1.0)
+            .toList()
+        : [];
 
     // Use selectedGround and selectedDate to get booked slots for this ground and date
     String groundDateKey = selectedGround != null && selectedDate != null
@@ -1012,16 +1024,45 @@ class _BookingPageState extends State<BookingPage> {
       children: [
         _buildGroundSelector(),
         SizedBox(height: 20),
-        Text(
-          'Available Slots',
-          style: TextStyle(
-              fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
-        ),
-        SizedBox(height: 10),
-        ...slots.entries.map((entry) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _buildSlotChips(entry.key, '', entry.value, bookedForThisGroundDate),
-            )),
+        if (hasOwnerSelected) ...[
+          if (normalOwnerSlots.isNotEmpty) ...[
+            Text(
+              'Available Slots',
+              style: TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+            ),
+            SizedBox(height: 10),
+            _buildSlotChips('Choose your best play time', '', normalOwnerSlots, bookedForThisGroundDate),
+          ],
+          if (specialOwnerSlots.isNotEmpty) ...[
+            Divider(height: 32, thickness: 2),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('Special Slots',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple)),
+            ),
+            _buildSlotChips('Special Slots', '', specialOwnerSlots, bookedForThisGroundDate),
+          ],
+          if (normalOwnerSlots.isEmpty && specialOwnerSlots.isEmpty)
+            Text('No slots available',
+                style: TextStyle(fontSize: 16, color: Colors.grey)),
+        ] else ...[
+          // Fallback to default slots when owner selectedSlots not provided
+          Text(
+            'Available Slots',
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+          ),
+          SizedBox(height: 10),
+          ...defaultSlots.entries.map((entry) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _buildSlotChips(
+                    entry.key, '', entry.value, bookedForThisGroundDate),
+              )),
+        ],
       ],
     );
   }
@@ -1077,7 +1118,7 @@ class _BookingPageState extends State<BookingPage> {
                 setState(() {
                   selectedGround = newValue;
                   runningTotalAmount = 0.0;
-                  runningTotalHours = 0;
+                  runningTotalHours = 0.0;
                   selectedSlots.clear();
                 });
               },
@@ -1100,7 +1141,7 @@ class _BookingPageState extends State<BookingPage> {
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Text(
-              'Selected: $runningTotalHours hour(s) | Total: ₹${runningTotalAmount.toStringAsFixed(2)}',
+              'Selected: ${runningTotalHours.toStringAsFixed(2)} hour(s) | Total: ₹${runningTotalAmount.toStringAsFixed(2)}',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.blueAccent,
@@ -1143,6 +1184,9 @@ class _BookingPageState extends State<BookingPage> {
   Widget _buildSlotChips(String title, String subtitle, List<String> slots,
       List<String> bookedSlots) {
     bool groundSelected = selectedGround != null && selectedGround!.isNotEmpty;
+    // Sort slots chronologically before displaying
+    List<String> sortedSlots = List<String>.from(slots);
+    sortedSlots.sort((a, b) => _compareSlotTimes(a, b));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1150,15 +1194,18 @@ class _BookingPageState extends State<BookingPage> {
         Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey)),
         Wrap(
           spacing: 8.0,
-          children: slots.map((slot) {
-            bool isBooked = bookedSlots.contains(slot);
+          children: sortedSlots.map((slot) {
+            // Consider any overlap with booked slots as booked/disabled
+            bool isBooked = bookedSlots.any((booked) => _slotsOverlap(slot, booked));
             bool isAlreadySelected = selectedSlots.contains(slot);
+            // Lock if this slot overlaps with any currently selected slot (prevent mixed overlapping selections)
+            bool overlapsWithSelected = selectedSlots.any((sel) => sel != slot && _slotsOverlap(slot, sel));
             return ChoiceChip(
               label: Text(slot),
               selected: isAlreadySelected,
               selectedColor: isBooked ? Colors.red : Colors.blue,
               disabledColor: Colors.grey.shade300,
-              onSelected: (!groundSelected || isBooked)
+              onSelected: (!groundSelected || isBooked || overlapsWithSelected)
                   ? null
                   : (selected) {
                       // Prevent user from booking the same slot twice
@@ -1167,11 +1214,12 @@ class _BookingPageState extends State<BookingPage> {
                         if (isAlreadySelected) {
                           selectedSlots.remove(slot);
                         } else {
-                          if (!isBooked) {
+                          if (!isBooked && !overlapsWithSelected) {
                             selectedSlots.add(slot);
                           }
                         }
-                        runningTotalHours = selectedSlots.length;
+                        // Update runningTotalHours and runningTotalAmount based on actual slot durations
+                        runningTotalHours = selectedSlots.fold<double>(0.0, (sum, s) => sum + _getHoursForSlot(s));
                         runningTotalAmount = runningTotalHours * selectedGroundPrice;
                       });
                     },
@@ -1190,8 +1238,103 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
+  // Helper to compare slot strings by their start time
+  int _compareSlotTimes(String a, String b) {
+    DateTime? parseStart(String slot) {
+      // Example slot: '7:00 AM - 8:00 AM'
+      final parts = slot.split(' - ');
+      if (parts.isEmpty) return null;
+      try {
+        // Parse time in 12-hour format
+        final timeStr = parts[0].trim();
+        final time = DateFormat('h:mm a').parse(timeStr);
+        
+        // Special handling for 12 AM/PM to ensure correct ordering
+        if (timeStr.endsWith('12:00 AM')) {
+          // Move 12 AM to start of day (00:00)
+          return DateTime(2000, 1, 1, 0, 0);
+        } else if (timeStr.endsWith('12:00 PM')) {
+          // Move 12 PM to middle of day (12:00)
+          return DateTime(2000, 1, 1, 12, 0);
+        }
+        return time;
+      } catch (_) {
+        return null;
+      }
+    }
+    final startA = parseStart(a);
+    final startB = parseStart(b);
+    if (startA == null && startB == null) return 0;
+    if (startA == null) return 1;
+    if (startB == null) return -1;
+    return startA.compareTo(startB);
+  }
+
+  // Helper to get the duration in hours for a slot string like '5:00 PM - 8:00 PM'
   double _getHoursForSlot(String slot) {
-    return 1.0;
+    try {
+      final range = _parseSlotRange(slot);
+      if (range.length != 2) return 1.0;
+      final start = range[0];
+      final end = range[1];
+      double hours = end.difference(start).inMinutes / 60.0;
+      return hours <= 0 ? 1.0 : hours;
+    } catch (_) {
+      return 1.0;
+    }
+  }
+
+  // Flexible parsing: supports 'h:mm a' and 'h a'
+  DateTime? _parseTimeFlexible(String timeStr) {
+    try {
+      return DateFormat('h:mm a').parse(timeStr);
+    } catch (_) {
+      try {
+        return DateFormat('h a').parse(timeStr);
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+
+  // Helper to parse slot time range, handling overnight by rolling end forward
+  List<DateTime> _parseSlotRange(String slot) {
+    final parts = slot.split(' - ');
+    if (parts.length != 2) return [];
+    final start = _parseTimeFlexible(parts[0].trim());
+    final endRaw = _parseTimeFlexible(parts[1].trim());
+    if (start == null || endRaw == null) return [];
+    DateTime end = endRaw;
+    if (!end.isAfter(start)) {
+      end = end.add(Duration(days: 1));
+    }
+    // Normalize to same arbitrary date
+    final s = DateTime(2000, 1, 1, start.hour, start.minute);
+    final e = DateTime(2000, 1, 1, end.hour, end.minute).isAfter(DateTime(2000, 1, 1, start.hour, start.minute))
+        ? DateTime(2000, 1, 1, end.hour, end.minute)
+        : DateTime(2000, 1, 2, end.hour, end.minute);
+    return [s, e];
+  }
+
+  // Normalize slot to 'h:mm a - h:mm a' for reliable comparisons
+  String _normalizeSlot(String slot) {
+    final range = _parseSlotRange(slot);
+    if (range.length != 2) return slot;
+    final fmt = DateFormat('h:mm a');
+    return '${fmt.format(range[0])} - ${fmt.format(range[1])}';
+  }
+
+  // Check if two slot ranges overlap (adjacent is allowed)
+  bool _slotsOverlap(String slotA, String slotB) {
+    final a = _parseSlotRange(slotA);
+    final b = _parseSlotRange(slotB);
+    if (a.length != 2 || b.length != 2) return false;
+    final startA = a[0];
+    final endA = a[1];
+    final startB = b[0];
+    final endB = b[1];
+    final overlaps = startA.isBefore(endB) && startB.isBefore(endA);
+    return overlaps;
   }
 
   void _showErrorDialog(BuildContext context) {
@@ -1225,7 +1368,7 @@ class _BookingPageState extends State<BookingPage> {
               child: Text('OK', style: TextStyle(color: Colors.red)),
               onPressed: () {
                 Navigator.of(context).pop();
-              },
+              }, 
             ),
           ],
         );

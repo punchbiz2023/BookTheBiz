@@ -472,7 +472,7 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> with SingleTickerProvid
                                   style: TextStyle(fontSize: 18, color: Colors.teal.shade900, fontWeight: FontWeight.w600),
                       decoration: InputDecoration(
                         prefixText: '+91 ',
-                        labelText: 'Phone Number',
+                        labelText: 'Enter only 10 digits',
                                     labelStyle: TextStyle(color: Colors.teal.shade700),
                         filled: true,
                         fillColor: Colors.teal[50],
