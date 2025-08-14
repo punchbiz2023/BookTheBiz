@@ -774,31 +774,46 @@ class _HomePage1State extends State<HomePage1>
   }
 
   Widget _buildBottomNavigationBar() {
-    return Container(
-      margin: EdgeInsets.only(left: 24, right: 24, bottom: 24), // Floating effect
-      decoration: BoxDecoration(
-        color: Colors.teal.shade600,
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _navBarItem(Icons.dashboard, '', 0),
-          _navBarItem(Icons.search, '', 1),
-          _navBarItem(Icons.sports_soccer, '', 2),
-          _navBarItem(Icons.confirmation_number, '', 3),
-        ],
-      ),
-    );
-  }
+  final mediaQuery = MediaQuery.of(context);
+  final viewInsets = mediaQuery.viewInsets.bottom; // Keyboard height if open
+  final bottomPadding = mediaQuery.padding.bottom;
+
+  // Determine if gesture navigation is active
+  final isGestureNav = bottomPadding > 20; 
+  // 20 is a safe threshold — gesture bars are usually taller than this
+
+  // Adjust margin based on navigation type
+  final bottomMargin = viewInsets > 0
+      ? viewInsets // Keyboard open → use keyboard height
+      : isGestureNav
+          ? bottomPadding // Gesture nav → match safe area
+          : 10.0; // Traditional nav → fixed margin
+
+  return Container(
+    margin: EdgeInsets.only(left: 24, right: 24, bottom: bottomMargin),
+    decoration: BoxDecoration(
+      color: Colors.teal.shade600,
+      borderRadius: BorderRadius.circular(32),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black26,
+          blurRadius: 18,
+          offset: Offset(0, 8),
+        ),
+      ],
+    ),
+    padding: EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        _navBarItem(Icons.dashboard, '', 0),
+        _navBarItem(Icons.search, '', 1),
+        _navBarItem(Icons.sports_soccer, '', 2),
+        _navBarItem(Icons.confirmation_number, '', 3),
+      ],
+    ),
+  );
+}
 
   Widget _navBarItem(IconData icon, String label, int index) {
     final isSelected = _selectedIndex == index;
@@ -1918,7 +1933,7 @@ class _HomePage1State extends State<HomePage1>
                     ),
                   ),
                 ),
-              );
+                );
             },
           ),
         );
@@ -2218,7 +2233,7 @@ class _HomePage1State extends State<HomePage1>
           ),
         ),
       ),
-    );
+      );
   }
 
   // Add this method to filter turfs by selected location
@@ -2239,7 +2254,7 @@ class _HomePage1State extends State<HomePage1>
             return turfs.where((doc) {
               final turfData = doc.data() as Map<String, dynamic>;
               final turfLoc = turfData['location']?.toString() ?? '';
-              if (turfLoc.isEmpty || !turfLoc.contains(',')) return false;
+                           if (turfLoc.isEmpty || !turfLoc.contains(',')) return false;
               final turfCoords = turfLoc.split(',');
               if (turfCoords.length != 2) return false;
               final turfLat = double.tryParse(turfCoords[0]);
@@ -3101,7 +3116,7 @@ class _SportTypeCardState extends State<_SportTypeCard> with SingleTickerProvide
           ),
         ),
       ),
-    );
+      );
   }
 }
 

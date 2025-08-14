@@ -1105,35 +1105,64 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
           ),
           // Sign Out Button at Bottom
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.logout, color: Colors.white),
-                          label: const Text('Sign Out', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red[700],
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 6,
-                          ),
-                          onPressed: _showLogoutDialog,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  child: Builder(
+    builder: (context) {
+      final mediaQuery = MediaQuery.of(context);
+      final viewInsets = mediaQuery.viewInsets.bottom; // Keyboard height
+      final bottomPadding = mediaQuery.padding.bottom;
+
+      // Detect gesture navigation
+      final isGestureNav = bottomPadding > 20;
+
+      // Decide bottom margin
+      final bottomMargin = viewInsets > 0
+          ? viewInsets // Keyboard open → match keyboard height
+          : isGestureNav
+              ? bottomPadding // Gesture nav → use safe area
+              : 10.0; // Traditional nav → small fixed margin
+
+      return Padding(
+        padding: EdgeInsets.only(bottom: bottomMargin),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.logout, color: Colors.white),
+                      label: const Text(
+                        'Sign Out',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[700],
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 6,
+                      ),
+                      onPressed: _showLogoutDialog,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
+        ),
+      );
+    },
+  ),
+),
         ],
       ),
     );

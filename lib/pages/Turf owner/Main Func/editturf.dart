@@ -54,21 +54,22 @@ class _EditTurfPageState extends State<EditTurfPage> {
   final List<String> _selectedMorningSlots = [];
   final List<String> _selectedEveningSlots = [];
   final List<String> _morningSlots = [
-    '6 AM - 7 AM',
-    '7 AM - 8 AM',
-    '8 AM - 9 AM',
-    '9 AM - 10 AM',
-    '10 AM - 11 AM',
-    '11 AM - 12 PM',
+    '6:00 AM - 7:00 AM',
+    '7:00 AM - 8:00 AM',
+    '8:00 AM - 9:00 AM',
+    '9:00 AM - 10:00 AM',
+    '10:00 AM - 11:00 AM',
+    '11:00 AM - 12:00 PM',
   ];
 
   final List<String> _eveningSlots = [
-    '4 PM - 5 PM',
-    '5 PM - 6 PM',
-    '6 PM - 7 PM',
-    '7 PM - 8 PM',
-    '8 PM - 9 PM',
-    '9 PM - 10 PM',
+    '4:00 PM - 5:00 PM',
+    '5:00 PM - 6:00 PM',
+    '6:00 PM - 7:00 PM',
+    '7:00 PM - 8:00 PM',
+    '8:00 PM - 9:00 PM',
+    '9:00 PM - 10:00 PM',
+    
   ];
 
   final List<String> _customSlots = [];

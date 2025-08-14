@@ -42,6 +42,29 @@ class _BookingsPageState extends State<BookingsPage>
   }
 
   void _enableSelectionMode(Map<String, dynamic> bookingData, String bookingType) {
+    // Prevent selection for upcoming bookings
+    if (bookingType == 'upcoming') {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('Not Allowed'),
+            ],
+          ),
+          content: Text('Upcoming bookings cannot be cancelled.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     setState(() {
       selectionMode = true;
       selectedBookings = [
@@ -484,110 +507,122 @@ class _BookingsPageState extends State<BookingsPage>
 Widget build(BuildContext context) {
   return DefaultTabController(
     length: 3,
-    child: Scaffold(
-      backgroundColor: Colors.grey[100],
-      // AppBar removed
-      body: Column(
-        children: [
-          SizedBox(height: 18),
-          // TabBar remains at the top
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.teal.shade500,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TabBar(
-                indicator: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
+    child: WillPopScope(
+      onWillPop: () async {
+        if (selectionMode) {
+          setState(() {
+            selectedBookings.clear();
+            selectionMode = false;
+          });
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.grey[100],
+        // AppBar removed
+        body: Column(
+          children: [
+            SizedBox(height: 18),
+            // TabBar remains at the top
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade500,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                labelColor: Colors.teal.shade800,
-                unselectedLabelColor: Colors.white,
-                labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                indicatorPadding: EdgeInsets.symmetric(horizontal: 1, vertical: 4),
-                tabs: const [
-                  Tab(text: '   Upcoming    '),
-                  Tab(text: '     Past     '),
-                  Tab(text: '   Cancelled   '),
+                child: TabBar(
+                  indicator: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  labelColor: Colors.teal.shade800,
+                  unselectedLabelColor: Colors.white,
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                  indicatorPadding: EdgeInsets.symmetric(horizontal: 1, vertical: 4),
+                  tabs: const [
+                    Tab(text: '   Upcoming    '),
+                    Tab(text: '     Past     '),
+                    Tab(text: '   Cancelled   '),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _buildBookingsSection('upcoming'),
+                  _buildBookingsSection('past'),
+                  _buildBookingsSection('cancelled'),
                 ],
               ),
             ),
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _buildBookingsSection('upcoming'),
-                _buildBookingsSection('past'),
-                _buildBookingsSection('cancelled'),
-              ],
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: selectionMode
-          ? FloatingActionButton.extended(
-              icon: const Icon(Icons.delete_forever, color: Colors.white),
-              backgroundColor: Colors.red.shade600,
-              label: Text(
-                'Delete (${selectedBookings.length})',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    titlePadding: EdgeInsets.fromLTRB(24, 24, 24, 8),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    actionsPadding: EdgeInsets.only(right: 16, bottom: 12),
-                    title: Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: Colors.red.shade400, size: 28),
-                        SizedBox(width: 10),
-                        Text(
-                          "Confirm Deletion",
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ],
+        ),
+        floatingActionButton: selectionMode
+            ? FloatingActionButton.extended(
+                icon: const Icon(Icons.delete_forever, color: Colors.white),
+                backgroundColor: Colors.red.shade600,
+                label: Text(
+                  'Delete (${selectedBookings.length})',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      titlePadding: EdgeInsets.fromLTRB(24, 24, 24, 8),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      actionsPadding: EdgeInsets.only(right: 16, bottom: 12),
+                      title: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.red.shade400, size: 28),
+                          SizedBox(width: 10),
+                          Text(
+                            "Confirm Deletion",
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                        ],
+                      ),
+                      content: Text(
+                        "Are you sure you want to delete ${selectedBookings.length} bookings? This action cannot be undone.",
+                        style: TextStyle(fontSize: 15, color: Colors.grey.shade800),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text(
+                            "Cancel",
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          icon: Icon(Icons.delete_forever, color: Colors.white, size: 18),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade600,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          label: Text(
+                            "Delete",
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
-                    content: Text(
-                      "Are you sure you want to delete ${selectedBookings.length} bookings? This action cannot be undone.",
-                      style: TextStyle(fontSize: 15, color: Colors.grey.shade800),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: Text(
-                          "Cancel",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        icon: Icon(Icons.delete_forever, color: Colors.white, size: 18),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade600,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        label: Text(
-                          "Delete",
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true) _deleteSelectedBookings();
-              },
-            )
-          : null,
+                  );
+                  if (confirm == true) _deleteSelectedBookings();
+                },
+              )
+            : null,
+      ),
     ),
-  );
-}
+    );
+  }
 
   }
 

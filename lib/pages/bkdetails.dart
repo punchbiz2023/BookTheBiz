@@ -315,14 +315,25 @@ Future<void> _cancelBooking(String bookID, DateTime startTime, DateTime endTime)
               '${DateFormat('h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}';
           print('Slot to remove: $slotToRemove');
 
-          if (bookingSlots.contains(slotToRemove)) {
-            // Remove the slot from bookingSlots
-            bookingSlots.remove(slotToRemove);
+          // Helper to normalize slot strings for comparison
+          String normalizeSlot(String s) {
+            return s
+                .replaceAll(RegExp(r'[:\s]'), '') // remove colons and spaces
+                .replaceAll(RegExp(r'am', caseSensitive: false), 'AM')
+                .replaceAll(RegExp(r'pm', caseSensitive: false), 'PM')
+                .toUpperCase();
+          }
+
+          // Find the slot in bookingSlots that matches after normalization
+          int slotIndex = bookingSlots.indexWhere((slot) => normalizeSlot(slot.toString()) == normalizeSlot(slotToRemove));
+          if (slotIndex != -1) {
+            String matchedSlot = bookingSlots[slotIndex];
+            bookingSlots.removeAt(slotIndex);
 
             // Update the document in Firebase
             await bookingRef.doc(doc.id).update({
               'bookingSlots': bookingSlots,
-              'bookingStatus': FieldValue.arrayUnion([slotToRemove]) // Add the slot directly
+              'bookingStatus': FieldValue.arrayUnion([matchedSlot]) // Add the slot directly
             });
             print('Updated bookingSlots and bookingStatus.');
           } else {
@@ -342,17 +353,22 @@ Future<void> _cancelBooking(String bookID, DateTime startTime, DateTime endTime)
                 listEquals(bookingData['bookingSlots'], doc['bookingSlots']) &&
                 bookingData['userId'] == doc['userId']) {
               List<dynamic> turfBookingSlots = List.from(bookingData['bookingSlots']);
-              if (turfBookingSlots.contains(slotToRemove)) {
-                turfBookingSlots.remove(slotToRemove);
+              if (turfBookingSlots.isNotEmpty) {
+                // Find the slot in turfBookingSlots that matches after normalization
+                int turfSlotIndex = turfBookingSlots.indexWhere((slot) => normalizeSlot(slot.toString()) == normalizeSlot(slotToRemove));
+                if (turfSlotIndex != -1) {
+                  String matchedTurfSlot = turfBookingSlots[turfSlotIndex];
+                  turfBookingSlots.removeAt(turfSlotIndex);
 
-                // Update the sub-collection document
-                await bookingsSubCollectionRef.doc(subDoc.id).update({
-                  'bookingSlots': turfBookingSlots,
-                  'bookingStatus': FieldValue.arrayUnion([slotToRemove])
-                });
-                print('Updated turf bookingSlots and bookingStatus.');
-              } else {
-                print('Slot not found in turfBookingSlots.');
+                  // Update the sub-collection document
+                  await bookingsSubCollectionRef.doc(subDoc.id).update({
+                    'bookingSlots': turfBookingSlots,
+                    'bookingStatus': FieldValue.arrayUnion([matchedTurfSlot])
+                  });
+                  print('Updated turf bookingSlots and bookingStatus.');
+                } else {
+                  print('Slot not found in turfBookingSlots.');
+                }
               }
               break;
             }
