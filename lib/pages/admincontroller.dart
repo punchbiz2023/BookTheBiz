@@ -272,23 +272,80 @@ class _AdminControllersPageState extends State<AdminControllersPage> with Single
                         final currentUser = FirebaseAuth.instance.currentUser;
                         if (currentUser != null) {
                           final userDoc = await _firestore.collection('users').doc(currentUser.uid).get();
-                          final userData = userDoc.data();
-
-                          if (userData != null) {
-                            // Update with map including name and mobile
-                            await _firestore.collection('users').doc(userID).update({
-                              'status': 'yes',
-                              'verifiedby': {
-                                'id': currentUser.uid,
-                                'name': userData['name'],
-                                'mobile': userData['mobile'],
-                              }
-                            });
-
-                            Navigator.pop(context);
-                            fetchUserData();
+                          final adminData = userDoc.data();
+                          if (adminData != null) {
+                            // Fetch the customer user doc
+                            final customerDoc = await _firestore.collection('users').doc(userID).get();
+                            final customerData = customerDoc.data();
+                            String? razorpayId = customerData?['razorpayAccountId'];
+                            if (razorpayId == null || !razorpayId.toString().trim().startsWith('acc_')) {
+                              // Ask admin to enter Razorpay Account ID
+                              final TextEditingController rzpController = TextEditingController();
+                              bool valid = false;
+                              await showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (ctx) {
+                                  return StatefulBuilder(
+                                    builder: (context, setState) {
+                                      return AlertDialog(
+                                        title: Text('Enter Razorpay Account ID'),
+                                        content: TextField(
+                                          controller: rzpController,
+                                          decoration: InputDecoration(
+                                            labelText: 'Razorpay Account ID (acc_...)',
+                                            hintText: 'acc_1234567890abcdef',
+                                            errorText: valid || rzpController.text.isEmpty || rzpController.text.startsWith('acc_') ? null : 'Must start with acc_',
+                                          ),
+                                          onChanged: (val) {
+                                            setState(() {
+                                              valid = val.trim().startsWith('acc_');
+                                            });
+                                          },
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(ctx),
+                                            child: Text('Cancel'),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () async {
+                                              if (rzpController.text.trim().startsWith('acc_')) {
+                                                await _firestore.collection('users').doc(userID).update({
+                                                  'razorpayAccountId': rzpController.text.trim(),
+                                                });
+                                                Navigator.pop(ctx);
+                                              }
+                                            },
+                                            child: Text('Save'),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
+                              );
+                              // Re-fetch after dialog
+                              final updatedDoc = await _firestore.collection('users').doc(userID).get();
+                              razorpayId = updatedDoc.data()?['razorpayAccountId'];
+                            }
+                            // Only approve if Razorpay ID is now present and valid
+                            if (razorpayId != null && razorpayId.toString().trim().startsWith('acc_')) {
+                              await _firestore.collection('users').doc(userID).update({
+                                'status': 'yes',
+                                'verifiedby': {
+                                  'id': currentUser.uid,
+                                  'name': adminData['name'],
+                                  'mobile': adminData['mobile'],
+                                }
+                              });
+                              Navigator.pop(context);
+                              fetchUserData();
+                            } else {
+                              Fluttertoast.showToast(msg: 'Approval requires a valid Razorpay Account ID.');
+                            }
                           } else {
-                            Fluttertoast.showToast(msg: 'User data not found');
+                            Fluttertoast.showToast(msg: 'Admin data not found');
                           }
                         }
                       },

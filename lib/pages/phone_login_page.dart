@@ -94,32 +94,147 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> with SingleTickerProvid
 
   Future<void> _sendOTP() async {
     setState(() => _isLoading = true);
-    await FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: "+91${_phoneController.text.trim()}",
-      timeout: const Duration(seconds: 60),
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        await FirebaseAuth.instance.signInWithCredential(credential);
-        await _redirectBasedOnUserType();
-      },
-      verificationFailed: (FirebaseAuthException e) {
+    
+    // Validate mobile number format first
+    String mobile = _phoneController.text.trim();
+    if (mobile.isEmpty) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please enter your mobile number')),
+      );
+      return;
+    }
+    
+    if (!RegExp(r'^[0-9]{10}$').hasMatch(mobile)) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please enter a valid 10-digit mobile number')),
+      );
+      return;
+    }
+
+    try {
+      // Check if mobile number exists in Firestore
+      final usersSnapshot = await FirebaseFirestore.instance.collection('users').get();
+      bool mobileExists = false;
+      
+      for (var doc in usersSnapshot.docs) {
+        final data = doc.data();
+        if (data != null && data.containsKey('mobile')) {
+          String? storedMobile = data['mobile'];
+          if (storedMobile != null) {
+            String normalizedStoredMobile = storedMobile.replaceAll(RegExp(r'\D'), '');
+            String normalizedInputMobile = mobile.replaceAll(RegExp(r'\D'), '');
+            if (normalizedStoredMobile.endsWith(normalizedInputMobile)) {
+              mobileExists = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!mobileExists) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Verification failed:  {e.message}')));
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        setState(() {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            backgroundColor: Colors.orange.shade50,
+            title: Row(
+              children: [
+                Icon(Icons.person_add, color: Colors.orange.shade700, size: 28),
+                SizedBox(width: 10),
+                Text(
+                  'Mobile Number Not Found',
+                  style: TextStyle(
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'This mobile number is not registered with us.\n\nPlease sign up first to create an account.',
+                  style: TextStyle(
+                    color: Colors.orange.shade900,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 18),
+                Icon(Icons.phone_android, color: Colors.orange.shade300, size: 48),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Navigate to sign up page
+                  Navigator.pushNamed(context, '/signup'); // Adjust route as needed
+                },
+                icon: Icon(Icons.person_add, color: Colors.white),
+                label: Text('Sign Up', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade700,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      // Mobile number exists, proceed with OTP sending
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: "+91${mobile}",
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          await FirebaseAuth.instance.signInWithCredential(credential);
+          await _redirectBasedOnUserType();
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Verification failed: ${e.message}')));
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          setState(() {
+            _verificationId = verificationId;
+            _otpSent = true;
+            _isLoading = false;
+            _didInitSmsListener = false;
+          });
+          _startOtpTimer();
+          FocusScope.of(context).requestFocus(_focusNodes[0]);
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
           _verificationId = verificationId;
-          _otpSent = true;
-          _isLoading = false;
-          _didInitSmsListener = false;
-        });
-        _startOtpTimer();
-        FocusScope.of(context).requestFocus(_focusNodes[0]);
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        _verificationId = verificationId;
-      },
-    );
+        },
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+    }
   }
 
   void _resendOtp() async {

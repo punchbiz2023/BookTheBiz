@@ -6,6 +6,7 @@ import 'package:odp/pages/BookingFailedPage.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'BookingSuccessPage.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class BookingPage extends StatefulWidget {
   final String documentId;
@@ -46,6 +47,30 @@ class _BookingPageState extends State<BookingPage> {
   final Map<String, List<String>> _bookedSlotsMap = {};
   bool _isLoadingTurf = true;
   bool _isLoadingBookings = true;
+
+  // Add these helper functions to your _BookingPageState:
+  double _platformProfit(double turfRate) {
+    if (turfRate < 1000) {
+      return turfRate * 0.15;
+    } else if (turfRate <= 3000) {
+      return 110;
+    } else {
+      return 210;
+    }
+  }
+  double _razorpayFeePercent() {
+    return 0.02 * 1.18; // 2% + 18% GST = 2.36%
+  }
+  double _totalToCharge(double turfRate) {
+    double profit = _platformProfit(turfRate);
+    double feePercent = _razorpayFeePercent();
+    return (turfRate + profit) / (1 - feePercent);
+  }
+  double _razorpayFeeAmount(double turfRate) {
+    double total = _totalToCharge(turfRate);
+    double profit = _platformProfit(turfRate);
+    return total - turfRate - profit;
+  }
 
   @override
   void initState() {
@@ -264,37 +289,39 @@ class _BookingPageState extends State<BookingPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.red),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Note: On Spot Payment Not Accepted',
-                        style: TextStyle(
-                          color: Colors.red.shade700,
-                          fontWeight: FontWeight.bold,
+              if (!isBookingConfirmed) // Only show warning if not confirming
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.red),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Note: On Spot Payment Not Accepted',
+                          style: TextStyle(
+                            color: Colors.red.shade700,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              SizedBox(height: 16),
+              if (!isBookingConfirmed)
+                SizedBox(height: 16),
               Wrap(
                 spacing: 16.0,
                 runSpacing: 16.0,
                 children: [
                   if (!isBookingConfirmed) _buildCalendar(),
                   if (!isBookingConfirmed) _buildSlotSelector(),
-                  if (selectedSlots.isNotEmpty)
+                  if (!isBookingConfirmed && selectedSlots.isNotEmpty)
                     Center(
                       child: ElevatedButton(
                         onPressed: () async {
@@ -316,7 +343,7 @@ class _BookingPageState extends State<BookingPage> {
                         },
                         style: ElevatedButton.styleFrom(
                           padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                          backgroundColor: Colors.blueAccent,
+                          backgroundColor: Colors.teal,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
@@ -445,14 +472,14 @@ class _BookingPageState extends State<BookingPage> {
                 children: [
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.blueAccent,
+                      color: Colors.teal,
                       borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
                     ),
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(vertical: 22),
                     child: Column(
-                      children: const [
-                        Icon(Icons.verified, color: Colors.white, size: 38),
+                          children: const [
+                            Icon(Icons.verified, color: Colors.white, size: 38),
                         SizedBox(height: 8),
                         Text(
                           'Confirm Booking',
@@ -484,11 +511,11 @@ class _BookingPageState extends State<BookingPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.calendar_today, size: 18, color: Colors.indigo),
+                            Icon(Icons.calendar_today, size: 18, color: Colors.teal),
                             SizedBox(width: 6),
                             Text(
                               DateFormat('EEE, MMM d, yyyy').format(selectedDate!),
-                              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.indigo),
+                              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.teal),
                             ),
                           ],
                         ),
@@ -497,7 +524,7 @@ class _BookingPageState extends State<BookingPage> {
                           width: double.infinity,
                           padding: EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.indigo.withOpacity(0.07),
+                            color: Colors.teal.withOpacity(0.07),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
@@ -507,7 +534,7 @@ class _BookingPageState extends State<BookingPage> {
                                 'Selected Ground:',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.indigo,
+                                  color: Colors.teal,
                                   fontSize: 15,
                                 ),
                               ),
@@ -516,7 +543,7 @@ class _BookingPageState extends State<BookingPage> {
                                 selectedGround ?? '',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.indigo.shade900,
+                                  color: Colors.teal.shade900,
                                   fontSize: 16,
                                 ),
                               ),
@@ -556,36 +583,56 @@ class _BookingPageState extends State<BookingPage> {
                           ),
                         ),
                         SizedBox(height: 14),
-                        Row(
+                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.access_time, color: Colors.deepPurple, size: 20),
+                            Icon(Icons.access_time, color: Colors.teal, size: 20),
                             SizedBox(width: 6),
                             Text(
                               'Total Hours: ',
-                              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.deepPurple),
+                              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.teal),
                             ),
                             Text(
                               totalHours.toStringAsFixed(0),
-                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple, fontSize: 16),
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 16),
                             ),
                           ],
                         ),
                         SizedBox(height: 8),
-                        Row(
+                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.currency_rupee, color: Colors.green, size: 22),
+                            Icon(Icons.currency_rupee, color: Colors.teal, size: 22),
                             SizedBox(width: 6),
                             Text(
                               'Total Amount: ',
-                              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.green),
+                              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.teal),
                             ),
                             Text(
                               totalAmount.toStringAsFixed(2),
-                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 17),
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 17),
                             ),
                           ],
+                        ),
+                         SizedBox(height: 12),
+                        // Amount breakdown
+                        Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withOpacity(0.07),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Turf Rate (Owner Receives): ₹${totalAmount.toStringAsFixed(2)}'),
+                              Text('Platform Charges: ₹${_platformProfit(totalAmount).toStringAsFixed(2)}'),
+                              Text('Payment Gateway Fee + GST: ₹${_razorpayFeeAmount(totalAmount).toStringAsFixed(2)}'),
+                              Divider(),
+                              Text('Total Payable: ₹${_totalToCharge(totalAmount).toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -604,29 +651,98 @@ class _BookingPageState extends State<BookingPage> {
               icon: Icon(Icons.cancel, color: Colors.red),
               label: Text('Cancel', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
               onPressed: () {
-                Navigator.of(context).pop();
-                _showCancellationDialog();
+                Navigator.of(context).pop(); // Just close the dialog
+                // Removed call to _showCancellationDialog();
               },
             ),
           ),
           Expanded(
             child: TextButton.icon(
-              icon: Icon(Icons.check_circle, color: Colors.green),
-              label: Text('Confirm', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              icon: Icon(Icons.check_circle, color: Colors.teal),
+              label: Text('Confirm', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
               onPressed: () async {
+                // Validate that we have the owner ID
+                if (_turfData == null || _turfData!['ownerId'] == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: Turf owner information not found. Please try again.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                // Calculate total amount with profit and fees (confidential business logic)
+                final payableAmount = _totalToCharge(totalAmount);
+                
+                // Validate calculated amount
+                if (payableAmount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: Invalid amount calculated. Please try again.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                String userEmail = FirebaseAuth.instance.currentUser?.email ?? await _fetchUserEmail(currentUser.uid);
+                String userPhone = FirebaseAuth.instance.currentUser?.phoneNumber ?? await _fetchUserPhone(currentUser.uid);
+
+                // Before opening Razorpay checkout, call the callable function to create order with transfer
+                String? ownerAccountId;
+
+                if (_turfData != null && _turfData!['ownerId'] != null) {
+  final ownerDoc = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(_turfData!['ownerId'])
+      .get();
+  if (ownerDoc.exists && ownerDoc.data() != null) {
+    ownerAccountId = ownerDoc['razorpayAccountId'];
+  }
+}
+if (ownerAccountId == null || !ownerAccountId.toString().startsWith('acc_')) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('Turf owner does not have a valid Razorpay Account ID. Please contact support.')),
+  );
+  return;
+}
+                final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('createRazorpayOrderWithTransfer');
+                final orderResult = await callable({
+                  'totalAmount': totalAmount,
+                  'ownerAccountId': ownerAccountId,
+                  'bookingId': widget.documentId + '_' + DateTime.now().millisecondsSinceEpoch.toString(),
+                  'turfId': widget.documentId,
+                });
+                final orderId = orderResult.data['orderId'];
+                if (orderId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to create Razorpay order. Please try again.')),
+                  );
+                  return;
+                }
                 var options = {
-                  'key': 'rzp_test_RmOLs985IPNRVq',
-                  'amount': (totalAmount * 100).toInt(),
-                  'name': 'Turf Booking',
-                  'description': 'Booking fee for your selected slots',
+                  'key': 'rzp_live_lUkgWvIy2IHCWA',
+                  'amount': (payableAmount * 100).round(),
+                  'name': widget.documentname,
+                  'description': 'Booking at ${selectedGround ?? ''} on ${DateFormat('yyyy-MM-dd').format(selectedDate!)}',
+                  'order_id': orderId,
                   'prefill': {
-                    'contact': 'test',
-                    'email': 'test',
+                    'contact': userPhone,
+                    'email': userEmail,
                   },
                   'theme': {
-                    'color': '#00FF00',
+                    'color': '#009688',
                   },
                 };
+
+                print('Payment Options:');
+                print('Base Amount: ₹$totalAmount');
+                print('Payable Amount: ₹$payableAmount');
+                print('Amount in Paise: ${(payableAmount * 100).round()}');
+                print('Turf: ${widget.documentname}');
+                print('Ground: $selectedGround');
+                print('Date: ${DateFormat('yyyy-MM-dd').format(selectedDate!)}');
 
                 _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
                   try {
@@ -636,41 +752,96 @@ class _BookingPageState extends State<BookingPage> {
                       'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
                       'bookingSlots': selectedSlots,
                       'totalHours': totalHours,
-                      'amount': totalAmount,
+                      'amount': payableAmount, // Total amount paid by user (including profit + fees)
+                      'baseAmount': totalAmount, // Original turf amount (for reference)
                       'turfId': widget.documentId,
                       'turfName': widget.documentname,
                       'selectedGround': selectedGround,
                       'paymentMethod': 'Online',
                       'status': 'confirmed',
+                      'payoutStatus': 'pending',
+                      'razorpayPaymentId': response.paymentId,
+                      'razorpayOrderId': response.orderId,
+                      'razorpaySignature': response.signature,
+                      'ownerId': _turfData != null ? _turfData!['ownerId'] : null,
+                      'createdAt': FieldValue.serverTimestamp(),
+                      'updatedAt': FieldValue.serverTimestamp(),
                     };
 
-                    await _firestore
+                    // First, add to turf's subcollection (triggers Cloud Function)
+                    DocumentReference turfBookingRef = await _firestore
                         .collection('turfs')
                         .doc(widget.documentId)
                         .collection('bookings')
                         .add(bookingData);
 
-                    await _firestore.collection('bookings').add(bookingData);
+                    // Then add to main bookings collection for easy querying
+                    await _firestore.collection('bookings').add({
+                      ...bookingData,
+                      'turfBookingId': turfBookingRef.id, // Reference to turf subcollection
+                    });
+
+                    print('Booking created successfully!');
+                    print('Turf Booking ID: ${turfBookingRef.id}');
+                    print('Amount: $payableAmount (Base: $totalAmount)');
+                    print('Owner ID: ${_turfData?['ownerId']}');
 
                     await _showSuccessDialog(context, "Booking confirmed successfully!", true);
+                    // Redirect to BookingSuccessPage after dialog
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => BookingSuccessPage()),
+                      (Route<dynamic> route) => false,
+                    );
                   } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Failed to confirm booking: $e'),
-                        backgroundColor: Colors.red,
+                    // On any error, redirect to BookingFailedPage
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) => BookingFailedPage(
+                          documentId: widget.documentId,
+                          documentname: widget.documentname,
+                          userId: widget.userId,
+                        ),
                       ),
+                      (Route<dynamic> route) => false,
                     );
                   }
                 });
 
                 _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) async {
-                  await _showSuccessDialog(context, "Payment failed: ${response.message}", false);
+                  try {
+                    print('Payment failed:  ${response.message}');
+                    print('Error code: ${response.code}');
+                    await _showSuccessDialog(context, "Oops! Payment failed Please try again", false);
+                  } catch (e) {
+                    print('Error in payment error handler: $e');
+                  } finally {
+                    // Always redirect to BookingFailedPage on payment error
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) => BookingFailedPage(
+                          documentId: widget.documentId,
+                          documentname: widget.documentname,
+                          userId: widget.userId,
+                        ),
+                      ),
+                      (Route<dynamic> route) => false,
+                    );
+                  }
                 });
 
                 try {
+                  print('Opening Razorpay payment...');
+                  print('Amount: ${payableAmount * 100} paise');
+                  print('User: $userEmail, Phone: $userPhone');
                   _razorpay.open(options);
                 } catch (e) {
-                  print("Error: $e");
+                  print("Razorpay error: $e");
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to open payment: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                 }
               },
             ),
@@ -729,6 +900,10 @@ class _BookingPageState extends State<BookingPage> {
         );
       },
     );
+    // After dialog is closed, restore main UI
+    setState(() {
+      isBookingConfirmed = false;
+    });
   }
 
   Future<Map<DateTime, int>> getBookedSlotsPerDate(String turfId) async {
@@ -843,7 +1018,7 @@ class _BookingPageState extends State<BookingPage> {
           ),
           calendarStyle: CalendarStyle(
             todayDecoration: BoxDecoration(
-              color: Colors.blue,
+              color: Colors.teal,
               shape: BoxShape.circle,
             ),
             defaultDecoration: BoxDecoration(shape: BoxShape.circle),
@@ -1080,7 +1255,7 @@ class _BookingPageState extends State<BookingPage> {
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w600,
-            color: Colors.indigo,
+            color: Colors.teal,
           ),
         ),
         SizedBox(height: 15),
@@ -1090,20 +1265,20 @@ class _BookingPageState extends State<BookingPage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.indigo,
+              color: Colors.teal,
               width: 1.5,
             ),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: selectedGround,
-              dropdownColor: Colors.indigo.shade50,
+              dropdownColor: Colors.teal.shade50,
               hint: Text(
                 'Select your ground',
                 style: TextStyle(color: Colors.grey.shade600),
               ),
               isExpanded: true,
-              icon: Icon(Icons.arrow_drop_down, color: Colors.indigo),
+              icon: Icon(Icons.arrow_drop_down, color: Colors.teal),
               items: availableGrounds.map((ground) {
                 return DropdownMenuItem<String>(
                   value: ground,
@@ -1144,7 +1319,7 @@ class _BookingPageState extends State<BookingPage> {
               'Selected: ${runningTotalHours.toStringAsFixed(2)} hour(s) | Total: ₹${runningTotalAmount.toStringAsFixed(2)}',
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.blueAccent,
+                color: Colors.teal,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1157,7 +1332,7 @@ class _BookingPageState extends State<BookingPage> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
-                color: Colors.indigo,
+                color: Colors.teal,
               ),
             ),
           ),
@@ -1203,7 +1378,7 @@ class _BookingPageState extends State<BookingPage> {
             return ChoiceChip(
               label: Text(slot),
               selected: isAlreadySelected,
-              selectedColor: isBooked ? Colors.red : Colors.blue,
+              selectedColor: isBooked ? Colors.red : Colors.teal,
               disabledColor: Colors.grey.shade300,
               onSelected: (!groundSelected || isBooked || overlapsWithSelected)
                   ? null
@@ -1381,7 +1556,11 @@ class _BookingPageState extends State<BookingPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => BookingFailedPage(),
+        builder: (context) => BookingFailedPage(
+          documentId: widget.documentId,
+                          documentname: widget.documentname,
+                          userId: widget.userId,
+        ),
       ),
     );
   }
@@ -1460,6 +1639,58 @@ class _BookingPageState extends State<BookingPage> {
       print('Error fetching user name: $e');
     }
     return 'Anonymous';
+  }
+
+  Future<String> _fetchUserEmail(String userId) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user?.email != null && user!.email!.isNotEmpty) return user.email!;
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>?;
+        final email = data != null ? (data['email'] as String?) : null;
+        if (email != null && email.isNotEmpty) return email;
+      }
+    } catch (e) {
+      print('Error fetching user email: $e');
+    }
+    return '';
+  }
+
+  Future<String> _fetchUserPhone(String userId) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user?.phoneNumber != null && user!.phoneNumber!.isNotEmpty) return user.phoneNumber!;
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>?;
+        final phone = data != null ? (data['phone'] ?? data['contact']) as String? : null;
+        if (phone != null && phone.isNotEmpty) return phone;
+      }
+    } catch (e) {
+      print('Error fetching user phone: $e');
+    }
+    return '';
+  }
+
+
+  // Calculate total amount with profit and fees (confidential business logic)
+  // This is what the user pays - the base amount plus company profit and platform fees
+  double _calculateTotalAmount(double baseAmount) {
+    if (baseAmount <= 0) {
+      return 0.0; // Handle invalid amounts
+    }
+    
+    if (baseAmount < 1000) {
+      // For amounts < 1000: 100% base + 15% profit + 2% platform fee = 117%
+      return (baseAmount * 1.17).roundToDouble();
+    } else if (baseAmount <= 3000) {
+      // For amounts 1000-3000: base + fixed ₹110 profit + 2% platform fee
+      return (baseAmount + 110 + (baseAmount * 0.02)).roundToDouble();
+    } else {
+      // For amounts > 3000: base + fixed ₹210 profit + 2% platform fee
+      return (baseAmount + 210 + (baseAmount * 0.02)).roundToDouble();
+    }
   }
 
   Future<bool> _checkSlotAvailability() async {
@@ -1583,5 +1814,16 @@ class _BookingPageState extends State<BookingPage> {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    // Clean up Razorpay listeners to prevent memory leaks
+    try {
+      _razorpay.clear(); // This removes all event listeners
+    } catch (e) {
+      print('Error disposing Razorpay: $e');
+    }
+    super.dispose();
   }
 }

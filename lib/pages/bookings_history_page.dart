@@ -54,7 +54,7 @@ class _BookingsPageState extends State<BookingsPage>
               Text('Not Allowed'),
             ],
           ),
-          content: Text('Upcoming bookings cannot be cancelled.'),
+          content: Text('Upcoming bookings cannot be deleted.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -423,45 +423,46 @@ class _BookingsPageState extends State<BookingsPage>
               },
             ),
             // --- Instruction at the bottom ---
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 10,
-              child: IgnorePointer(
-                child: Center(
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200]?.withOpacity(0.95),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 6,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.touch_app, size: 16, color: Colors.grey[600]),
-                        SizedBox(width: 8),
-                        Text(
-                          'Long press a booking to select and delete it.',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 13,
-                            fontStyle: FontStyle.italic,
-                            letterSpacing: 0.1,
+            if (state == 'cancelled' || state == 'past')
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 10,
+                child: IgnorePointer(
+                  child: Center(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200]?.withOpacity(0.95),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.touch_app, size: 16, color: Colors.grey[600]),
+                          SizedBox(width: 8),
+                          Text(
+                            'Long press a booking to select and delete it.',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         );
       },
@@ -543,7 +544,7 @@ Widget build(BuildContext context) {
                   indicatorPadding: EdgeInsets.symmetric(horizontal: 1, vertical: 4),
                   tabs: const [
                     Tab(text: '   Upcoming    '),
-                    Tab(text: '     Past     '),
+                    Tab(text: '  Past Bookings  '),
                     Tab(text: '   Cancelled   '),
                   ],
                 ),

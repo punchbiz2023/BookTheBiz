@@ -9,7 +9,194 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:async';
 import 'package:odp/pages/details.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
+class MemoizedSearchBar extends StatefulWidget {
+    final List<Map<String, dynamic>> allTurfs;
+    final TextEditingController searchController;
+    final void Function(Map<String, dynamic>) onSelected;
+    const MemoizedSearchBar({required this.allTurfs, required this.searchController, required this.onSelected, Key? key}) : super(key: key);
+
+    @override
+    State<MemoizedSearchBar> createState() => _MemoizedSearchBarState();
+  }
+
+  class _MemoizedSearchBarState extends State<MemoizedSearchBar> with AutomaticKeepAliveClientMixin {
+    String _searchText = '';
+    @override
+    bool get wantKeepAlive => true;
+
+    @override
+    Widget build(BuildContext context) {
+      super.build(context);
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
+        child: Autocomplete<Map<String, dynamic>>(
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return const Iterable<Map<String, dynamic>>.empty();
+            }
+            final query = textEditingValue.text.toLowerCase();
+            return widget.allTurfs.where((turf) =>
+              (turf['name'] as String).toLowerCase().contains(query)
+            );
+          },
+          displayStringForOption: (option) => option['name'] ?? '',
+          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            controller.text = widget.searchController.text;
+            controller.selection = widget.searchController.selection;
+            return AnimatedContainer(
+              duration: Duration(milliseconds: 300),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: TextFormField(
+                controller: widget.searchController,
+                focusNode: focusNode,
+                style: TextStyle(color: Colors.black87, fontSize: 16),
+                decoration: InputDecoration(
+                  hintText: 'Search for turfs...',
+                  hintStyle: TextStyle(color: Colors.grey[600]),
+                  prefixIcon: Icon(Icons.search, color: Colors.teal),
+                  suffixIcon: widget.searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.cancel, color: Colors.grey[600]),
+                          onPressed: () {
+                            if (widget.searchController.text.isNotEmpty) {
+                              widget.searchController.clear();
+                              focusNode.unfocus();
+                              setState(() {
+                                _searchText = '';
+                              });
+                            }
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 14),
+                ),
+                onChanged: (val) {
+                  if (_searchText != val) {
+                    setState(() {
+                      _searchText = val;
+                    });
+                  }
+                },
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  margin: EdgeInsets.only(top: 10),
+                  width: MediaQuery.of(context).size.width - 32,
+                  constraints: BoxConstraints(maxHeight: 350),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: options.length,
+                    separatorBuilder: (context, index) => Divider(
+                      height: 1,
+                      indent: 72,
+                      color: Colors.grey[200],
+                    ),
+                    itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      return InkWell(
+                        onTap: () {
+                          onSelected(option);
+                        },
+                        splashColor: Colors.teal.withOpacity(0.1),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          child: Row(
+                            children: [
+                              Hero(
+                                tag: option['id'],
+                                child: CircleAvatar(
+                                  radius: 24,
+                                  backgroundColor: Colors.teal.shade50,
+                                  backgroundImage: option['imageUrl'] != null &&
+                                          option['imageUrl']
+                                              .toString()
+                                              .isNotEmpty
+                                      ? NetworkImage(option['imageUrl'])
+                                      : null,
+                                  child: option['imageUrl'] == null ||
+                                          option['imageUrl']
+                                              .toString()
+                                              .isEmpty
+                                      ? Icon(Icons.sports_soccer,
+                                          color: Colors.teal)
+                                      : null,
+                                ),
+                              ),
+                              SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(option['name'] ?? '',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 16,
+                                        )),
+                                    if (option['description'] != null &&
+                                        option['description']
+                                            .toString()
+                                            .isNotEmpty)
+                                      Text(
+                                        option['description'],
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[600],
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+          onSelected: widget.onSelected,
+        ),
+      );
+    }
+  }
 class HomePage1 extends StatefulWidget {
   final User? user;
   const HomePage1({super.key, this.user});
@@ -41,6 +228,8 @@ class _HomePage1State extends State<HomePage1>
   List<String> _availableLocations = ['All Areas'];
   final Map<String, String> _locationCache = {}; // docId -> address
   Map<String, String> _localityToLatLng = {}; // locality -> latlng string
+  List<Map<String, dynamic>> _allTurfs = [];
+  bool _isLoadingTurfs = true;
 
   // Returns a unique list of available locations (removes duplicates)
   List<String> _getUniqueLocations() {
@@ -123,10 +312,34 @@ class _HomePage1State extends State<HomePage1>
   @override
   void initState() {
     super.initState();
+    print('[DEBUG] HomePage1State.initState called');
     _tabController = TabController(length: 3, vsync: this);
     _initializeLocation();
     _loadUserLikes();
     _loadAvailableLocations(); // Make sure this is called!
+    _fetchAllTurfs();
+  }
+
+  Future<void> _fetchAllTurfs() async {
+    setState(() {
+      print('[DEBUG] setState: _fetchAllTurfs loading');
+      _isLoadingTurfs = true;
+    });
+    try {
+      final allTurfsSnapshot = await FirebaseFirestore.instance.collection('turfs').get();
+      _allTurfs = allTurfsSnapshot.docs.map((doc) => {
+        'id': doc.id,
+        'name': doc['name'] ?? '',
+        'imageUrl': doc['imageUrl'] ?? '',
+        'description': doc['description'] ?? '',
+      }).toList();
+    } catch (e) {
+      _allTurfs = [];
+    }
+    setState(() {
+      print('[DEBUG] setState: _fetchAllTurfs loaded');
+      _isLoadingTurfs = false;
+    });
   }
 
   Future<void> _loadUserLikes() async {
@@ -135,6 +348,7 @@ class _HomePage1State extends State<HomePage1>
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final likes = userDoc.data()?['likes'] as Map<String, dynamic>? ?? {};
       setState(() {
+        print('[DEBUG] setState: _loadUserLikes');
         _likedTurfs = likes.keys.toSet();
       });
     }
@@ -177,191 +391,8 @@ class _HomePage1State extends State<HomePage1>
     );
   }
 
-  Widget _buildSearchBar() {
-    return Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Autocomplete<Map<String, dynamic>>(
-          optionsBuilder: (TextEditingValue textEditingValue) async {
-            if (textEditingValue.text.isEmpty) {
-              return const Iterable<Map<String, dynamic>>.empty();
-            }
-
-            final allTurfsSnapshot =
-                await FirebaseFirestore.instance.collection('turfs').get();
-
-            final filtered = allTurfsSnapshot.docs.where((doc) {
-              final name = (doc['name'] ?? '').toString().toLowerCase();
-              return name.contains(textEditingValue.text.toLowerCase());
-            }).map((doc) => {
-                  'id': doc.id,
-                  'name': doc['name'] ?? '',
-                  'imageUrl': doc['imageUrl'] ?? '',
-                  'description': doc['description'] ?? '',
-                }).toList();
-
-            return filtered;
-          },
-          displayStringForOption: (option) => option['name'] ?? '',
-          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-            return StatefulBuilder(
-              builder: (context, setState) {
-                controller.addListener(() => setState(() {}));
-
-                return AnimatedContainer(
-                  duration: Duration(milliseconds: 300),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 12,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: TextFormField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    style: TextStyle(color: Colors.black87, fontSize: 16),
-                    decoration: InputDecoration(
-                      hintText: 'Search for turfs...',
-                      hintStyle: TextStyle(color: Colors.grey[600]),
-                      prefixIcon: Icon(Icons.search, color: Colors.teal),
-                      suffixIcon: controller.text.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(Icons.cancel, color: Colors.grey[600]),
-                              onPressed: () {
-                                controller.clear();
-                                focusNode.unfocus();
-                                setState(() {});
-                              },
-                            )
-                          : null,
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 14),
-        ),
-      ),
-    );
-              },
-            );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  margin: EdgeInsets.only(top: 10),
-                  width: MediaQuery.of(context).size.width - 32,
-                  constraints: BoxConstraints(maxHeight: 350),
-            decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                ),
-              ],
-            ),
-                  child: ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: options.length,
-                    separatorBuilder: (context, index) => Divider(
-                      height: 1,
-                      indent: 72,
-                      color: Colors.grey[200],
-                    ),
-                    itemBuilder: (context, index) {
-                      final option = options.elementAt(index);
-                      return InkWell(
-                        onTap: () {
-                          onSelected(option);
-                        },
-                        splashColor: Colors.teal.withOpacity(0.1),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                          child: Row(
-                            children: [
-                              Hero(
-                                tag: option['id'],
-            child: CircleAvatar(
-                                  radius: 24,
-                                  backgroundColor: Colors.teal.shade50,
-                                  backgroundImage: option['imageUrl'] != null &&
-                                          option['imageUrl']
-                                              .toString()
-                                              .isNotEmpty
-                                      ? NetworkImage(option['imageUrl'])
-                                      : null,
-                                  child: option['imageUrl'] == null ||
-                                          option['imageUrl']
-                                              .toString()
-                                              .isEmpty
-                                      ? Icon(Icons.sports_soccer,
-                                          color: Colors.teal)
-                                      : null,
-                                ),
-                              ),
-                              SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(option['name'] ?? '',
-            style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 16,
-                                        )),
-                                    if (option['description'] != null &&
-                                        option['description']
-                                            .toString()
-                                            .isNotEmpty)
-                                      Text(
-                                        option['description'],
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey[600],
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-          onSelected: (option) {
-                  Navigator.push(
-                    context,
-              MaterialPageRoute(
-                builder: (context) => DetailsPage(
-                  documentId: option['id'],
-                  documentname: option['name'],
-                ),
-              ),
-                  );
-                },
-              ),
-      ],
-    ),
-  );
-}
+  // Add this at the top-level (after imports, before HomePage1):
+  
 
   Future<void> _initializeLocation() async {
     await _getCurrentLocation();
@@ -404,6 +435,7 @@ class _HomePage1State extends State<HomePage1>
       }
 
       setState(() {
+        print('[DEBUG] setState: _loadAvailableLocations');
         _availableLocations = ['All Areas', ...localities];
         _localityToLatLng = localityToLatLng;
         _docIdToLocality = docIdToLocality;
@@ -418,6 +450,7 @@ class _HomePage1State extends State<HomePage1>
   
   Future<void> _getCurrentLocation() async {
     setState(() {
+      print('[DEBUG] setState: _getCurrentLocation loading');
       _isLoadingLocation = true;
     });
 
@@ -625,136 +658,150 @@ class _HomePage1State extends State<HomePage1>
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: widget.user != null
-          ? FirebaseFirestore.instance.collection('users').doc(widget.user!.uid).get()
-          : null,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    print('[DEBUG] HomePage1State.build called');
+    return WillPopScope(
+      onWillPop: () async {
+        if (_selectedIndex == 0) {
+          SystemNavigator.pop();
+          return false;
+        } else {
+          setState(() {
+            _selectedIndex = 0;
+          });
+          return false;
+        }
+      },
+      child: FutureBuilder<DocumentSnapshot>(
+        future: widget.user != null
+            ? FirebaseFirestore.instance.collection('users').doc(widget.user!.uid).get()
+            : null,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Scaffold(
+              backgroundColor: Colors.grey[100],
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return Scaffold(
+              backgroundColor: Colors.grey[100],
+              body: Center(child: Text('User data not found. Please contact support.')),
+            );
+          }
+          // User data exists, show the main UI
           return Scaffold(
             backgroundColor: Colors.grey[100],
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return Scaffold(
-            backgroundColor: Colors.grey[100],
-            body: Center(child: Text('User data not found. Please contact support.')),
-          );
-        }
-        // User data exists, show the main UI
-        return Scaffold(
-          backgroundColor: Colors.grey[100],
-          appBar: PreferredSize(
-            preferredSize: Size.fromHeight(64),
-            child: AppBar(
-              elevation: 0.5,
-              backgroundColor: Colors.white,
-              automaticallyImplyLeading: false,
-              titleSpacing: 0,
-              title: Row(
-                children: [
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      'Turf Booking',
-                      style: TextStyle(
-                        color: Color(0xFF17494D),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 26,
-                        letterSpacing: 0.5,
-                        fontFamily: 'Montserrat',
-                        shadows: [
-                          Shadow(
-                            color: Colors.teal.withOpacity(0.08),
-                            blurRadius: 8,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ProfilePage(user: widget.user),
+            appBar: PreferredSize(
+              preferredSize: Size.fromHeight(64),
+              child: AppBar(
+                elevation: 0.5,
+                backgroundColor: Colors.white,
+                automaticallyImplyLeading: false,
+                titleSpacing: 0,
+                title: Row(
+                  children: [
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        'Turf Booking',
+                        style: TextStyle(
+                          color: Color(0xFF17494D),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 26,
+                          letterSpacing: 0.5,
+                          fontFamily: 'Montserrat',
+                          shadows: [
+                            Shadow(
+                              color: Colors.teal.withOpacity(0.08),
+                              blurRadius: 8,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 16),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.teal.shade100, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 6,
-                            offset: Offset(0, 2),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfilePage(user: widget.user),
                           ),
-                        ],
-                      ),
-                      child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                        stream: (widget.user != null)
-                            ? FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(widget.user!.uid)
-                                .snapshots()
-                            : const Stream.empty(),
-                        builder: (context, snapshot) {
-                          String? imageUrl;
-                          if (snapshot.hasData && snapshot.data!.exists) {
-                            final data = snapshot.data!.data();
-                            final dynamic url = data?['imageUrl'] ?? data?['profileImageUrl'] ?? data?['photoUrl'];
-                            if (url is String && url.trim().isNotEmpty) {
-                              imageUrl = url;
+                        );
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 16),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.teal.shade100, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 6,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                          stream: (widget.user != null)
+                              ? FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(widget.user!.uid)
+                                  .snapshots()
+                              : const Stream.empty(),
+                          builder: (context, snapshot) {
+                            String? imageUrl;
+                            if (snapshot.hasData && snapshot.data!.exists) {
+                              final data = snapshot.data!.data();
+                              final dynamic url = data?['imageUrl'] ?? data?['profileImageUrl'] ?? data?['photoUrl'];
+                              if (url is String && url.trim().isNotEmpty) {
+                                imageUrl = url;
+                              }
                             }
-                          }
-                          return CircleAvatar(
-                            backgroundColor: Colors.teal.shade50,
-                            radius: 22,
-                            backgroundImage: (imageUrl != null) ? NetworkImage(imageUrl) : null,
-                            child: (imageUrl == null)
-                                ? Icon(Icons.person, color: Colors.teal.shade700, size: 28)
-                                : null,
-                          );
-                        },
+                            return CircleAvatar(
+                              backgroundColor: Colors.teal.shade50,
+                              radius: 22,
+                              backgroundImage: (imageUrl != null) ? NetworkImage(imageUrl) : null,
+                              child: (imageUrl == null)
+                                  ? Icon(Icons.person, color: Colors.teal.shade700, size: 28)
+                                  : null,
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              bottom: PreferredSize(
-                preferredSize: Size.fromHeight(1.5),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.teal.shade50, Colors.grey.shade200],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
+                  ],
+                ),
+                bottom: PreferredSize(
+                  preferredSize: Size.fromHeight(1.5),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.teal.shade50, Colors.grey.shade200],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
                     ),
+                    height: 1.5,
                   ),
-                  height: 1.5,
                 ),
               ),
             ),
-          ),
-          body: SafeArea(
-            child: IndexedStack(
-              index: _selectedIndex,
-              children: [
-                _buildDashboardTab(),
-                _buildSearchTab(),
-                _buildDiscoverTurfsTab(),
-                BookingsPage(),
-              ],
+            body: SafeArea(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  _buildDashboardTab(),
+                  _buildSearchTab(),
+                  _buildDiscoverTurfsTab(),
+                  BookingsPage(),
+                ],
+              ),
             ),
-          ),
-          bottomNavigationBar: _buildBottomNavigationBar(),
-        );
-      },
+            bottomNavigationBar: _buildBottomNavigationBar(),
+          );
+        },
+      ),
     );
   }
 
@@ -845,13 +892,17 @@ class _HomePage1State extends State<HomePage1>
 
   Widget _buildDashboardTab() {
     return SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Remove search bar entirely
+          // Improved Welcome Card
           _buildWelcomeSection(),
           SizedBox(height: 24),
           _buildMostRecentBookedTurf(),
+          SizedBox(height: 20),
+          _buildFavouriteTurfs(),
           SizedBox(height: 20),
           Row(
             children: const [
@@ -862,163 +913,125 @@ class _HomePage1State extends State<HomePage1>
           ),
           SizedBox(height: 15),
           _buildNearbyTurfs(),
-          _buildFavouriteTurfs(),
+          SizedBox(height: 20),
+          
         ],
       ),
     );
   }
 
   Widget _buildWelcomeSection() {
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              height: 167,
-              width: double.infinity,
-              margin: EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Image.asset(
-                  'lib/assets/dashboard.jpg',
-                  fit: BoxFit.cover,
-                  alignment: Alignment.center,
-                ),
-              ),
-            ),
-            SizedBox(height: 18),
-            Text(
-              'Welcome to BooktheBiz!',
-              style: TextStyle(
-                color: Colors.teal.shade800,
-                fontWeight: FontWeight.w900,
-                fontSize: 26,
-                letterSpacing: 0.2,
-                fontFamily: 'Montserrat',
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Book your first turf in just a few taps. Discover, compare, and reserve the best sports venues near you!',
-              style: TextStyle(
-                color: Colors.teal.shade700,
-                fontWeight: FontWeight.w500,
-                fontSize: 16,
-                height: 1.4,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 22),
-            ElevatedButton.icon(
-              onPressed: () {
-                setState(() {
-                  _selectedIndex = 2; // Go to Discover Turfs tab
-                });
-              },
-              icon: Icon(Icons.explore, color: Colors.white),
-              label: Text('Explore Turfs', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal.shade700,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 2,
-              ),
-            ),
-            SizedBox(height: 28),
-            Divider(height: 1, color: Colors.teal.shade100),
-            SizedBox(height: 18),
-            Text(
-              'How BooktheBiz Works',
-              style: TextStyle(
-                color: Colors.teal.shade900,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-            SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildHowItWorksStep(
-                  icon: Icons.search,
-                  label: 'Find Turfs',
-                  asset: 'lib/assets/img.png',
-                ),
-                _buildHowItWorksStep(
-                  icon: Icons.calendar_month,
-                  label: 'Book Instantly',
-                  asset: 'lib/assets/placeholder_image.jpeg',
-                ),
-                _buildHowItWorksStep(
-                  icon: Icons.sports_soccer,
-                  label: 'Play & Enjoy',
-                  asset: 'lib/assets/badminton.png',
+  return Container(
+    decoration: BoxDecoration(
+      color: Colors.white, // Clean white card
+      borderRadius: BorderRadius.circular(28),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 12,
+          offset: Offset(0, 6),
+        ),
+      ],
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Full Image (no border)
+          Container(
+            height: 200,
+            width: double.infinity,
+            margin: EdgeInsets.only(bottom: 18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: Offset(0, 5),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHowItWorksStep({required IconData icon, required String label, required String asset}) {
-    return Column(
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.teal.withOpacity(0.10),
-                blurRadius: 10,
-                offset: Offset(0, 4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Image.asset(
+                'lib/assets/dashboard.jpg',
+                fit: BoxFit.contain, // Show full image
+                alignment: Alignment.center,
               ),
-            ],
-            border: Border.all(color: Colors.teal.shade100, width: 2),
-          ),
-          padding: EdgeInsets.all(4),
-          child: ClipOval(
-            child: Image.asset(
-              asset,
-              width: 56,
-              height: 56,
-              fit: BoxFit.cover,
             ),
           ),
-        ),
-        SizedBox(height: 10),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.teal.shade800,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
+
+          // Title
+          SizedBox(height: 18),
+          Text(
+            'Welcome to BooktheBiz!',
+            style: TextStyle(
+              color: Colors.teal.shade800,
+              fontWeight: FontWeight.w800,
+              fontSize: 28,
+              letterSpacing: 0.5,
+              fontFamily: 'Montserrat',
+            ),
+            textAlign: TextAlign.center,
           ),
-        ),
-      ],
-    );
-  }
+
+          // Subtitle
+          SizedBox(height: 12),
+          Text(
+            'Discover, compare, and instantly book the best sports venues near you. Exclusive offers & a vibrant sports community await you!',
+            style: TextStyle(
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w500,
+              fontSize: 16,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+
+          // Button
+          SizedBox(height: 26),
+          ElevatedButton.icon(
+            onPressed: () {
+              setState(() {
+                _selectedIndex = 2; // Navigate to Discover Turfs tab
+              });
+            },
+            icon: Icon(Icons.explore, color: Colors.white),
+            label: Text(
+              'Explore Turfs',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal.shade600,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 36, vertical: 18),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              elevation: 4,
+              shadowColor: Colors.teal.withOpacity(0.15),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 
   Widget _buildSearchTab() {
-    // Enhanced: Elegant 2x4 grid for 8 sport types
     return Container(
       color: Colors.grey[100],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(height: 12),
-          _buildSearchBar(),
+          if (_isLoadingTurfs)
+            Center(child: CircularProgressIndicator()),
+          // Remove MemoizedSearchBar from here
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
             child: Row(
@@ -1026,8 +1039,8 @@ class _HomePage1State extends State<HomePage1>
                 Icon(Icons.sports, color: Colors.teal.shade700, size: 30),
                 SizedBox(width: 10),
                 Text(
-              'Sport Types',
-              style: TextStyle(
+                  'Sport Types',
+                  style: TextStyle(
                     fontWeight: FontWeight.w900,
                     color: Colors.teal.shade900,
                     fontSize: 28,
@@ -1040,7 +1053,7 @@ class _HomePage1State extends State<HomePage1>
                         offset: Offset(0, 2),
                       ),
                     ],
-              ),
+                  ),
                 ),
               ],
             ),

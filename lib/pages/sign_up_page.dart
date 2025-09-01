@@ -128,7 +128,7 @@ class _SignupPageState extends State<SignupPage> {
       _showErrorDialog('Please enter your email.');
       return;
     }
-    if (!RegExp(r'^.+@.+\..+').hasMatch(email)) {
+    if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(email)) {
       setState(() => _loading = false);
       _showErrorDialog('Please enter a valid email address.');
       return;

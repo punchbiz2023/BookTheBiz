@@ -106,6 +106,21 @@ class _DetailsPageState extends State<DetailsPage> {
     }
   }
 
+  // Helper to get image asset for each item (if available)
+  String? _getImageForItem(String item) {
+    final map = {
+      'football field': 'lib/assets/football_field.jpg',
+      'volleyball court': 'lib/assets/volleyball_court.jpg',
+      'cricket ground': 'lib/assets/cricket_ground.jpg',
+      'basketball court': 'lib/assets/basket_ball.jpg',
+      'swimming pool': 'lib/assets/swimming_pool.jpg',
+      'shuttlecock': 'lib/assets/shuttle_cock.jpg',
+      'tennis court': 'lib/assets/tennis_court.jpg',
+      'badminton court': 'lib/assets/badminton_court.jpg',
+    };
+    return map[item.toLowerCase()];
+  }
+
   // Build a list of chips for available grounds or facilities
   Widget _buildChipList(String title, List<dynamic> items, Color backgroundColor, Color labelColor) {
     return Column(
@@ -115,27 +130,70 @@ class _DetailsPageState extends State<DetailsPage> {
           title,
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black),
         ),
-        SizedBox(height: 8),
-        Wrap(
-          spacing: 6.0,
-          runSpacing: 3.0,
-          children: items
-              .map((item) => Chip(
-            label: Text(item),
-            avatar: Icon(
-              _getIconForItem(item),
-              color: Colors.white,
-              size: 20,
-            ),
-            backgroundColor: backgroundColor,
-            labelStyle: TextStyle(color: labelColor),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(50),
-            ),
-          ))
-              .toList(),
+        SizedBox(height: 2),
+        Text(
+          'Available',
+          style: TextStyle(
+            color: backgroundColor.withOpacity(0.85),
+            fontWeight: FontWeight.w500,
+            fontSize: 13.5,
+            letterSpacing: 0.1,
+          ),
         ),
-        SizedBox(height: 16),
+        SizedBox(height: 6),
+        Wrap(
+          spacing: 10.0,
+          runSpacing: 8.0,
+          children: items.map((item) {
+            final img = _getImageForItem(item);
+            return Container(
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: backgroundColor.withOpacity(0.13),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (img != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.asset(
+                        img,
+                        width: 20,
+                        height: 20,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: backgroundColor.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(_getIconForItem(item), color: backgroundColor, size: 14),
+                    ),
+                  SizedBox(width: 6),
+                  Text(
+                    item,
+                    style: TextStyle(
+                      color: labelColor,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14.5,
+                      letterSpacing: 0.05,
+                      fontFamily: 'Montserrat',
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(Icons.check_circle, color: backgroundColor.withOpacity(0.7), size: 16),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+        SizedBox(height: 18),
       ],
     );
   }
@@ -405,58 +463,73 @@ class _DetailsPageState extends State<DetailsPage> {
 
   // Helper widget for activity/facility cards
   Widget _buildIconCardList(String title, List<dynamic> items, Color color) {
-  final bool isActivities = title.toLowerCase().contains('activity');
-  final int crossAxisCount = isActivities ? 2 : 3;
-  final double iconRadius = isActivities ? 32 : 26;
-  final double iconSize = isActivities ? 32 : 28;
-  final double fontSize = isActivities ? 15 : 14;
-  final double cellHeight = isActivities ? 110 : 90;
+    final bool isActivities = title.toLowerCase().contains('activity');
+    final int crossAxisCount = isActivities ? 2 : 3;
+    final double iconRadius = isActivities ? 32 : 26;
+    final double iconSize = isActivities ? 32 : 28;
+    final double fontSize = isActivities ? 15 : 14;
+    final double cellHeight = isActivities ? 120 : 100;
 
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        title,
-        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
-      ),
-      SizedBox(height: 10),
-      GridView.builder(
-        shrinkWrap: true,
-        physics: NeverScrollableScrollPhysics(),
-        itemCount: items.length,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.0,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
         ),
-        itemBuilder: (context, idx) {
-          final item = items[idx];
-          return Container(
-            height: cellHeight,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: color.withOpacity(0.18), width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withOpacity(0.07),
-                  blurRadius: 8,
-                  offset: Offset(2, 4),
+        SizedBox(height: 10),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 1.0,
+          ),
+          itemBuilder: (context, idx) {
+            final item = items[idx];
+            final img = _getImageForItem(item);
+            return Container(
+              height: cellHeight,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [color.withOpacity(0.13), color.withOpacity(0.07)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-              ],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  backgroundColor: color.withOpacity(0.13),
-                  radius: iconRadius,
-                  child: Icon(_getIconForItem(item), color: color, size: iconSize),
-                ),
-                SizedBox(height: 6),
-                Flexible(
-                  child: Padding(
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: color.withOpacity(0.13), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withOpacity(0.09),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (img != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(iconRadius),
+                      child: Image.asset(
+                        img,
+                        width: iconRadius * 2,
+                        height: iconRadius * 2,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  else
+                    CircleAvatar(
+                      backgroundColor: color.withOpacity(0.18),
+                      radius: iconRadius,
+                      child: Icon(_getIconForItem(item), color: color, size: iconSize),
+                    ),
+                  SizedBox(height: 8),
+                  Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4.0),
                     child: Text(
                       item,
@@ -464,22 +537,23 @@ class _DetailsPageState extends State<DetailsPage> {
                       style: TextStyle(
                         color: Colors.teal.shade700,
                         fontWeight: FontWeight.w600,
-                        fontSize: fontSize,
+                        fontSize: fontSize + 1,
+                        fontFamily: 'Montserrat',
+                        letterSpacing: 0.1,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-      SizedBox(height: 18),
-    ],
-  );
-}
+                ],
+              ),
+            );
+          },
+        ),
+        SizedBox(height: 22),
+      ],
+    );
+  }
 
   // Widget for displaying turf images as a carousel
   Widget _buildTurfImagesCarousel(List<dynamic> images, String spotlightImage) {
