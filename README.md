@@ -1048,7 +1048,7 @@ lib/
 ## 📞 **Contact Information**
 
 ### 🏢 **Punchbiz**
-- **Website:** [punchbiz.com](https://punchbiz.com)
+- **Website:** [punchbiz.co](https://punchbiz.co)
 - **Developer:** Mohamed Athik R
 - **Support:** Available through app support system
 
@@ -1063,7 +1063,7 @@ lib/
   
   **BookTheBiz - Revolutionizing Sports Facility Booking**
   
-  *Developed with ❤️ by Punchbiz*
+  
   
   [![Download](https://img.shields.io/badge/Download-Google%20Play-green.svg)](https://play.google.com/store)
   
