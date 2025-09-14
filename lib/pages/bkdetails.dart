@@ -38,7 +38,7 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
                 SizedBox(height: 16),
                 _buildDetailRow('Turf Name', widget.bookingData['turfName'] ?? 'Unknown Turf'),
                 _buildDetailRow('Date', widget.bookingData['bookingDate'] ?? 'N/A'),
-                _buildDetailRow('Amount', '₹${widget.bookingData['amount'] ?? 0}'),
+                _buildDetailRow('Amount', '₹${_formatAmount(widget.bookingData['amount'])}'),
                 _buildDetailRow('Total Hours', '${widget.bookingData['totalHours'] ?? 0}'),
                 _buildDetailRow('Selected Ground', widget.bookingData['selectedGround'] ?? 'N/A'),
                 _buildDetailRow('Name', widget.bookingData['userName'] ?? 'Unknown User'),
@@ -99,6 +99,34 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
     } else {
       throw Exception('Turf not found');
     }
+  }
+
+  String _formatAmount(dynamic amount) {
+    if (amount == null) return '0.00';
+    
+    // Convert to double and format to 2 decimal places
+    double amountValue;
+    if (amount is int) {
+      amountValue = amount.toDouble();
+    } else if (amount is double) {
+      amountValue = amount;
+    } else {
+      try {
+        amountValue = double.parse(amount.toString());
+      } catch (e) {
+        return '0.00';
+      }
+    }
+    
+    // Format to 2 decimal places and remove trailing zeros
+    String formatted = amountValue.toStringAsFixed(2);
+    if (formatted.endsWith('.00')) {
+      formatted = formatted.substring(0, formatted.length - 3);
+    } else if (formatted.endsWith('0')) {
+      formatted = formatted.substring(0, formatted.length - 1);
+    }
+    
+    return formatted;
   }
 
   Widget _buildDetailRow(String title, String value) {

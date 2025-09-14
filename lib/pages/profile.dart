@@ -8,6 +8,7 @@ import 'package:firebase_storage/firebase_storage.dart'; // Add this import
 import 'login.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:intl/intl.dart';
 
 /// This painter draws a gradient from teal to dark,
 /// plus a subtle dotted pattern on top.
@@ -217,7 +218,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _sendSupportAcknowledgementEmail(String email, String subject) async {
-    final url = Uri.parse('https://cloud-functions-vnxv.onrender.com/sendSupportAck');
+    final url = Uri.parse('https://us-central1-turf-booking-0.cloudfunctions.net/supportApi/sendSupportAck');
     try {
       final response = await http.post(
         url,
@@ -368,7 +369,7 @@ When you provide us with personal information to complete a transaction, verify 
 If we ask for your personal information for a secondary reason, like marketing, we will either ask you directly for your expressed consent, or provide you with an opportunity to say no.
 
 How do I withdraw my consent?
-If after you opt-in, you change your mind, you may withdraw your consent for us to contact you, for the continued collection, use or disclosure of your information, at anytime, by contacting/mailing us at btbowners@gmail.com for turf owners and btbcustomers@gmail.com for customers.
+If after you opt-in, you change your mind, you may withdraw your consent for us to contact you, for the continued collection, use or disclosure of your information, at anytime, by contacting/mailing us at ownersbtb@gmail.com for turf owners and customersbtb@gmail.com for customers.
 
 SECTION 3 - DISCLOSURE
 We may disclose your personal information if we are required by law to do so or if you violate our Terms of Service.
@@ -402,7 +403,7 @@ We reserve the right to modify this privacy policy at any time, so please review
 If our Company/App/Services is acquired or merged with another company, your information may be transferred to the new owners so that we may continue to sell products to you.
 
 QUESTIONS AND CONTACT INFORMATION
-If you would like to: access, correct, amend or delete any personal information we have about you, register a complaint, or simply want more information, kindly contact/mail us at btbowners@gmail.com for turf owners and btbcustomers@gmail.com for customers.
+If you would like to: access, correct, amend or delete any personal information we have about you, register a complaint, or simply want more information, kindly contact/mail us at ownersbtb@gmail.com for turf owners and customersbtb@gmail.com for customers.
 ''';
 
   final String _generalTerms = '''
@@ -584,7 +585,7 @@ BooktheBiz reserves the right to update or modify these Terms at any time. You w
 
 12. CONTACT INFORMATION
 For queries, assistance, or complaints, please contact us at:
-Email: btbowners@gmail.com
+Email: ownersbtb@gmail.com
 Phone: +91-8248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
 ''';
 
@@ -656,7 +657,7 @@ These Terms are governed by the laws of India. Any disputes shall be subject to 
 
 12. CONTACT US
 For support or complaints, reach out to:
-Email: btbcustomers@gmail.com
+Email: customersbtb@gmail.com
 Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
 ''';
 
@@ -861,7 +862,7 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
                         ),
                         const SizedBox(height: 4),
                         GestureDetector(
-                          onTap: _showEditRestrictionDialog,
+                          onTap: _isEditing ? _showEditRestrictionDialog : null,
                           child: AbsorbPointer(
                             child: TextField(
                               controller: TextEditingController(text: user?.email ?? 'email@example.com'),
@@ -887,7 +888,7 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
                         ),
                         const SizedBox(height: 4),
                         GestureDetector(
-                          onTap: _showEditRestrictionDialog,
+                          onTap: _isEditing ? _showEditRestrictionDialog : null,
                           child: AbsorbPointer(
                             child: TextField(
                               controller: TextEditingController(text: _userData?['mobile'] ?? 'Mobile number not available'),
@@ -1023,75 +1024,141 @@ Phone: +918248708300 (Mon-Fri 10.00 A.M - 6.00 P.M)
                                     ),
                                   ),
                                   // Previous Tickets Section
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Divider(),
-                                        Text('Previous Tickets', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[800], fontSize: 16)),
-                                        const SizedBox(height: 8),
-                                        StreamBuilder<QuerySnapshot>(
-                                          stream: FirebaseFirestore.instance
-                                              .collection('support_tickets')
-                                              .where('userId', isEqualTo: user?.uid ?? '')
-                                              .orderBy('createdAt', descending: true)
-                                              .snapshots(),
-                                          builder: (context, snapshot) {
-                                            if (!snapshot.hasData) {
-                                              return Center(child: Padding(
-                                                padding: EdgeInsets.all(8),
-                                                child: CircularProgressIndicator(),
-                                              ));
-                                            }
-                                            final tickets = snapshot.data!.docs;
-                                            if (tickets.isEmpty) {
-                                              return Padding(
-                                                padding: const EdgeInsets.all(8.0),
-                                                child: Text("No previous tickets found."),
-                                              );
-                                            }
-                                            return ListView.builder(
-                                              shrinkWrap: true,
-                                              physics: NeverScrollableScrollPhysics(),
-                                              itemCount: tickets.length,
-                                              itemBuilder: (context, index) {
-                                                final ticket = tickets[index];
-                                                final createdAt = ticket['createdAt'] != null && ticket['createdAt'] is Timestamp
-                                                    ? (ticket['createdAt'] as Timestamp).toDate()
-                                                    : null;
-                                                return Card(
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                                  margin: EdgeInsets.only(bottom: 12),
-                                                  child: ListTile(
-                                                    leading: Icon(Icons.support_agent, color: Colors.teal),
-                                                    title: Text(ticket['subject'] ?? 'No Subject'),
-                                                    subtitle: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        SizedBox(height: 4),
-                                                        Text(ticket['message'] ?? ''),
-                                                        SizedBox(height: 4),
-                                                        Text(
-                                                          "Status: "+(ticket['status'] ?? 'open'),
-                                                          style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                                                        ),
-                                                        if (createdAt != null)
-                                                          Text(
-                                                            "Created: "+createdAt.toString(),
-                                                            style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                                                          ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              },
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    ),
+                                  
+// inside your widget:
+Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Divider(),
+      Text(
+        'Previous Tickets',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Colors.teal[800],
+          fontSize: 16,
+        ),
+      ),
+      const SizedBox(height: 8),
+      StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('support_tickets')
+            .where('userId', isEqualTo: user?.uid ?? '')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return Center(
+              child: Padding(
+                padding: EdgeInsets.all(8),
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+          final tickets = snapshot.data!.docs;
+          if (tickets.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text("No previous tickets found."),
+            );
+          }
+
+          final dateFormat = DateFormat("MMMM d, yyyy 'at' hh:mm a");
+
+          return ListView.builder(
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            itemCount: tickets.length,
+            itemBuilder: (context, index) {
+              final ticket = tickets[index];
+              final createdAt = ticket['createdAt'] != null &&
+                      ticket['createdAt'] is Timestamp
+                  ? (ticket['createdAt'] as Timestamp).toDate()
+                  : null;
+              final respondedAt = ticket['respondedAt'] != null &&
+                      ticket['respondedAt'] is Timestamp
+                  ? (ticket['respondedAt'] as Timestamp).toDate()
+                  : null;
+
+              return Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                margin: EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  leading: Icon(Icons.support_agent, color: Colors.teal),
+                  title: Text(ticket['subject'] ?? 'No Subject'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: 4),
+                      Text(ticket['message'] ?? ''),
+                      SizedBox(height: 4),
+                      Text(
+                        "Status: ${ticket['status'] ?? 'open'}",
+                        style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                      ),
+                      if (createdAt != null)
+                        Text(
+                          "Created: ${dateFormat.format(createdAt)}",
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 11,
+                          ),
+                        ),
+                      if (ticket['adminResponse'] != null &&
+                          ticket['adminResponse'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.teal[50],
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Admin Response:",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.teal[700],
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                ticket['adminResponse'],
+                                style: TextStyle(
+                                  color: Colors.black87,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              if (respondedAt != null)
+                                Text(
+                                  "Responded: ${dateFormat.format(respondedAt)}",
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 11,
                                   ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    ],
+  ),
+),
+
                                 ],
                               ),
                             ),

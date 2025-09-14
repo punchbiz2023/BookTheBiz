@@ -32,6 +32,8 @@ class _AddTurfPageState extends State<AddTurfPage> {
   bool _isosp = false;
   LatLng? _selectedLocation;
   GoogleMapController? _mapController;
+  final TextEditingController _customGroundController = TextEditingController();
+  final List<String> _customAvailableGrounds = [];
 
   final List<String> _facilities = [
     'Parking',
@@ -44,8 +46,39 @@ class _AddTurfPageState extends State<AddTurfPage> {
     'Wi-Fi'
   ];
   final List<String> _selectedFacilities = [];
-  final List<String> _selectedMorningSlots = [];
-  final List<String> _selectedEveningSlots = [];
+  // Slot definitions as in turfstats.dart
+  static const List<String> earlyMorningSlots = [
+    '12:00 AM - 1:00 AM',
+    '1:00 AM - 2:00 AM',
+    '2:00 AM - 3:00 AM',
+    '3:00 AM - 4:00 AM',
+    '4:00 AM - 5:00 AM',
+  ];
+  static const List<String> morningSlots = [
+    '5:00 AM - 6:00 AM',
+    '6:00 AM - 7:00 AM',
+    '7:00 AM - 8:00 AM',
+    '8:00 AM - 9:00 AM',
+    '9:00 AM - 10:00 AM',
+    '10:00 AM - 11:00 AM',
+  ];
+  static const List<String> afternoonSlots = [
+    '12:00 PM - 1:00 PM',
+    '1:00 PM - 2:00 PM',
+    '2:00 PM - 3:00 PM',
+    '3:00 PM - 4:00 PM',
+    '4:00 PM - 5:00 PM',
+  ];
+  static const List<String> eveningSlots = [
+    '5:00 PM - 6:00 PM',
+    '6:00 PM - 7:00 PM',
+    '7:00 PM - 8:00 PM',
+    '8:00 PM - 9:00 PM',
+    '9:00 PM - 10:00 PM',
+    '10:00 PM - 11:00 PM',
+  ];
+  final List<String> _selectedSlots = [];
+  final List<String> _selectedAvailableGrounds = []; // Add this missing variable
   final List<String> _availableGrounds = [
     'Volleyball Court',
     'Swimming Pool',
@@ -75,9 +108,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     '9:00 PM - 10:00 PM',
   ];
 
-  final List<String> _customSlots = [];
-
-  final List<String> _selectedAvailableGrounds = [];
   String _selectedSlotType = 'Morning Slots';
 
   // 1. Add these fields to your _AddTurfPageState:
@@ -316,14 +346,9 @@ class _AddTurfPageState extends State<AddTurfPage> {
         'hasLocation': true,
         'latitude': _currentPosition?.latitude,
         'longitude': _currentPosition?.longitude,
+        'turf_status': 'Not Verified', // <-- Changed from 'status' to 'turf_status'
+        'selectedSlots': _selectedSlots, // <-- Add selected slots
       };
-      List<String> selectedSlots = [];
-      selectedSlots.addAll(_selectedMorningSlots);
-      selectedSlots.addAll(_selectedEveningSlots);
-      selectedSlots.addAll(_customSlots);
-      if (selectedSlots.isNotEmpty) {
-        turfData['selectedSlots'] = selectedSlots;
-      }
 
       await turfRef.set(turfData);
 
@@ -498,79 +523,87 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.teal.shade50, // Light teal background for contrast
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            backgroundColor: Colors.teal.shade700,
-            title: Text(
-              'Add Turf',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+    return WillPopScope(
+      onWillPop: () async => await _showExitWarning(),
+      child: Scaffold(
+        backgroundColor: Colors.teal.shade50, // Light teal background for contrast
+        body: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              backgroundColor: Colors.teal.shade700,
+              leading: IconButton(
+                icon: Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () async {
+                  bool shouldLeave = await _showExitWarning();
+                  if (shouldLeave) Navigator.pop(context);
+                },
+              ),
+              title: Text(
+                'Add Turf',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              centerTitle: true,
+              floating: true,
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.parallax,
               ),
             ),
-            centerTitle: true,
-            floating: true,
-            flexibleSpace: FlexibleSpaceBar(
-              collapseMode: CollapseMode.parallax,
-            ),
-          ),
-          SliverList(
-            delegate: SliverChildListDelegate(
-              [
-                Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildImagePicker(),
-                      SizedBox(height: 16),
+            SliverList(
+              delegate: SliverChildListDelegate(
+                [
+                  Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildImagePicker(),
+                        SizedBox(height: 16),
 
-                      _buildGlassTextField(
-                        controller: _nameController,
-                        label: 'Turf Name',
-                      ),
-                      SizedBox(height: 16),
+                        _buildGlassTextField(
+                          controller: _nameController,
+                          label: 'Turf Name',
+                        ),
+                        SizedBox(height: 16),
 
-                      _buildGlassTextField(
-                        controller: _descriptionController,
-                        label: 'Description',
-                        maxLines: 3,
-                      ),
-                      SizedBox(height: 16),
+                        _buildGlassTextField(
+                          controller: _descriptionController,
+                          label: 'Description',
+                          maxLines: 3,
+                        ),
+                        SizedBox(height: 16),
 
-                      _buildLocationSection(),
-                      SizedBox(height: 16),
+                        _buildLocationSection(),
+                        SizedBox(height: 16),
 
-                      _buildTopicTitle('Available Grounds'),
-                      _buildGlassContainer(_buildAvailableGroundsChips()),
-                      SizedBox(height: 16),
+                        _buildTopicTitle('Available Grounds'),
+                        _buildGlassContainer(_buildAvailableGroundsChips()),
+                        SizedBox(height: 16),
 
-                      _buildTopicTitle('Facilities'),
-                      _buildGlassContainer(_buildFacilitiesChips()),
-                      SizedBox(height: 16),
+                        _buildTopicTitle('Facilities'),
+                        _buildGlassContainer(_buildFacilitiesChips()),
+                        SizedBox(height: 16),
 
-                      _buildDropdown(),
-                      SizedBox(height: 16),
+                        _buildTopicTitle('Available Slots'),
+                        _buildGlassContainer(_buildGroupedSlotChips()),
+                        SizedBox(height: 16),
 
-                      _buildGlassContainer(_buildSlotChips()),
-                      SizedBox(height: 16),
+                        _buildIsospCheckbox(),
+                        SizedBox(height: 24),
 
-                      _buildIsospCheckbox(),
-                      SizedBox(height: 24),
-
-                      _isLoading
-                          ? Center(child: CircularProgressIndicator())
-                          : _buildSubmitButton(),
-                    ],
+                        _isLoading
+                            ? Center(child: CircularProgressIndicator())
+                            : _buildSubmitButton(),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -668,7 +701,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
             border: OutlineInputBorder(),
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
-          items: ['Morning Slots', 'Evening Slots', 'Custom Slots']
+          items: ['Morning Slots', 'Evening Slots']
               .map((type) => DropdownMenuItem(
             value: type,
             child: Text(type),
@@ -694,11 +727,9 @@ class _AddTurfPageState extends State<AddTurfPage> {
         ),
         SizedBox(height: 8),
         if (_selectedSlotType == 'Morning Slots')
-          _buildChips(_morningSlots, _selectedMorningSlots)
-        else if (_selectedSlotType == 'Evening Slots')
-          _buildChips(_eveningSlots, _selectedEveningSlots)
+          _buildChips(_morningSlots, _selectedSlots)
         else
-          _buildCustomSlotSection(),
+          _buildChips(_eveningSlots, _selectedSlots),
       ],
     );
   }
@@ -726,118 +757,49 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
-  Widget _buildCustomSlotSection() {
+  Widget _buildGroupedSlotChips() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_customSlots.isNotEmpty)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                runSpacing: 4.0,
-                children: _customSlots.map((slot) {
-                  return Chip(
-                    label: Text(slot),
-                    deleteIcon: Icon(Icons.close, size: 18),
-                    onDeleted: () {
-                      setState(() {
-                        _customSlots.remove(slot);
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        SizedBox(height: 12),
-        ElevatedButton.icon(
-          onPressed: _showCustomSlotDialog,
-          icon: Icon(Icons.add),
-          label: Text("Add Custom Slot"),
-          style: ElevatedButton.styleFrom(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          ),
-        ),
+        _buildSlotChipsGroup('Early Morning', earlyMorningSlots),
+        SizedBox(height: 8),
+        _buildSlotChipsGroup('Morning', morningSlots),
+        SizedBox(height: 8),
+        _buildSlotChipsGroup('Afternoon', afternoonSlots),
+        SizedBox(height: 8),
+        _buildSlotChipsGroup('Evening', eveningSlots),
       ],
     );
   }
 
-  void _showCustomSlotDialog() async {
-    TimeOfDay? startTime;
-    TimeOfDay? endTime;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("Select Custom Slot"),
-          content: StatefulBuilder(
-            builder: (context, setDialogState) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    leading: Icon(Icons.access_time),
-                    title: Text("Start Time"),
-                    trailing: Text(
-                      startTime != null ? startTime!.format(context) : "Select",
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    onTap: () async {
-                      TimeOfDay? picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (picked != null) {
-                        setDialogState(() {
-                          startTime = picked;
-                        });
-                      }
-                    },
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.access_time),
-                    title: Text("End Time"),
-                    trailing: Text(
-                      endTime != null ? endTime!.format(context) : "Select",
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    onTap: () async {
-                      TimeOfDay? picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (picked != null) {
-                        setDialogState(() {
-                          endTime = picked;
-                        });
-                      }
-                    },
-                  ),
-                ],
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (startTime != null && endTime != null) {
-                  String formattedSlot =
-                      "${startTime!.format(context)} - ${endTime!.format(context)}";
-                  setState(() {
-                    _customSlots.add(formattedSlot);
-                  });
-                }
-                Navigator.pop(context);
+  Widget _buildSlotChipsGroup(String label, List<String> slots) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+        SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: slots.map((slot) {
+            final isSelected = _selectedSlots.contains(slot);
+            return FilterChip(
+              label: Text(slot, style: TextStyle(color: isSelected ? Colors.white : Colors.teal)),
+              selected: isSelected,
+              selectedColor: Colors.teal,
+              onSelected: (selected) {
+                setState(() {
+                  if (selected) {
+                    _selectedSlots.add(slot);
+                  } else {
+                    _selectedSlots.remove(slot);
+                  }
+                });
               },
-              child: Text("Add"),
-            ),
-          ],
-        );
-      },
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -1114,37 +1076,137 @@ class _AddTurfPageState extends State<AddTurfPage> {
 
 // 🟢 Enhanced Available Grounds Chips with Gradient & Hover Effect
   Widget _buildAvailableGroundsChips() {
-    return Wrap(
-      spacing: 8.0,
-      children: _availableGrounds.map((ground) {
-        return ChoiceChip(
-          label: Text(
-            ground,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: _selectedAvailableGrounds.contains(ground) ? Colors.white : Colors.teal.shade700,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8.0,
+          children: [
+            ..._availableGrounds.map((ground) {
+              return ChoiceChip(
+                label: Text(
+                  ground,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: _selectedAvailableGrounds.contains(ground) ? Colors.white : Colors.teal.shade700,
+                  ),
+                ),
+                selected: _selectedAvailableGrounds.contains(ground),
+                selectedColor: Colors.teal.shade500,
+                backgroundColor: Colors.white.withOpacity(0.3),
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.teal.shade300),
+                ),
+                onSelected: (bool selected) async {
+                  if (selected) {
+                    await _fetchPriceForGround(ground);
+                  } else {
+                    setState(() {
+                      _selectedAvailableGrounds.remove(ground);
+                      _selectedGroundPrices.remove(ground);
+                    });
+                  }
+                },
+              );
+            }).toList(),
+            ..._customAvailableGrounds.map((ground) {
+              return ChoiceChip(
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      ground,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: _selectedAvailableGrounds.contains(ground) ? Colors.white : Colors.teal.shade700,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _customAvailableGrounds.remove(ground);
+                          _selectedAvailableGrounds.remove(ground);
+                          _selectedGroundPrices.remove(ground);
+                        });
+                      },
+                      child: Icon(Icons.close, size: 16, color: Colors.red),
+                    ),
+                  ],
+                ),
+                selected: _selectedAvailableGrounds.contains(ground),
+                selectedColor: Colors.teal.shade500,
+                backgroundColor: Colors.white.withOpacity(0.3),
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.teal.shade300),
+                ),
+                onSelected: (bool selected) async {
+                  if (selected) {
+                    await _fetchPriceForGround(ground);
+                  } else {
+                    setState(() {
+                      _selectedAvailableGrounds.remove(ground);
+                      _selectedGroundPrices.remove(ground);
+                    });
+                  }
+                },
+              );
+            }).toList(),
+          ],
+        ),
+        SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _customGroundController,
+                decoration: InputDecoration(
+                  hintText: 'Add custom ground',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
             ),
-          ),
-          selected: _selectedAvailableGrounds.contains(ground),
-          selectedColor: Colors.teal.shade500,
-          backgroundColor: Colors.white.withOpacity(0.3),
-          elevation: 3,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.teal.shade300),
-          ),
-          onSelected: (bool selected) async {
-            if (selected) {
-              await _fetchPriceForGround(ground);
-            } else {
-              setState(() {
-                _selectedAvailableGrounds.remove(ground);
-                _selectedGroundPrices.remove(ground);
-              });
-            }
-          },
-        );
-      }).toList(),
+            SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () async {
+                final customGround = _customGroundController.text.trim();
+                if (customGround.isNotEmpty &&
+                    !_availableGrounds.contains(customGround) &&
+                    !_customAvailableGrounds.contains(customGround)) {
+                  double? price = await showDialog<double>(
+                    context: context,
+                    builder: (context) => _PriceInputDialog(
+                      groundName: customGround,
+                      previousPrice: _selectedGroundPrices.isNotEmpty
+                          ? _selectedGroundPrices.values.last
+                          : null,
+                    ),
+                  );
+                  if (price != null) {
+                    setState(() {
+                      _customAvailableGrounds.add(customGround);
+                      _selectedAvailableGrounds.add(customGround);
+                      _selectedGroundPrices[customGround] = price;
+                    });
+                    _customGroundController.clear();
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              ),
+              child: Icon(Icons.add, color: Colors.white),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1387,6 +1449,39 @@ class _AddTurfPageState extends State<AddTurfPage> {
         ],
       ),
     );
+  }
+
+  Future<bool> _showExitWarning() async {
+    bool? result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Discard changes?'),
+            ],
+          ),
+          content: Text(
+            'You have unsaved changes. If you go back now, your input will be lost.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('Stay', style: TextStyle(color: Colors.teal)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: Text('Leave',style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
   }
 }
 

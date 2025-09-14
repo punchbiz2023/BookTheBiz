@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // For date formatting
 import 'package:carousel_slider/carousel_slider.dart'; // Import for carousel
 import 'bookingpage.dart'; // Ensure this import is correct
+import 'package:url_launcher/url_launcher.dart';
+import 'package:geocoding/geocoding.dart';
 
 class DetailsPage extends StatefulWidget {
   final String documentId;
@@ -613,6 +615,127 @@ class _DetailsPageState extends State<DetailsPage> {
     );
   }
 
+  // Address section widget
+  Widget _buildAddressSection(Map<String, dynamic> turfData) {
+    final address = turfData['location'] ?? '';
+    final latitude = turfData['latitude'];
+    final longitude = turfData['longitude'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(height: 10),
+        Row(
+          children: [
+            Icon(Icons.place, color: Colors.teal, size: 26),
+            SizedBox(width: 8),
+            Text('Address', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal)),
+          ],
+        ),
+        SizedBox(height: 8),
+        Card(
+          color: Colors.teal.shade50,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.location_on, color: Colors.teal, size: 22),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: latitude != null && longitude != null
+                          ? FutureBuilder<String?>(
+                              future: _getAddressFromLatLng(latitude, longitude),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return Row(children: [
+                                    SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                    SizedBox(width: 8),
+                                    Text('Fetching address...', style: TextStyle(fontSize: 15, color: Colors.grey)),
+                                  ]);
+                                }
+                                if (snapshot.hasError) {
+                                  return Text('Unable to fetch address', style: TextStyle(fontSize: 15, color: Colors.red));
+                                }
+                                final addr = snapshot.data;
+                                return Text(
+                                  (addr != null && addr.isNotEmpty)
+                                      ? addr
+                                      : (address.isNotEmpty ? address : 'No address available'),
+                                  style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.w500),
+                                );
+                              },
+                            )
+                          : Text(
+                              address.isNotEmpty ? address : 'No address available',
+                              style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.w500),
+                            ),
+                    ),
+                  ],
+                ),
+                if (latitude != null && longitude != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.map, color: Colors.white),
+                        label: Text('View on Google Maps', style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold, fontSize: 15)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () async {
+                          final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude');
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          } else {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Could not open Google Maps')),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 18),
+      ],
+    );
+  }
+
+  // Helper to get address from lat/lng using geocoding
+  Future<String?> _getAddressFromLatLng(double latitude, double longitude) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(latitude, longitude);
+      if (placemarks.isNotEmpty) {
+        final p = placemarks.first;
+        String composed = '';
+        if (p.name != null && p.name!.isNotEmpty) composed += p.name! + ', ';
+        if (p.street != null && p.street!.isNotEmpty) composed += p.street! + ', ';
+        if (p.subLocality != null && p.subLocality!.isNotEmpty) composed += p.subLocality! + ', ';
+        if (p.locality != null && p.locality!.isNotEmpty) composed += p.locality! + ', ';
+        if (p.administrativeArea != null && p.administrativeArea!.isNotEmpty) composed += p.administrativeArea! + ', ';
+        if (p.postalCode != null && p.postalCode!.isNotEmpty) composed += p.postalCode! + ', ';
+        if (p.country != null && p.country!.isNotEmpty) composed += p.country!;
+        return composed.trim().replaceAll(RegExp(r', *$'), '');
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -700,6 +823,9 @@ class _DetailsPageState extends State<DetailsPage> {
                           // Show carousel if turfImages exist
                           if (turfImages.isNotEmpty)
                             _buildTurfImagesCarousel(turfImages, imageUrl),
+                          // Address Section
+                          if ((snapshot.data!['location'] ?? '').toString().isNotEmpty)
+                            _buildAddressSection(snapshot.data!),
                           // Activities and Facilities as icon cards
                           _buildIconCardList('Available Activities', availableGrounds, Colors.blue),
                           _buildIconCardList('Facilities', facilities, Colors.green),

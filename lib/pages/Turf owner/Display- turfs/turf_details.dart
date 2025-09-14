@@ -4,6 +4,8 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:odp/pages/Turf%20owner/Display-%20turfs/turfstats.dart';
 import '../Main Func/editturf.dart';
 import 'booking_details.dart';
+import 'package:intl/intl.dart';
+import 'dart:ui';
 
 class TurfDetails extends StatefulWidget {
   final String turfId;
@@ -32,6 +34,34 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
 
   Future<void> _updateTurfStatus(BuildContext context, String newStatus) async {
     try {
+      // First check if the turf is verified
+      final turfDoc = await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).get();
+      if (!turfDoc.exists) {
+        Fluttertoast.showToast(
+          msg: "Turf not found",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+          fontSize: 16.0,
+        );
+        return;
+      }
+
+      final turfData = turfDoc.data() as Map<String, dynamic>;
+      if (turfData['turf_status'] != 'Verified') {
+        Fluttertoast.showToast(
+          msg: "Cannot update status: Turf is not verified by admin",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.orange,
+          textColor: Colors.white,
+          fontSize: 16.0,
+        );
+        return;
+      }
+
+      // Proceed with status update if verified
       await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update({'status': newStatus});
       Fluttertoast.showToast(
         msg: "Turf status updated to $newStatus",
@@ -226,39 +256,92 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                           SizedBox(height: 16),
                         ],
 
-                        // Status Card
-                        Container(
-                          padding: EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: turfData['status'] == 'Open' ? Colors.green[100] : Colors.red[100],
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: turfData['status'] == 'Open' ? Colors.green : Colors.red, width: 2),
+                        // Status Card and Open/Close Buttons - Only show if turf is verified
+                        if (turfData['turf_status'] == 'Verified') ...[
+                          Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: turfData['status'] == 'Open' ? Colors.green[100] : Colors.red[100],
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: turfData['status'] == 'Open' ? Colors.green : Colors.red, width: 2),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Current Status: ${turfData['status'] ?? 'Opened'}',
+                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: turfData['status'] == 'Open' ? Colors.green : Colors.red),
+                                ),
+                                Icon(
+                                  turfData['status'] == 'Open' ? Icons.check_circle : Icons.cancel,
+                                  color: turfData['status'] == 'Open' ? Colors.green : Colors.red,
+                                  size: 30,
+                                ),
+                              ],
+                            ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          SizedBox(height: 16),
+
+                          // Open/Close Buttons
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              Text(
-                                'Current Status: ${turfData['status'] ?? 'Opened'}',
-                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: turfData['status'] == 'Open' ? Colors.green : Colors.red),
-                              ),
-                              Icon(
-                                turfData['status'] == 'Open' ? Icons.check_circle : Icons.cancel,
-                                color: turfData['status'] == 'Open' ? Colors.green : Colors.red,
-                                size: 30,
-                              ),
+                              _statusButton(context, 'Open', Colors.green),
+                              _statusButton(context, 'Closed', Colors.red),
                             ],
                           ),
-                        ),
-                        SizedBox(height: 16),
-
-                        // Open/Close Buttons
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _statusButton(context, 'Open', Colors.green),
-                            _statusButton(context, 'Closed', Colors.red),
-                          ],
-                        ),
+                        ] else ...[
+                          // Show verification status if not verified
+                          Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[100],
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.orange, width: 2),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Verification Status: ${turfData['turf_status'] ?? 'Not Verified'}',
+                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange[800]),
+                                ),
+                                Icon(
+                                  Icons.pending,
+                                  color: Colors.orange[800],
+                                  size: 30,
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 16),
+                          
+                          // Show message about verification
+                          Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.blue[200]!, width: 1),
+                            ),
+                            child: Row(
+                              children: [
+                                                                 Icon(Icons.info_outline, color: Colors.blue[700]!, size: 24),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Your turf is pending admin verification. Once approved, you can control its availability status.',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.blue[700],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

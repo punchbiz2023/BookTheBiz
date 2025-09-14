@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:table_calendar/table_calendar.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 class Turfstats extends StatefulWidget {
   final String turfId;
@@ -13,6 +15,7 @@ class Turfstats extends StatefulWidget {
 class _BookingCalendarState extends State<Turfstats> {
   DateTime _selectedDate = DateTime.now();
   List<String> _occupiedSlots = [];
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -20,25 +23,52 @@ class _BookingCalendarState extends State<Turfstats> {
     _fetchOccupiedSlots();
   }
 
-  void _fetchOccupiedSlots() {
+  void _fetchOccupiedSlots() async {
+    setState(() { _isLoading = true; });
     String formattedDate =
         '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
 
-    FirebaseFirestore.instance
-        .collection('turfs')
-        .doc(widget.turfId)
-        .collection('bookings')
-        .where('bookingDate', isEqualTo: formattedDate)
-        .get()
-        .then((snapshot) {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('turfs')
+          .doc(widget.turfId)
+          .collection('bookings')
+          .where('bookingDate', isEqualTo: formattedDate)
+          .get();
       setState(() {
         _occupiedSlots = snapshot.docs
-            .map((doc) => (doc.data())['bookingSlots'])
-            .expand((slot) => slot)
-            .toList()
-            .cast<String>();
+            .map((doc) => (doc.data())['bookingSlots'] as List<dynamic>?)
+            .where((slots) => slots != null)
+            .expand((slots) => slots!)
+            .map((slot) => slot.toString())
+            .toList();
+        _isLoading = false;
       });
-    });
+    } catch (e) {
+      setState(() { _isLoading = false; });
+    }
+  }
+
+  Widget _buildLegend() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(children: [
+            Icon(Icons.lock, color: Colors.grey[600], size: 18),
+            SizedBox(width: 4),
+            Text('Booked', style: TextStyle(color: Colors.grey[600])),
+          ]),
+          SizedBox(width: 16),
+          Row(children: [
+            Container(width: 18, height: 18, decoration: BoxDecoration(border: Border.all(color: Colors.green, width: 2), borderRadius: BorderRadius.circular(9))),
+            SizedBox(width: 4),
+            Text('Available', style: TextStyle(color: Colors.green)),
+          ]),
+        ],
+      ),
+    );
   }
 
   Column _buildSlotSelectionColumn(List<String> bookedSlots) {
@@ -46,6 +76,7 @@ class _BookingCalendarState extends State<Turfstats> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(height: 20),
+        _buildLegend(),
         _buildSlotChips('Early Morning', '12 AM - 5 AM', [
           '12:00 AM - 1:00 AM',
           '1:00 AM - 2:00 AM',
@@ -109,8 +140,15 @@ class _BookingCalendarState extends State<Turfstats> {
             children: slots.map((slot) {
               bool isBooked = bookedSlots.contains(slot);
               return Chip(
-                label: Text(slot, style: TextStyle(color: isBooked ? Colors.black : Colors.black)),
-                backgroundColor: isBooked ? Colors.greenAccent : Colors.white,
+                avatar: isBooked ? Icon(Icons.lock, size: 18, color: Colors.white) : null,
+                label: Text(
+                  slot,
+                  style: TextStyle(
+                    color: isBooked ? Colors.white : Colors.black,
+                  ),
+                ),
+                backgroundColor: isBooked ? Colors.grey[500] : Colors.white,
+                shape: StadiumBorder(side: isBooked ? BorderSide.none : BorderSide(color: Colors.green, width: 1.5)),
               );
             }).toList(),
           ),
@@ -150,21 +188,45 @@ class _BookingCalendarState extends State<Turfstats> {
                     ),
                   ],
                 ),
-                child: CalendarDatePicker(
-                  initialDate: _selectedDate,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                  onDateChanged: (date) {
+                child: TableCalendar(
+                  firstDay: DateTime(2000),
+                  lastDay: DateTime(2100),
+                  focusedDay: _selectedDate,
+                  selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
+                  onDaySelected: (selectedDay, focusedDay) {
                     setState(() {
-                      _selectedDate = date;
-                      _fetchOccupiedSlots();
+                      _selectedDate = selectedDay;
                     });
+                    _fetchOccupiedSlots();
                   },
+                  calendarStyle: CalendarStyle(
+                    selectedDecoration: BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                    todayDecoration: BoxDecoration(
+                      color: Colors.lightBlue,
+                      shape: BoxShape.circle,
+                    ),
+                    selectedTextStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    todayTextStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  headerStyle: HeaderStyle(
+                    formatButtonVisible: false,
+                    titleCentered: true,
+                  ),
                 ),
               ),
             ),
-            // Call the new slot selection method
-            _buildSlotSelectionColumn(_occupiedSlots),
+            _isLoading
+                ? Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: SpinKitFadingCircle(
+                      color: Colors.green,
+                      size: 40.0,
+                    ),
+                  )
+                : _buildSlotSelectionColumn(_occupiedSlots),
           ],
         ),
       ),

@@ -5,7 +5,7 @@ import 'home_page.dart';
 import 'package:odp/pages/Turf owner/Main Func/owner_home.dart';
 import 'dart:async';
 import 'package:sms_autofill/sms_autofill.dart';
-
+import 'package:odp/pages/sign_up_page.dart';
 class PhoneLoginPage extends StatefulWidget {
   const PhoneLoginPage({super.key});
 
@@ -183,19 +183,25 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> with SingleTickerProvid
                 ),
               ),
               ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  // Navigate to sign up page
-                  Navigator.pushNamed(context, '/signup'); // Adjust route as needed
-                },
-                icon: Icon(Icons.person_add, color: Colors.white),
-                label: Text('Sign Up', style: TextStyle(fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange.shade700,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
+  onPressed: () {
+    Navigator.pop(context);
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SignupPage()),
+    );
+  },
+  icon: Icon(Icons.person_add, color: Colors.white),
+  label: Text(
+    'Sign Up',
+    style: TextStyle(fontWeight: FontWeight.bold),
+  ),
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.orange.shade700,
+    foregroundColor: Colors.white,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  ),
+),
+
             ],
           ),
         );

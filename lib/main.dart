@@ -9,6 +9,7 @@ import 'package:odp/pages/admincontroller.dart';
 import 'package:odp/pages/home_page.dart';
 import 'package:odp/pages/login.dart';
 import 'package:odp/pages/view_turfs_guest.dart';
+import 'package:odp/services/fcm_service.dart';
 // Make sure to import or define SignupPage() in your project.
 import 'firebase_options.dart';
 import 'dart:ui';
@@ -83,6 +84,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         options: DefaultFirebaseOptions.currentPlatform,
       );
       print('Firebase initialized successfully.');
+
+      // Initialize FCM service
+      await FCMService.initialize();
+      print('FCM service initialized successfully.');
 
       if (mounted) {
         setState(() {

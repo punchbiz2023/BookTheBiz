@@ -40,7 +40,6 @@ class _EditTurfPageState extends State<EditTurfPage> {
     'Wi-Fi',
     'Seating',
   ];
-  String _selectedSlotType = 'Morning Slots';
   List<String> availableGrounds = [
     'Volleyball Court',
     'Swimming Pool',
@@ -51,33 +50,42 @@ class _EditTurfPageState extends State<EditTurfPage> {
     'Football Field',
     'Basketball Court',
   ];
-  final List<String> _selectedMorningSlots = [];
-  final List<String> _selectedEveningSlots = [];
-  final List<String> _morningSlots = [
+  Set<String> selectedFacilities = {};
+  Set<String> selectedGrounds = {};
+  final TextEditingController _customGroundController = TextEditingController();
+  final List<String> _customAvailableGrounds = [];
+  // Slot definitions as in turfadd.dart
+  static const List<String> earlyMorningSlots = [
+    '12:00 AM - 1:00 AM',
+    '1:00 AM - 2:00 AM',
+    '2:00 AM - 3:00 AM',
+    '3:00 AM - 4:00 AM',
+    '4:00 AM - 5:00 AM',
+  ];
+  static const List<String> morningSlots = [
+    '5:00 AM - 6:00 AM',
     '6:00 AM - 7:00 AM',
     '7:00 AM - 8:00 AM',
     '8:00 AM - 9:00 AM',
     '9:00 AM - 10:00 AM',
     '10:00 AM - 11:00 AM',
-    '11:00 AM - 12:00 PM',
   ];
-
-  final List<String> _eveningSlots = [
+  static const List<String> afternoonSlots = [
+    '12:00 PM - 1:00 PM',
+    '1:00 PM - 2:00 PM',
+    '2:00 PM - 3:00 PM',
+    '3:00 PM - 4:00 PM',
     '4:00 PM - 5:00 PM',
+  ];
+  static const List<String> eveningSlots = [
     '5:00 PM - 6:00 PM',
     '6:00 PM - 7:00 PM',
     '7:00 PM - 8:00 PM',
     '8:00 PM - 9:00 PM',
     '9:00 PM - 10:00 PM',
-    
+    '10:00 PM - 11:00 PM',
   ];
-
-  final List<String> _customSlots = [];
-  Set<String> selectedFacilities = {};
-  Set<String> selectedGrounds = {};
-  Set<String> selectedCustomSlots = {};
-  Set<String> selectedMorningSlots = {};
-  Set<String> selectedEveningSlots = {};
+  Set<String> selectedSlots = {};
   List<dynamic> _allImages = [];
 
   @override
@@ -118,24 +126,13 @@ class _EditTurfPageState extends State<EditTurfPage> {
         _isosp = turfData['isosp'] ?? false;
         selectedFacilities = turfData['facilities'] != null ? Set<String>.from(turfData['facilities']) : {};
         selectedGrounds = turfData['availableGrounds'] != null ? Set<String>.from(turfData['availableGrounds']) : {};
+        // Custom grounds are not persisted separately; they are part of availableGrounds selection
 
         // Fetch selected slots if they exist
         List<String>? fetchedSlots = turfData['selectedSlots'] != null
             ? List<String>.from(turfData['selectedSlots'])
             : null;
-
-        // Assign fetched slots or initialize all slots if not found
-        selectedMorningSlots = fetchedSlots != null
-            ? Set<String>.from(fetchedSlots.where((slot) => _morningSlots.contains(slot)))
-            : Set<String>.from(_morningSlots);
-
-        selectedEveningSlots = fetchedSlots != null
-            ? Set<String>.from(fetchedSlots.where((slot) => _eveningSlots.contains(slot)))
-            : Set<String>.from(_eveningSlots);
-
-        selectedCustomSlots = fetchedSlots != null
-            ? Set<String>.from(fetchedSlots.where((slot) => !_morningSlots.contains(slot) && !_eveningSlots.contains(slot)))
-            : {};
+        selectedSlots = fetchedSlots != null ? Set<String>.from(fetchedSlots) : {};
 
         // Build _allImages list
         _allImages = [];
@@ -222,11 +219,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
       } else {
         priceData = _price;
       }
-      List<String> allSelectedSlots = [
-        ...selectedMorningSlots,
-        ...selectedEveningSlots,
-        ...selectedCustomSlots,
-      ];
+      List<String> allSelectedSlots = selectedSlots.toList();
       Map<String, dynamic> updateData = {
         'name': _nameController.text,
         'description': _descriptionController.text,
@@ -236,7 +229,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
         'isosp': _isosp,
         if (newImageUrl != null) 'imageUrl': newImageUrl,
         if (_hasMultipleImages) 'turfimages': newTurfImages,
-        if (allSelectedSlots.isNotEmpty) 'selectedSlots': allSelectedSlots,
+        'selectedSlots': allSelectedSlots,
       };
       await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update(updateData);
 
@@ -928,7 +921,9 @@ class _EditTurfPageState extends State<EditTurfPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return WillPopScope(
+      onWillPop: () async => await _showExitWarning(),
+      child: Scaffold(
       appBar: AppBar(
         title: Text('Edit Turf Details',style: TextStyle(color:Colors.white)),
         backgroundColor: Colors.teal,
@@ -938,6 +933,13 @@ class _EditTurfPageState extends State<EditTurfPage> {
             onPressed: _saveTurfDetails,
           ),
         ],
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () async {
+            bool shouldLeave = await _showExitWarning();
+            if (shouldLeave) Navigator.pop(context);
+          },
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -987,9 +989,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
               SizedBox(height: 16),
               _buildGroundsSelection(),
               SizedBox(height: 16),
-              _buildDropdown(),
-              SizedBox(height: 16),
-              _buildSlotChips(),
+              _buildGroupedSlotChips(),
               SizedBox(height: 16),
               SizedBox(height: 16),
               _buildIsospSwitch(),
@@ -1060,195 +1060,55 @@ class _EditTurfPageState extends State<EditTurfPage> {
           ),
         ),
       ),
+      ),
     );
   }
 
-  Widget _buildDropdown() {
+  Widget _buildGroupedSlotChips() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Select Slot Type",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal.shade900),
-        ),
+        Text('Available Slots', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal)),
         SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _selectedSlotType,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.white.withOpacity(0.8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          ),
-          items: ['Morning Slots', 'Evening Slots', 'Custom Slots']
-              .map((type) => DropdownMenuItem(
-            value: type,
-            child: Text(type),
-          ))
-              .toList(),
-          onChanged: (value) {
-            setState(() {
-              _selectedSlotType = value!;
-            });
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSlotChips() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          _selectedSlotType,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal.shade900),
-        ),
+        _buildSlotChipsGroup('Early Morning', earlyMorningSlots),
         SizedBox(height: 8),
-        if (_selectedSlotType == 'Morning Slots')
-          _buildChips(_morningSlots, selectedMorningSlots)
-        else if (_selectedSlotType == 'Evening Slots')
-          _buildChips(_eveningSlots, selectedEveningSlots)
-        else
-          _buildCustomSlotSection(),
+        _buildSlotChipsGroup('Morning', morningSlots),
+        SizedBox(height: 8),
+        _buildSlotChipsGroup('Afternoon', afternoonSlots),
+        SizedBox(height: 8),
+        _buildSlotChipsGroup('Evening', eveningSlots),
       ],
     );
   }
 
-  Widget _buildChips(List<String> slots, Set<String> selectedSlots) {
-    return Wrap(
-      spacing: 8.0,
-      runSpacing: 6.0,
-      children: slots.map((slot) {
-        return ChoiceChip(
-          label: Text(slot, style: TextStyle(fontWeight: FontWeight.w600)),
-          selected: selectedSlots.contains(slot),
-          selectedColor: Colors.teal.shade100,
-          backgroundColor: Colors.white.withOpacity(0.8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.teal.shade200)),
-          onSelected: (bool selected) {
-            setState(() {
-              if (selected) {
-                selectedSlots.add(slot);
-              } else {
-                selectedSlots.remove(slot);
-              }
-            });
-          },
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildCustomSlotSection() {
+  Widget _buildSlotChipsGroup(String label, List<String> slots) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (selectedCustomSlots.isNotEmpty)
-          Wrap(
-            spacing: 8.0,
-            runSpacing: 6.0,
-            children: selectedCustomSlots.map((slot) {
-              return Chip(
-                label: Text(slot, style: TextStyle(fontWeight: FontWeight.w600)),
-                backgroundColor: Colors.teal.shade100,
-                deleteIcon: Icon(Icons.close, size: 18, color: Colors.teal.shade900),
-                onDeleted: () {
-                  setState(() {
-                    selectedCustomSlots.remove(slot);
-                  });
-                },
-              );
-            }).toList(),
-          ),
-        SizedBox(height: 12),
-        ElevatedButton.icon(
-          onPressed: _showCustomSlotDialog,
-          icon: Icon(Icons.add, color: Colors.white),
-          label: Text("Add Custom Slot", style: TextStyle(color: Colors.white)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.teal,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showCustomSlotDialog() async {
-    TimeOfDay? startTime;
-    TimeOfDay? endTime;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: Text("Select Custom Slot", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal.shade900)),
-          content: StatefulBuilder(
-            builder: (context, setDialogState) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    leading: Icon(Icons.access_time, color: Colors.teal),
-                    title: Text("Start Time", style: TextStyle(fontWeight: FontWeight.w600)),
-                    trailing: Text(
-                      startTime != null ? startTime!.format(context) : "Select",
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal.shade900),
-                    ),
-                    onTap: () async {
-                      TimeOfDay? picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (picked != null) {
-                        setDialogState(() {
-                          startTime = picked;
-                        });
-                      }
-                    },
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.access_time, color: Colors.teal),
-                    title: Text("End Time", style: TextStyle(fontWeight: FontWeight.w600)),
-                    trailing: Text(
-                      endTime != null ? endTime!.format(context) : "Select",
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal.shade900),
-                    ),
-                    onTap: () async {
-                      TimeOfDay? picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (picked != null) {
-                        setDialogState(() {
-                          endTime = picked;
-                        });
-                      }
-                    },
-                  ),
-                ],
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (startTime != null && endTime != null) {
-                  String formattedSlot = "${startTime!.format(context)} - ${endTime!.format(context)}";
-                  setState(() {
-                    selectedCustomSlots.add(formattedSlot);
-                  });
-                }
-                Navigator.pop(context);
+        Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+        SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: slots.map((slot) {
+            final isSelected = selectedSlots.contains(slot);
+            return FilterChip(
+              label: Text(slot, style: TextStyle(color: isSelected ? Colors.white : Colors.teal)),
+              selected: isSelected,
+              selectedColor: Colors.teal,
+              onSelected: (selected) {
+                setState(() {
+                  if (selected) {
+                    selectedSlots.add(slot);
+                  } else {
+                    selectedSlots.remove(slot);
+                  }
+                });
               },
-              child: Text("Add", style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -1331,42 +1191,132 @@ class _EditTurfPageState extends State<EditTurfPage> {
         Wrap(
           spacing: 8.0,
           runSpacing: 8.0,
-          children: availableGrounds.map((ground) {
-            return ChoiceChip(
-              label: Text(
-                '$ground${_price.containsKey(ground) ? '\n(${_price[ground]})' : ''}',
-                textAlign: TextAlign.center,
-              ),
-              selected: selectedGrounds.contains(ground),
-              onSelected: (selected) async {
-                if (selected) {
-                  if (!_price.containsKey(ground)) {
-                    int? enteredPrice = await _showPriceDialog(ground);
-                    if (enteredPrice != null) {
+          children: [
+            ...availableGrounds.map((ground) {
+              return ChoiceChip(
+                label: Text(
+                  '$ground\n${_price.containsKey(ground) ? '(${_price[ground]})' : ''}',
+                  textAlign: TextAlign.center,
+                ),
+                selected: selectedGrounds.contains(ground),
+                onSelected: (selected) async {
+                  if (selected) {
+                    if (!_price.containsKey(ground)) {
+                      int? enteredPrice = await _showPriceDialog(ground);
+                      if (enteredPrice != null) {
+                        setState(() {
+                          _price[ground] = enteredPrice;
+                          selectedGrounds.add(ground);
+                        });
+                      }
+                    } else {
                       setState(() {
-                        _price[ground] = enteredPrice;
                         selectedGrounds.add(ground);
                       });
                     }
                   } else {
                     setState(() {
-                      selectedGrounds.add(ground);
+                      selectedGrounds.remove(ground);
+                      _price.remove(ground);
                     });
                   }
-                } else {
+                },
+                backgroundColor: Colors.grey[300],
+                selectedColor: Colors.teal,
+                labelStyle: TextStyle(
+                  color: selectedGrounds.contains(ground) ? Colors.white : Colors.black,
+                ),
+              );
+            }),
+            ..._customAvailableGrounds.map((ground) {
+              final isSelected = selectedGrounds.contains(ground);
+              return InputChip(
+                label: Text(
+                  '$ground\n${_price.containsKey(ground) ? '(${_price[ground]})' : ''}',
+                  textAlign: TextAlign.center,
+                ),
+                selected: isSelected,
+                onSelected: (selected) async {
+                  if (selected) {
+                    if (!_price.containsKey(ground)) {
+                      int? enteredPrice = await _showPriceDialog(ground);
+                      if (enteredPrice != null) {
+                        setState(() {
+                          _price[ground] = enteredPrice;
+                          selectedGrounds.add(ground);
+                        });
+                      }
+                    } else {
+                      setState(() {
+                        selectedGrounds.add(ground);
+                      });
+                    }
+                  } else {
+                    setState(() {
+                      selectedGrounds.remove(ground);
+                      _price.remove(ground);
+                    });
+                  }
+                },
+                onDeleted: () {
                   setState(() {
+                    _customAvailableGrounds.remove(ground);
                     selectedGrounds.remove(ground);
                     _price.remove(ground);
                   });
+                },
+                deleteIcon: Icon(Icons.close, size: 18, color: Colors.red),
+                selectedColor: Colors.teal,
+                backgroundColor: Colors.grey[300],
+                labelStyle: TextStyle(
+                  color: isSelected ? Colors.white : Colors.black,
+                ),
+              );
+            }),
+          ],
+        ),
+        SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _customGroundController,
+                decoration: InputDecoration(
+                  hintText: 'Add custom ground',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                ),
+              ),
+            ),
+            SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () async {
+                final customGround = _customGroundController.text.trim();
+                if (customGround.isNotEmpty &&
+                    !availableGrounds.contains(customGround) &&
+                    !_customAvailableGrounds.contains(customGround)) {
+                  int? enteredPrice = await _showPriceDialog(customGround);
+                  if (enteredPrice != null) {
+                    setState(() {
+                      _customAvailableGrounds.add(customGround);
+                      selectedGrounds.add(customGround);
+                      _price[customGround] = enteredPrice;
+                    });
+                    _customGroundController.clear();
+                  }
                 }
               },
-              backgroundColor: Colors.grey[300],
-              selectedColor: Colors.teal,
-              labelStyle: TextStyle(
-                color: selectedGrounds.contains(ground) ? Colors.white : Colors.black,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
-            );
-          }).toList(),
+              child: Text('Add'),
+            ),
+          ],
         ),
       ],
     );
@@ -1398,7 +1348,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    Icons.attach_money,
+                    Icons.currency_rupee,
                     color: Colors.teal,
                     size: 40,
                   ),
@@ -1570,5 +1520,38 @@ class _EditTurfPageState extends State<EditTurfPage> {
         ),
       ],
     );
+  }
+
+  Future<bool> _showExitWarning() async {
+    bool? result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Discard changes?'),
+            ],
+          ),
+          content: Text(
+            'You have unsaved changes. If you go back now, your edits will be lost.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('Stay', style: TextStyle(color: Colors.teal)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: Text('Leave', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
   }
 }

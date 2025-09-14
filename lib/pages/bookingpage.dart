@@ -353,7 +353,7 @@ class _BookingPageState extends State<BookingPage> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        child: Text('Book Now'),
+                        child: Text('Book Now',style: TextStyle(color: Colors.white),),
                       ),
                     ),
                 ],
@@ -626,11 +626,9 @@ class _BookingPageState extends State<BookingPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Turf Rate (Owner Receives): ₹${totalAmount.toStringAsFixed(2)}'),
-                              Text('Platform Charges: ₹${_platformProfit(totalAmount).toStringAsFixed(2)}'),
-                              Text('Payment Gateway Fee + GST: ₹${_razorpayFeeAmount(totalAmount).toStringAsFixed(2)}'),
+                              Text('Turf Rate:₹${totalAmount.toStringAsFixed(2)}'),
                               Divider(),
-                              Text('Total Payable: ₹${_totalToCharge(totalAmount).toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text('Total Payable + Inclusive of GST: ₹${_totalToCharge(totalAmount).toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
@@ -781,6 +779,25 @@ if (ownerAccountId == null || !ownerAccountId.toString().startsWith('acc_')) {
                       'turfBookingId': turfBookingRef.id, // Reference to turf subcollection
                     });
 
+                    // Send confirmation email
+                    try {
+                      final HttpsCallable emailFn = FirebaseFunctions.instance.httpsCallable('sendBookingConfirmationEmail');
+                      await emailFn({
+                        'to': await _fetchUserEmail(currentUser.uid),
+                        'userName': userName,
+                        'bookingId': turfBookingRef.id,
+                        'turfName': widget.documentname,
+                        'ground': selectedGround,
+                        'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                        'slots': selectedSlots,
+                        'totalHours': totalHours,
+                        'amount': payableAmount,
+                        'paymentMethod': 'Online',
+                      });
+                    } catch (e) {
+                      print('Email send failed: $e');
+                    }
+
                     print('Booking created successfully!');
                     print('Turf Booking ID: ${turfBookingRef.id}');
                     print('Amount: $payableAmount (Base: $totalAmount)');
@@ -877,7 +894,24 @@ if (ownerAccountId == null || !ownerAccountId.toString().startsWith('acc_')) {
                   .collection('bookings')
                   .add(bookingData);
 
-              await _firestore.collection('bookings').add(bookingData);
+              // Send confirmation email for On Spot too
+              try {
+                final HttpsCallable emailFn = FirebaseFunctions.instance.httpsCallable('sendBookingConfirmationEmail');
+                await emailFn({
+                  'to': await _fetchUserEmail(currentUser.uid),
+                  'userName': userName,
+                  'bookingId': '${widget.documentId}_${DateTime.now().millisecondsSinceEpoch}',
+                  'turfName': widget.documentname,
+                  'ground': selectedGround,
+                  'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                  'slots': selectedSlots,
+                  'totalHours': totalHours,
+                  'amount': totalAmount,
+                  'paymentMethod': 'On Spot',
+                });
+              } catch (e) {
+                print('Email send failed (On Spot): $e');
+              }
 
               await _showSuccessDialog(context, "Booking confirmed successfully!", true);
             } catch (e) {
@@ -1289,6 +1323,16 @@ if (ownerAccountId == null || !ownerAccountId.toString().startsWith('acc_')) {
                 );
               }).toList(),
               onChanged: (String? newValue) async {
+                if (selectedDate == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Please select the play date first'),
+                      backgroundColor: Colors.orange,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
                 await _fetchPriceForSelectedGround(newValue);
                 setState(() {
                   selectedGround = newValue;

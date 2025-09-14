@@ -174,16 +174,15 @@ class _AnimatedTicketCardState extends State<_AnimatedTicketCard> with SingleTic
   final TextEditingController _responseController = TextEditingController();
 
   Future<bool> _sendSupportResponseEmail({
-    required String email,
-    required String subject,
+    required String ticketId,
     required String message,
   }) async {
     try {
-      final url = Uri.parse('https://cloud-functions-vnxv.onrender.com/sendSupportAck');
+      final url = Uri.parse('https://us-central1-turf-booking-0.cloudfunctions.net/supportApi/sendSupportAck');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: '{"email": "$email", "subject": "$subject", "message": "$message"}',
+        body: '{"ticketId": "$ticketId", "message": "$message"}',
       );
       return response.statusCode == 200;
     } catch (e) {
@@ -286,22 +285,19 @@ class _AnimatedTicketCardState extends State<_AnimatedTicketCard> with SingleTic
                         onPressed: _sending ? null : () async {
                           setState(() => _sending = true);
                           final responseText = _responseController.text.trim();
-                          final email = data['userEmail'] ?? '';
-                          final subject = data['subject'] ?? '';
                           final message = responseText;
-                          if (email.isEmpty || subject.isEmpty || message.isEmpty) {
+                          if (message.isEmpty) {
                             setState(() => _sending = false);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Email, subject, or message missing.'),
+                                content: Text('Response message missing.'),
                                 backgroundColor: Colors.red,
                               ),
                             );
                             return;
                           }
                           final emailSent = await _sendSupportResponseEmail(
-                            email: email,
-                            subject: subject,
+                            ticketId: widget.ticketId,
                             message: message,
                           );
                           if (emailSent) {

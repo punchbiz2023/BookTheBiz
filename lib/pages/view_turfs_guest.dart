@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:odp/pages/login.dart'; // Add this import if not already present
-
+import 'package:odp/pages/sign_up_page.dart';
 // --- Turf Details Page ---
 class TurfDetailsGuestPage extends StatelessWidget {
   final Map<String, dynamic> turfData;
@@ -183,13 +183,11 @@ class TurfDetailsGuestPage extends StatelessWidget {
                       Center(
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Please login or register to book this turf.'),
-                                backgroundColor: Colors.teal.shade800,
-                              ),
-                            );
-                          },
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SignupPage()),
+    );
+  },
                           icon: Icon(Icons.lock_outline),
                           label: Text('Login/Register to Book'),
                           style: ElevatedButton.styleFrom(
@@ -238,7 +236,7 @@ class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
 
   Future<void> _loadAvailableLocations() async {
     try {
-      final turfs = await FirebaseFirestore.instance.collection('turfs').get();
+      final turfs = await FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').get();
       final Set<String> localities = {};
       final Map<String, String> docIdToLocality = {};
 
@@ -438,7 +436,7 @@ class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
             ),
             // Sports Type Filter
             StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('turfs').snapshots(),
+              stream: FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return SizedBox.shrink();
                 final turfs = snapshot.data!.docs;
@@ -489,7 +487,7 @@ class _ViewTurfsGuestPageState extends State<ViewTurfsGuestPage> {
             SizedBox(height: 10),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('turfs').snapshots(),
+                stream: FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return Center(child: CircularProgressIndicator());

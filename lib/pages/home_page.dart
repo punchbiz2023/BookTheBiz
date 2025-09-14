@@ -326,7 +326,7 @@ class _HomePage1State extends State<HomePage1>
       _isLoadingTurfs = true;
     });
     try {
-      final allTurfsSnapshot = await FirebaseFirestore.instance.collection('turfs').get();
+      final allTurfsSnapshot = await FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').get();
       _allTurfs = allTurfsSnapshot.docs.map((doc) => {
         'id': doc.id,
         'name': doc['name'] ?? '',
@@ -401,7 +401,7 @@ class _HomePage1State extends State<HomePage1>
 
   Future<void> _loadAvailableLocations() async {
     try {
-      final turfs = await FirebaseFirestore.instance.collection('turfs').get();
+      final turfs = await FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').get();
       final Set<String> localities = {};
       final Map<String, String> localityToLatLng = {};
       final Map<String, String> docIdToLocality = {};
@@ -662,7 +662,46 @@ class _HomePage1State extends State<HomePage1>
     return WillPopScope(
       onWillPop: () async {
         if (_selectedIndex == 0) {
-          SystemNavigator.pop();
+          final shouldExit = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Icon(Icons.exit_to_app, color: Colors.red, size: 28),
+                  SizedBox(width: 10),
+                  Text('Exit App?'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.sentiment_very_dissatisfied, color: Colors.orange, size: 48),
+                  SizedBox(height: 16),
+                  Text('Are you sure you want to leave this app?',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text('Stay Here', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  icon: Icon(Icons.exit_to_app, color: Colors.white),
+                  label: Text('Yes, Exit',style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold,),),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                ),
+              ],
+            ),
+          );
+          if (shouldExit == true) {
+            SystemNavigator.pop();
+            return false;
+          }
           return false;
         } else {
           setState(() {
@@ -671,136 +710,103 @@ class _HomePage1State extends State<HomePage1>
           return false;
         }
       },
-      child: FutureBuilder<DocumentSnapshot>(
-        future: widget.user != null
-            ? FirebaseFirestore.instance.collection('users').doc(widget.user!.uid).get()
-            : null,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Scaffold(
-              backgroundColor: Colors.grey[100],
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return Scaffold(
-              backgroundColor: Colors.grey[100],
-              body: Center(child: Text('User data not found. Please contact support.')),
-            );
-          }
-          // User data exists, show the main UI
-          return Scaffold(
-            backgroundColor: Colors.grey[100],
-            appBar: PreferredSize(
-              preferredSize: Size.fromHeight(64),
-              child: AppBar(
-                elevation: 0.5,
-                backgroundColor: Colors.white,
-                automaticallyImplyLeading: false,
-                titleSpacing: 0,
-                title: Row(
-                  children: [
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: Text(
-                        'Turf Booking',
-                        style: TextStyle(
-                          color: Color(0xFF17494D),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 26,
-                          letterSpacing: 0.5,
-                          fontFamily: 'Montserrat',
-                          shadows: [
-                            Shadow(
-                              color: Colors.teal.withOpacity(0.08),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
+      child: Scaffold(
+        backgroundColor: Colors.grey[100],
+        appBar: PreferredSize(
+          preferredSize: Size.fromHeight(64),
+          child: AppBar(
+            elevation: 0.5,
+            backgroundColor: Colors.white,
+            automaticallyImplyLeading: false,
+            titleSpacing: 0,
+            title: Row(
+              children: [
+                SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    'Turf Booking',
+                    style: TextStyle(
+                      color: Color(0xFF17494D),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 26,
+                      letterSpacing: 0.5,
+                      fontFamily: 'Montserrat',
+                      shadows: [
+                        Shadow(
+                          color: Colors.teal.withOpacity(0.08),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
                         ),
-                      ),
+                      ],
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ProfilePage(user: widget.user),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 16),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.teal.shade100, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 6,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                          stream: (widget.user != null)
-                              ? FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(widget.user!.uid)
-                                  .snapshots()
-                              : const Stream.empty(),
-                          builder: (context, snapshot) {
-                            String? imageUrl;
-                            if (snapshot.hasData && snapshot.data!.exists) {
-                              final data = snapshot.data!.data();
-                              final dynamic url = data?['imageUrl'] ?? data?['profileImageUrl'] ?? data?['photoUrl'];
-                              if (url is String && url.trim().isNotEmpty) {
-                                imageUrl = url;
-                              }
-                            }
-                            return CircleAvatar(
-                              backgroundColor: Colors.teal.shade50,
-                              radius: 22,
-                              backgroundImage: (imageUrl != null) ? NetworkImage(imageUrl) : null,
-                              child: (imageUrl == null)
-                                  ? Icon(Icons.person, color: Colors.teal.shade700, size: 28)
-                                  : null,
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                bottom: PreferredSize(
-                  preferredSize: Size.fromHeight(1.5),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.teal.shade50, Colors.grey.shade200],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                    ),
-                    height: 1.5,
                   ),
                 ),
-              ),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ProfilePage(user: widget.user),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 16),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.teal.shade100, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 6,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                      stream: (widget.user != null)
+                          ? FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(widget.user!.uid)
+                              .snapshots()
+                          : const Stream.empty(),
+                      builder: (context, snapshot) {
+                        String? imageUrl;
+                        if (snapshot.hasData && snapshot.data!.exists) {
+                          final data = snapshot.data!.data();
+                          final dynamic url = data?['imageUrl'] ?? data?['profileImageUrl'] ?? data?['photoUrl'];
+                          if (url is String && url.trim().isNotEmpty) {
+                            imageUrl = url;
+                          }
+                        }
+                        return CircleAvatar(
+                          backgroundColor: Colors.teal.shade50,
+                          radius: 22,
+                          backgroundImage: (imageUrl != null) ? NetworkImage(imageUrl) : null,
+                          child: (imageUrl == null)
+                              ? Icon(Icons.person, color: Colors.teal.shade700, size: 28)
+                              : null,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
-            body: SafeArea(
-              child: IndexedStack(
-                index: _selectedIndex,
-                children: [
-                  _buildDashboardTab(),
-                  _buildSearchTab(),
-                  _buildDiscoverTurfsTab(),
-                  BookingsPage(),
-                ],
-              ),
-            ),
-            bottomNavigationBar: _buildBottomNavigationBar(),
-          );
-        },
+          ),
+        ),
+        body: SafeArea(
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              _buildDashboardTab(),
+              _buildSearchTab(),
+              _buildDiscoverTurfsTab(),
+              BookingsPage(),
+            ],
+          ),
+        ),
+        bottomNavigationBar: _buildBottomNavigationBar(),
       ),
     );
   }
@@ -1261,7 +1267,7 @@ class _HomePage1State extends State<HomePage1>
                   ),
                   onPressed: () async {
                     // Generate price buckets if not already
-                    final turfsSnap = await FirebaseFirestore.instance.collection('turfs').get();
+                    final turfsSnap = await FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').get();
                     if (!_priceBucketsInitialized) {
                     setState(() {
                         _priceBuckets = _generatePriceBuckets(turfsSnap.docs);
@@ -1659,7 +1665,7 @@ class _HomePage1State extends State<HomePage1>
       );
     }
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('turfs').snapshots(),
+      stream: FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
@@ -2071,7 +2077,7 @@ class _HomePage1State extends State<HomePage1>
 
   Widget _buildPopularTurfs() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('turfs').snapshots(),
+      stream: FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
@@ -2291,7 +2297,7 @@ class _HomePage1State extends State<HomePage1>
 
   // Add this helper for Discover Turfs tab
   Future<List<DocumentSnapshot>> _getFilteredTurfs() async {
-    final turfs = await FirebaseFirestore.instance.collection('turfs').get();
+          final turfs = await FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').get();
     return _filterTurfsByLocation(turfs.docs);
   }
 }
@@ -2840,7 +2846,7 @@ class SportTypeTurfsPage extends StatelessWidget {
           SizedBox(height: 10),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('turfs').snapshots(),
+              stream: FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return Center(child: CircularProgressIndicator());
