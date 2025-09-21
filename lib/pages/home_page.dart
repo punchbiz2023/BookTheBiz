@@ -1035,9 +1035,53 @@ class _HomePage1State extends State<HomePage1>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(height: 12),
+          // Search Bar for Sports
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: TextFormField(
+                controller: _searchController,
+                style: TextStyle(color: Colors.black87, fontSize: 16),
+                decoration: InputDecoration(
+                  hintText: 'Search for sports...',
+                  hintStyle: TextStyle(color: Colors.grey[600]),
+                  prefixIcon: Icon(Icons.search, color: Colors.teal),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.cancel, color: Colors.grey[600]),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchText = '';
+                            });
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 14),
+                ),
+                onChanged: (val) {
+                  setState(() {
+                    _searchText = val;
+                  });
+                },
+              ),
+            ),
+          ),
           if (_isLoadingTurfs)
             Center(child: CircularProgressIndicator()),
-          // Remove MemoizedSearchBar from here
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
             child: Row(
@@ -1072,7 +1116,7 @@ class _HomePage1State extends State<HomePage1>
 
   Widget _buildElegantSportTypesGrid() {
     // Define the 8 sport types and their assets/icons
-    final List<Map<String, dynamic>> sportTypes = [
+    final List<Map<String, dynamic>> allSportTypes = [
       {
         'name': 'Badminton Court',
         'image': 'lib/assets/badminton_court.jpg',
@@ -1114,6 +1158,55 @@ class _HomePage1State extends State<HomePage1>
         'icon': Icons.sports_basketball,
       },
     ];
+
+    // Filter sport types based on search text
+    final List<Map<String, dynamic>> sportTypes = _searchText.isEmpty
+        ? allSportTypes
+        : allSportTypes.where((sport) =>
+            sport['name'].toLowerCase().contains(_searchText.toLowerCase())).toList();
+
+    if (sportTypes.isEmpty) {
+      return Center(
+        child: Card(
+          elevation: 6,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          color: Colors.white,
+          margin: EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.search_off, size: 80, color: Colors.grey[400]),
+                SizedBox(height: 24),
+                Text(
+                  'No Sports Found',
+                  style: TextStyle(
+                    color: Colors.teal.shade800,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    letterSpacing: 0.2,
+                    fontFamily: 'Montserrat',
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'No sports match your search. Try a different term!',
+                  style: TextStyle(
+                    color: Colors.teal.shade700,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1157,6 +1250,50 @@ class _HomePage1State extends State<HomePage1>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Search Bar for Turfs
+          Container(
+            margin: EdgeInsets.symmetric(vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.teal.withOpacity(0.07),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: TextFormField(
+              controller: _searchController,
+              style: TextStyle(color: Colors.black87, fontSize: 16),
+              decoration: InputDecoration(
+                hintText: 'Search for turfs...',
+                hintStyle: TextStyle(color: Colors.grey[600]),
+                prefixIcon: Icon(Icons.search, color: Colors.teal),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.cancel, color: Colors.grey[600]),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchText = '';
+                          });
+                        },
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 14),
+              ),
+              onChanged: (val) {
+                setState(() {
+                  _searchText = val;
+                });
+              },
+            ),
+          ),
           // Location Filter Dropdown
           Container(
             margin: EdgeInsets.symmetric(vertical: 10),
@@ -2297,8 +2434,25 @@ class _HomePage1State extends State<HomePage1>
 
   // Add this helper for Discover Turfs tab
   Future<List<DocumentSnapshot>> _getFilteredTurfs() async {
-          final turfs = await FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').get();
-    return _filterTurfsByLocation(turfs.docs);
+    final turfs = await FirebaseFirestore.instance.collection('turfs').where('turf_status', isEqualTo: 'Verified').get();
+    var filteredTurfs = await _filterTurfsByLocation(turfs.docs);
+    
+    // Apply search filter if search text is not empty
+    if (_searchText.isNotEmpty) {
+      filteredTurfs = filteredTurfs.where((doc) {
+        final turfData = doc.data() as Map<String, dynamic>;
+        final name = (turfData['name'] ?? '').toLowerCase();
+        final description = (turfData['description'] ?? '').toLowerCase();
+        final location = (turfData['location'] ?? '').toLowerCase();
+        final searchQuery = _searchText.toLowerCase();
+        
+        return name.contains(searchQuery) || 
+               description.contains(searchQuery) || 
+               location.contains(searchQuery);
+      }).toList();
+    }
+    
+    return filteredTurfs;
   }
 }
 
@@ -2776,10 +2930,24 @@ Future<void> showLikeDialog({
   );
 }
 
-class SportTypeTurfsPage extends StatelessWidget {
+class SportTypeTurfsPage extends StatefulWidget {
   final String sportType;
   final String imagePath;
   const SportTypeTurfsPage({Key? key, required this.sportType, required this.imagePath}) : super(key: key);
+
+  @override
+  State<SportTypeTurfsPage> createState() => _SportTypeTurfsPageState();
+}
+
+class _SportTypeTurfsPageState extends State<SportTypeTurfsPage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchText = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2790,7 +2958,7 @@ class SportTypeTurfsPage extends StatelessWidget {
         elevation: 0.5,
         iconTheme: IconThemeData(color: Colors.teal.shade800),
         title: Text(
-          sportType,
+          widget.sportType,
           style: TextStyle(
             color: Colors.teal.shade800,
             fontWeight: FontWeight.bold,
@@ -2819,9 +2987,55 @@ class SportTypeTurfsPage extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
               child: Image.asset(
-                imagePath,
+                widget.imagePath,
                 fit: BoxFit.cover,
                 width: double.infinity,
+              ),
+            ),
+          ),
+          SizedBox(height: 18),
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.teal.withOpacity(0.07),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: TextFormField(
+                controller: _searchController,
+                style: TextStyle(color: Colors.black87, fontSize: 16),
+                decoration: InputDecoration(
+                  hintText: 'Search turfs for ${widget.sportType}...',
+                  hintStyle: TextStyle(color: Colors.grey[600]),
+                  prefixIcon: Icon(Icons.search, color: Colors.teal),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.cancel, color: Colors.grey[600]),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchText = '';
+                            });
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 14),
+                ),
+                onChanged: (val) {
+                  setState(() {
+                    _searchText = val;
+                  });
+                },
               ),
             ),
           ),
@@ -2833,7 +3047,7 @@ class SportTypeTurfsPage extends StatelessWidget {
                 Icon(Icons.sports, color: Colors.teal.shade700),
                 SizedBox(width: 8),
                 Text(
-                  'Turfs for $sportType',
+                  'Turfs for ${widget.sportType}',
                   style: TextStyle(
                     color: Colors.teal.shade800,
                     fontWeight: FontWeight.bold,
@@ -2851,11 +3065,26 @@ class SportTypeTurfsPage extends StatelessWidget {
                 if (!snapshot.hasData) {
                   return Center(child: CircularProgressIndicator());
                 }
-                final turfs = snapshot.data!.docs.where((doc) {
+                var turfs = snapshot.data!.docs.where((doc) {
                   final turfData = doc.data() as Map<String, dynamic>;
                   final grounds = List<String>.from(turfData['availableGrounds'] ?? []);
-                  return grounds.contains(sportType);
+                  return grounds.contains(widget.sportType);
                 }).toList();
+
+                // Apply search filter if search text is not empty
+                if (_searchText.isNotEmpty) {
+                  turfs = turfs.where((doc) {
+                    final turfData = doc.data() as Map<String, dynamic>;
+                    final name = (turfData['name'] ?? '').toLowerCase();
+                    final description = (turfData['description'] ?? '').toLowerCase();
+                    final location = (turfData['location'] ?? '').toLowerCase();
+                    final searchQuery = _searchText.toLowerCase();
+                    
+                    return name.contains(searchQuery) || 
+                           description.contains(searchQuery) || 
+                           location.contains(searchQuery);
+                  }).toList();
+                }
                 if (turfs.isEmpty) {
                   return Center(
                     child: Card(
@@ -2868,14 +3097,16 @@ class SportTypeTurfsPage extends StatelessWidget {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Image.asset(
-                              'lib/assets/static/undraw_empty_4zx0.png',
-                              height: 120,
-                              fit: BoxFit.contain,
+                            Icon(
+                              _searchText.isNotEmpty ? Icons.search_off : Icons.sports_soccer,
+                              size: 80,
+                              color: Colors.grey[400],
                             ),
                             SizedBox(height: 24),
                             Text(
-                              'No Turfs for $sportType',
+                              _searchText.isNotEmpty 
+                                  ? 'No Turfs Found' 
+                                  : 'No Turfs for ${widget.sportType}',
                               style: TextStyle(
                                 color: Colors.teal.shade800,
                                 fontWeight: FontWeight.bold,
@@ -2887,7 +3118,9 @@ class SportTypeTurfsPage extends StatelessWidget {
                             ),
                             SizedBox(height: 10),
                             Text(
-                              'We couldn\'t find any turfs for this sport type. Try another sport or check back later!',
+                              _searchText.isNotEmpty
+                                  ? 'No turfs match your search. Try a different term!'
+                                  : 'We couldn\'t find any turfs for this sport type. Try another sport or check back later!',
                               style: TextStyle(
                                 color: Colors.teal.shade700,
                                 fontWeight: FontWeight.w500,

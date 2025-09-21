@@ -447,9 +447,15 @@ class _BookingPageState extends State<BookingPage> {
 
     // Professional, modern AlertDialog
     showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
+  context: context,
+  barrierDismissible: false,
+  builder: (BuildContext context) {
+    // State variable to track loading state
+    bool isLoading = false;
+    bool isPayingOnSpot = false;
+    
+    return StatefulBuilder(
+      builder: (context, setState) {
         return Center(
           child: Material(
             color: Colors.transparent,
@@ -478,8 +484,8 @@ class _BookingPageState extends State<BookingPage> {
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(vertical: 22),
                     child: Column(
-                          children: const [
-                            Icon(Icons.verified, color: Colors.white, size: 38),
+                      children: const [
+                        Icon(Icons.verified, color: Colors.white, size: 38),
                         SizedBox(height: 8),
                         Text(
                           'Confirm Booking',
@@ -583,7 +589,7 @@ class _BookingPageState extends State<BookingPage> {
                           ),
                         ),
                         SizedBox(height: 14),
-                         Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.access_time, color: Colors.teal, size: 20),
@@ -599,7 +605,7 @@ class _BookingPageState extends State<BookingPage> {
                           ],
                         ),
                         SizedBox(height: 8),
-                         Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.currency_rupee, color: Colors.teal, size: 22),
@@ -609,12 +615,12 @@ class _BookingPageState extends State<BookingPage> {
                               style: TextStyle(fontWeight: FontWeight.w600, color: Colors.teal),
                             ),
                             Text(
-                              totalAmount.toStringAsFixed(2),
+                              _totalToCharge(totalAmount).toStringAsFixed(2),
                               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 17),
                             ),
                           ],
                         ),
-                         SizedBox(height: 12),
+                        SizedBox(height: 12),
                         // Amount breakdown
                         Container(
                           width: double.infinity,
@@ -626,7 +632,6 @@ class _BookingPageState extends State<BookingPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Turf Rate:₹${totalAmount.toStringAsFixed(2)}'),
                               Divider(),
                               Text('Total Payable + Inclusive of GST: ₹${_totalToCharge(totalAmount).toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold)),
                             ],
@@ -637,296 +642,417 @@ class _BookingPageState extends State<BookingPage> {
                   ),
                   Divider(height: 1, color: Colors.grey.shade300),
                   Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: TextButton.icon(
-              icon: Icon(Icons.cancel, color: Colors.red),
-              label: Text('Cancel', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              onPressed: () {
-                Navigator.of(context).pop(); // Just close the dialog
-                // Removed call to _showCancellationDialog();
-              },
-            ),
-          ),
-          Expanded(
-            child: TextButton.icon(
-              icon: Icon(Icons.check_circle, color: Colors.teal),
-              label: Text('Confirm', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-              onPressed: () async {
-                // Validate that we have the owner ID
-                if (_turfData == null || _turfData!['ownerId'] == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: Turf owner information not found. Please try again.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: TextButton.icon(
+                                icon: isLoading || isPayingOnSpot 
+                                  ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                                      ),
+                                    )
+                                  : Icon(Icons.cancel, color: Colors.red),
+                                label: isLoading || isPayingOnSpot
+                                  ? SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                                      ),
+                                    )
+                                  : Text('Cancel', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                onPressed: isLoading || isPayingOnSpot
+                                  ? null // Disable button when loading
+                                  : () {
+                                      Navigator.of(context).pop(); // Just close the dialog
+                                      // Removed call to _showCancellationDialog();
+                                    },
+                              ),
+                            ),
+                            Expanded(
+                              child: TextButton.icon(
+                                icon: isLoading
+                                  ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                                      ),
+                                    )
+                                  : Icon(Icons.check_circle, color: Colors.teal),
+                                label: isLoading
+                                  ? SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                                      ),
+                                    )
+                                  : Text('Confirm', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                                onPressed: isLoading || isPayingOnSpot
+                                  ? null // Disable button when loading
+                                  : () async {
+                                      setState(() {
+                                        isLoading = true;
+                                      });
+                                      
+                                      try {
+                                        // Validate that we have the owner ID
+                                        if (_turfData == null || _turfData!['ownerId'] == null) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Error: Turf owner information not found. Please try again.'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                          setState(() {
+                                            isLoading = false;
+                                          });
+                                          return;
+                                        }
 
-                // Calculate total amount with profit and fees (confidential business logic)
-                final payableAmount = _totalToCharge(totalAmount);
-                
-                // Validate calculated amount
-                if (payableAmount <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: Invalid amount calculated. Please try again.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
+                                        // Calculate total amount with profit and fees (confidential business logic)
+                                        final payableAmount = _totalToCharge(totalAmount);
+                                        
+                                        // Validate calculated amount
+                                        if (payableAmount <= 0) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Error: Invalid amount calculated. Please try again.'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                          setState(() {
+                                            isLoading = false;
+                                          });
+                                          return;
+                                        }
 
-                String userEmail = FirebaseAuth.instance.currentUser?.email ?? await _fetchUserEmail(currentUser.uid);
-                String userPhone = FirebaseAuth.instance.currentUser?.phoneNumber ?? await _fetchUserPhone(currentUser.uid);
+                                        String userEmail = FirebaseAuth.instance.currentUser?.email ?? await _fetchUserEmail(currentUser.uid);
+                                        String userPhone = FirebaseAuth.instance.currentUser?.phoneNumber ?? await _fetchUserPhone(currentUser.uid);
 
-                // Before opening Razorpay checkout, call the callable function to create order with transfer
-                String? ownerAccountId;
+                                        // Before opening Razorpay checkout, call the callable function to create order with transfer
+                                        String? ownerAccountId;
 
-                if (_turfData != null && _turfData!['ownerId'] != null) {
-  final ownerDoc = await FirebaseFirestore.instance
-      .collection('users')
-      .doc(_turfData!['ownerId'])
-      .get();
-  if (ownerDoc.exists && ownerDoc.data() != null) {
-    ownerAccountId = ownerDoc['razorpayAccountId'];
-  }
-}
-if (ownerAccountId == null || !ownerAccountId.toString().startsWith('acc_')) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text('Turf owner does not have a valid Razorpay Account ID. Please contact support.')),
-  );
-  return;
-}
-                final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('createRazorpayOrderWithTransfer');
-                final orderResult = await callable({
-                  'totalAmount': totalAmount,
-                  'ownerAccountId': ownerAccountId,
-                  'bookingId': widget.documentId + '_' + DateTime.now().millisecondsSinceEpoch.toString(),
-                  'turfId': widget.documentId,
-                });
-                final orderId = orderResult.data['orderId'];
-                if (orderId == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to create Razorpay order. Please try again.')),
-                  );
-                  return;
-                }
-                var options = {
-                  'key': 'rzp_live_lUkgWvIy2IHCWA',
-                  'amount': (payableAmount * 100).round(),
-                  'name': widget.documentname,
-                  'description': 'Booking at ${selectedGround ?? ''} on ${DateFormat('yyyy-MM-dd').format(selectedDate!)}',
-                  'order_id': orderId,
-                  'prefill': {
-                    'contact': userPhone,
-                    'email': userEmail,
-                  },
-                  'theme': {
-                    'color': '#009688',
-                  },
-                };
+                                        if (_turfData != null && _turfData!['ownerId'] != null) {
+                                          final ownerDoc = await FirebaseFirestore.instance
+                                              .collection('users')
+                                              .doc(_turfData!['ownerId'])
+                                              .get();
+                                          if (ownerDoc.exists && ownerDoc.data() != null) {
+                                            ownerAccountId = ownerDoc['razorpayAccountId'];
+                                          }
+                                        }
+                                        
+                                        if (ownerAccountId == null || !ownerAccountId.toString().startsWith('acc_')) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Turf owner does not have a valid Razorpay Account ID. Please contact support.')),
+                                          );
+                                          setState(() {
+                                            isLoading = false;
+                                          });
+                                          return;
+                                        }
+                                        
+                                        final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('createRazorpayOrderWithTransfer');
+                                        final orderResult = await callable({
+                                          'totalAmount': totalAmount,
+                                          'payableAmount': payableAmount,
+                                          'ownerAccountId': ownerAccountId,
+                                          'bookingId': widget.documentId + '_' + DateTime.now().millisecondsSinceEpoch.toString(),
+                                          'turfId': widget.documentId,
+                                        });
+                                        final orderId = orderResult.data['orderId'];
+                                        if (orderId == null) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Failed to create Razorpay order. Please try again.')),
+                                          );
+                                          setState(() {
+                                            isLoading = false;
+                                          });
+                                          return;
+                                        }
+                                        var options = {
+                                          'key': 'rzp_live_lUkgWvIy2IHCWA',
+                                          'amount': (payableAmount * 100).round(),
+                                          'name': widget.documentname,
+                                          'description': 'Booking at ${selectedGround ?? ''} on ${DateFormat('yyyy-MM-dd').format(selectedDate!)} - Total: ₹${payableAmount.toStringAsFixed(2)}',
+                                          'order_id': orderId,
+                                          'prefill': {
+                                            'contact': userPhone,
+                                            'email': userEmail,
+                                          },
+                                          'theme': {
+                                            'color': '#009688',
+                                          },
+                                        };
 
-                print('Payment Options:');
-                print('Base Amount: ₹$totalAmount');
-                print('Payable Amount: ₹$payableAmount');
-                print('Amount in Paise: ${(payableAmount * 100).round()}');
-                print('Turf: ${widget.documentname}');
-                print('Ground: $selectedGround');
-                print('Date: ${DateFormat('yyyy-MM-dd').format(selectedDate!)}');
+                                        print('Payment Options:');
+                                        print('Base Amount: ₹$totalAmount');
+                                        print('Payable Amount: ₹$payableAmount');
+                                        print('Amount in Paise: ${(payableAmount * 100).round()}');
+                                        print('Turf: ${widget.documentname}');
+                                        print('Ground: $selectedGround');
+                                        print('Date: ${DateFormat('yyyy-MM-dd').format(selectedDate!)}');
 
-                _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
-                  try {
-                    Map<String, dynamic> bookingData = {
-                      'userId': currentUser.uid,
-                      'userName': userName,
-                      'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                      'bookingSlots': selectedSlots,
-                      'totalHours': totalHours,
-                      'amount': payableAmount, // Total amount paid by user (including profit + fees)
-                      'baseAmount': totalAmount, // Original turf amount (for reference)
-                      'turfId': widget.documentId,
-                      'turfName': widget.documentname,
-                      'selectedGround': selectedGround,
-                      'paymentMethod': 'Online',
-                      'status': 'confirmed',
-                      'payoutStatus': 'pending',
-                      'razorpayPaymentId': response.paymentId,
-                      'razorpayOrderId': response.orderId,
-                      'razorpaySignature': response.signature,
-                      'ownerId': _turfData != null ? _turfData!['ownerId'] : null,
-                      'createdAt': FieldValue.serverTimestamp(),
-                      'updatedAt': FieldValue.serverTimestamp(),
-                    };
+                                        _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
+                                          try {
+                                            final HttpsCallable confirmFn = FirebaseFunctions.instance.httpsCallable('confirmBookingAndWrite');
+                                            final result = await confirmFn({
+                                              'orderId': response.orderId,
+                                              'paymentId': response.paymentId,
+                                              'userId': currentUser.uid,
+                                              'userName': userName,
+                                              'turfId': widget.documentId,
+                                              'turfName': widget.documentname,
+                                              'ownerId': _turfData != null ? _turfData!['ownerId'] : null,
+                                              'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                                              'selectedGround': selectedGround,
+                                              'slots': selectedSlots,
+                                              'totalHours': totalHours,
+                                              'baseAmount': totalAmount,
+                                              'payableAmount': payableAmount,
+                                            });
 
-                    // First, add to turf's subcollection (triggers Cloud Function)
-                    DocumentReference turfBookingRef = await _firestore
-                        .collection('turfs')
-                        .doc(widget.documentId)
-                        .collection('bookings')
-                        .add(bookingData);
+                                            final data = result.data as Map;
+                                            if (data['ok'] == true && data['status'] == 'confirmed') {
+                                              try {
+                                                final HttpsCallable emailFn = FirebaseFunctions.instance.httpsCallable('sendBookingConfirmationEmail');
+                                                await emailFn({
+                                                  'to': await _fetchUserEmail(currentUser.uid),
+                                                  'userName': userName,
+                                                  'bookingId': data['bookingId'] ?? '',
+                                                  'turfName': widget.documentname,
+                                                  'ground': selectedGround,
+                                                  'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                                                  'slots': selectedSlots,
+                                                  'totalHours': totalHours,
+                                                  'amount': payableAmount,
+                                                  'paymentMethod': 'Online',
+                                                });
+                                              } catch (e) {
+                                                print('Email send failed: $e');
+                                              }
+                                              await _showSuccessDialog(context, 'Booking confirmed successfully!', true);
+                                              Navigator.of(context).pushAndRemoveUntil(
+                                                MaterialPageRoute(builder: (context) => BookingSuccessPage()),
+                                                (Route<dynamic> route) => false,
+                                              );
+                                            } else {
+                                              await _showSuccessDialog(context, 'Payment verified, but booking failed. Please try again.', false);
+                                              Navigator.of(context).pushAndRemoveUntil(
+                                                MaterialPageRoute(
+                                                  builder: (context) => BookingFailedPage(
+                                                    documentId: widget.documentId,
+                                                    documentname: widget.documentname,
+                                                    userId: widget.userId,
+                                                  ),
+                                                ),
+                                                (Route<dynamic> route) => false,
+                                              );
+                                            }
+                                          } on FirebaseFunctionsException catch (e) {
+                                            print('confirmBookingAndWrite error: ${e.code} ${e.message}');
+                                            String msg = e.code == 'aborted'
+                                                ? 'Oops! Slot(s) just got booked by another user. Please try again.'
+                                                : (e.message ?? 'Payment verification failed');
+                                            await _showSuccessDialog(context, msg, false);
+                                            Navigator.of(context).pushAndRemoveUntil(
+                                              MaterialPageRoute(
+                                                builder: (context) => BookingFailedPage(
+                                                  documentId: widget.documentId,
+                                                  documentname: widget.documentname,
+                                                  userId: widget.userId,
+                                                ),
+                                              ),
+                                              (Route<dynamic> route) => false,
+                                            );
+                                          } catch (e) {
+                                            print('Unexpected booking confirm error: $e');
+                                            await _showSuccessDialog(context, 'Unexpected error after payment. Please contact support.', false);
+                                            Navigator.of(context).pushAndRemoveUntil(
+                                              MaterialPageRoute(
+                                                builder: (context) => BookingFailedPage(
+                                                  documentId: widget.documentId,
+                                                  documentname: widget.documentname,
+                                                  userId: widget.userId,
+                                                ),
+                                              ),
+                                              (Route<dynamic> route) => false,
+                                            );
+                                          }
+                                        });
 
-                    // Then add to main bookings collection for easy querying
-                    await _firestore.collection('bookings').add({
-                      ...bookingData,
-                      'turfBookingId': turfBookingRef.id, // Reference to turf subcollection
-                    });
+                                        _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) async {
+                                          try {
+                                            print('Payment failed:  ${response.message}');
+                                            print('Error code: ${response.code}');
+                                            await _showSuccessDialog(context, "Oops! Payment failed Please try again", false);
+                                          } catch (e) {
+                                            print('Error in payment error handler: $e');
+                                          } finally {
+                                            // Always redirect to BookingFailedPage on payment error
+                                            Navigator.of(context).pushAndRemoveUntil(
+                                              MaterialPageRoute(
+                                                builder: (context) => BookingFailedPage(
+                                                  documentId: widget.documentId,
+                                                  documentname: widget.documentname,
+                                                  userId: widget.userId,
+                                                ),
+                                              ),
+                                              (Route<dynamic> route) => false,
+                                            );
+                                          }
+                                        });
 
-                    // Send confirmation email
-                    try {
-                      final HttpsCallable emailFn = FirebaseFunctions.instance.httpsCallable('sendBookingConfirmationEmail');
-                      await emailFn({
-                        'to': await _fetchUserEmail(currentUser.uid),
-                        'userName': userName,
-                        'bookingId': turfBookingRef.id,
-                        'turfName': widget.documentname,
-                        'ground': selectedGround,
-                        'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                        'slots': selectedSlots,
-                        'totalHours': totalHours,
-                        'amount': payableAmount,
-                        'paymentMethod': 'Online',
-                      });
-                    } catch (e) {
-                      print('Email send failed: $e');
-                    }
-
-                    print('Booking created successfully!');
-                    print('Turf Booking ID: ${turfBookingRef.id}');
-                    print('Amount: $payableAmount (Base: $totalAmount)');
-                    print('Owner ID: ${_turfData?['ownerId']}');
-
-                    await _showSuccessDialog(context, "Booking confirmed successfully!", true);
-                    // Redirect to BookingSuccessPage after dialog
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => BookingSuccessPage()),
-                      (Route<dynamic> route) => false,
-                    );
-                  } catch (e) {
-                    // On any error, redirect to BookingFailedPage
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (context) => BookingFailedPage(
-                          documentId: widget.documentId,
-                          documentname: widget.documentname,
-                          userId: widget.userId,
+                                        try {
+                                          print('Opening Razorpay payment...');
+                                          print('Amount: ${payableAmount * 100} paise');
+                                          print('User: $userEmail, Phone: $userPhone');
+                                          _razorpay.open(options);
+                                        } catch (e) {
+                                          print("Razorpay error: $e");
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Failed to open payment: $e'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                          setState(() {
+                                            isLoading = false;
+                                          });
+                                        }
+                                      } catch (e) {
+                                        print('Error during payment process: $e');
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Error: $e'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                        setState(() {
+                                          isLoading = false;
+                                        });
+                                      }
+                                    },
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      (Route<dynamic> route) => false,
-                    );
-                  }
-                });
+                        SizedBox(height: 12), // Adjust spacing as needed
+                        if (isosp)
+                          TextButton.icon(
+                            icon: isPayingOnSpot
+                              ? SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                                  ),
+                                )
+                              : Icon(Icons.payments, color: Colors.teal),
+                            label: isPayingOnSpot
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text('Processing...', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                                  ],
+                                )
+                              : Text('Pay On Spot', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                            onPressed: isLoading || isPayingOnSpot
+                              ? null // Disable button when loading
+                              : () async {
+                                  setState(() {
+                                    isPayingOnSpot = true;
+                                  });
+                                  
+                                  try {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Processing your on-spot payment...')),
+                                    );
+                                    
+                                    Map<String, dynamic> bookingData = {
+                                      'userId': currentUser.uid,
+                                      'userName': userName,
+                                      'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                                      'bookingSlots': selectedSlots,
+                                      'totalHours': totalHours,
+                                      'amount': totalAmount,
+                                      'turfId': widget.documentId,
+                                      'turfName': widget.documentname,
+                                      'selectedGround': selectedGround,
+                                      'paymentMethod': 'On Spot',
+                                      'status': 'confirmed',
+                                      'createdAt': FieldValue.serverTimestamp(),
+                                      'updatedAt': FieldValue.serverTimestamp(),
+                                    };
 
-                _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) async {
-                  try {
-                    print('Payment failed:  ${response.message}');
-                    print('Error code: ${response.code}');
-                    await _showSuccessDialog(context, "Oops! Payment failed Please try again", false);
-                  } catch (e) {
-                    print('Error in payment error handler: $e');
-                  } finally {
-                    // Always redirect to BookingFailedPage on payment error
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (context) => BookingFailedPage(
-                          documentId: widget.documentId,
-                          documentname: widget.documentname,
-                          userId: widget.userId,
-                        ),
-                      ),
-                      (Route<dynamic> route) => false,
-                    );
-                  }
-                });
+                                    // Only write to turf subcollection; backend trigger mirrors it
+                                    await _firestore
+                                        .collection('turfs')
+                                        .doc(widget.documentId)
+                                        .collection('bookings')
+                                        .add(bookingData);
 
-                try {
-                  print('Opening Razorpay payment...');
-                  print('Amount: ${payableAmount * 100} paise');
-                  print('User: $userEmail, Phone: $userPhone');
-                  _razorpay.open(options);
-                } catch (e) {
-                  print("Razorpay error: $e");
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to open payment: $e'),
-                      backgroundColor: Colors.red,
+                                    // Send confirmation email for On Spot too
+                                    try {
+                                      final HttpsCallable emailFn = FirebaseFunctions.instance.httpsCallable('sendBookingConfirmationEmail');
+                                      await emailFn({
+                                        'to': await _fetchUserEmail(currentUser.uid),
+                                        'userName': userName,
+                                        'bookingId': '${widget.documentId}_${DateTime.now().millisecondsSinceEpoch}',
+                                        'turfName': widget.documentname,
+                                        'ground': selectedGround,
+                                        'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                                        'slots': selectedSlots,
+                                        'totalHours': totalHours,
+                                        'amount': totalAmount,
+                                        'paymentMethod': 'On Spot',
+                                      });
+                                    } catch (e) {
+                                      print('Email send failed (On Spot): $e');
+                                    }
+
+                                    await _showSuccessDialog(context, "Booking confirmed successfully!", true);
+                                  } catch (e) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Failed to confirm booking: $e'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  } finally {
+                                    setState(() {
+                                      isPayingOnSpot = false;
+                                    });
+                                  }
+                                },
+                          ),
+                      ],
                     ),
-                  );
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-      SizedBox(height: 12), // Adjust spacing as needed
-      if (isosp)
-        TextButton.icon(
-          icon: Icon(Icons.payments, color: Colors.teal),
-          label: Text('Pay On Spot', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-          onPressed: () async {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('On-spot payment selected')),
-            );
-            try {
-              Map<String, dynamic> bookingData = {
-                'userId': currentUser.uid,
-                'userName': userName,
-                'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                'bookingSlots': selectedSlots,
-                'totalHours': totalHours,
-                'amount': totalAmount,
-                'turfId': widget.documentId,
-                'turfName': widget.documentname,
-                'selectedGround': selectedGround,
-                'paymentMethod': 'On Spot',
-              };
-
-              await _firestore
-                  .collection('turfs')
-                  .doc(widget.documentId)
-                  .collection('bookings')
-                  .add(bookingData);
-
-              // Send confirmation email for On Spot too
-              try {
-                final HttpsCallable emailFn = FirebaseFunctions.instance.httpsCallable('sendBookingConfirmationEmail');
-                await emailFn({
-                  'to': await _fetchUserEmail(currentUser.uid),
-                  'userName': userName,
-                  'bookingId': '${widget.documentId}_${DateTime.now().millisecondsSinceEpoch}',
-                  'turfName': widget.documentname,
-                  'ground': selectedGround,
-                  'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                  'slots': selectedSlots,
-                  'totalHours': totalHours,
-                  'amount': totalAmount,
-                  'paymentMethod': 'On Spot',
-                });
-              } catch (e) {
-                print('Email send failed (On Spot): $e');
-              }
-
-              await _showSuccessDialog(context, "Booking confirmed successfully!", true);
-            } catch (e) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to confirm booking: $e'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          },
-        ),
-    ],
-  ),
-),
+                  ),
                 ],
               ),
             ),
@@ -934,7 +1060,8 @@ if (ownerAccountId == null || !ownerAccountId.toString().startsWith('acc_')) {
         );
       },
     );
-    // After dialog is closed, restore main UI
+  },
+);// After dialog is closed, restore main UI
     setState(() {
       isBookingConfirmed = false;
     });

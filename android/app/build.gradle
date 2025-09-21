@@ -2,7 +2,8 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
-    id "com.google.gms.google-services" // Google Services Plugin
+    id "com.google.gms.google-services"
+    id 'com.google.firebase.firebase-perf' // Google Services Plugin
 }
 
 def localProperties = new Properties()
@@ -39,8 +40,8 @@ android {
         applicationId "com.PunchBiz.odp"
         minSdkVersion 25
         targetSdkVersion flutter.targetSdkVersion
-        versionCode 20
-        versionName "1.0.20"
+        versionCode 23
+        versionName "1.0.23"
         multiDexEnabled true
     }
 

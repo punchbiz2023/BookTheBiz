@@ -13,6 +13,7 @@ import 'package:odp/services/fcm_service.dart';
 // Make sure to import or define SignupPage() in your project.
 import 'firebase_options.dart';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 
 // -------------- ADD THIS NEW StartPage() FILE OR CODE SNIPPET BELOW --------------
 
@@ -80,14 +81,19 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   Future<void> _initializeApp() async {
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      print('Firebase initialized successfully.');
+      // Initialize Firebase only if not already initialized (prevents web crash)
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        print('Firebase initialized successfully (Splash).');
+      }
 
-      // Initialize FCM service
-      await FCMService.initialize();
-      print('FCM service initialized successfully.');
+      // Initialize FCM service (skip on web unless you have web setup)
+      if (!kIsWeb) {
+        await FCMService.initialize();
+        print('FCM service initialized successfully.');
+      }
 
       if (mounted) {
         setState(() {

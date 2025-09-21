@@ -67,7 +67,6 @@ class _DetailsPageState extends State<DetailsPage> {
     }
   }
 
-
   // Get icon for each item
   IconData _getIconForItem(String item) {
     switch (item.toLowerCase()) {
@@ -202,17 +201,75 @@ class _DetailsPageState extends State<DetailsPage> {
 
   // Build a chip to display on-spot payment status
   Widget _buildOnSpotPaymentStatus(bool isosp) {
-    return Chip(
-      label: Text(
-        isosp ? 'On Spot Payment Accepted' : 'On Spot Payment Not Accepted',
-        style: TextStyle(
-          color: isosp ? Colors.green : Colors.red,
-          fontWeight: FontWeight.bold,
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isosp 
+              ? [Colors.green.shade50, Colors.green.shade100] 
+              : [Colors.red.shade50, Colors.red.shade100],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isosp ? Colors.green.shade200 : Colors.red.shade200,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isosp ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
-      backgroundColor: isosp ? Colors.green[50] : Colors.red[50],
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(50),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isosp ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isosp ? Icons.payments : Icons.money_off,
+              color: isosp ? Colors.green.shade700 : Colors.red.shade700,
+              size: 24,
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Payment Option',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  isosp ? 'On Spot Payment Accepted' : 'On Spot Payment Not Accepted',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isosp ? Colors.green.shade800 : Colors.red.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            isosp ? Icons.check_circle : Icons.cancel,
+            color: isosp ? Colors.green.shade600 : Colors.red.shade600,
+            size: 22,
+          ),
+        ],
       ),
     );
   }
@@ -463,189 +520,439 @@ class _DetailsPageState extends State<DetailsPage> {
     );
   }
 
-  // Helper widget for activity/facility cards
-  Widget _buildIconCardList(String title, List<dynamic> items, Color color) {
-    final bool isActivities = title.toLowerCase().contains('activity');
-    final int crossAxisCount = isActivities ? 2 : 3;
-    final double iconRadius = isActivities ? 32 : 26;
-    final double iconSize = isActivities ? 32 : 28;
-    final double fontSize = isActivities ? 15 : 14;
-    final double cellHeight = isActivities ? 120 : 100;
-
+  // Fixed widget for activity/facility cards with proper height constraints
+  Widget _buildCompactActivityCardList(String title, List<dynamic> items, Color color, {bool isActivities = true}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
-        ),
-        SizedBox(height: 10),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          itemCount: items.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 1.0,
-          ),
-          itemBuilder: (context, idx) {
-            final item = items[idx];
-            final img = _getImageForItem(item);
-            return Container(
-              height: cellHeight,
+        // Section Header with modern design
+        Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(10),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [color.withOpacity(0.13), color.withOpacity(0.07)],
+                  colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: color.withOpacity(0.13), width: 1.2),
+                borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: color.withOpacity(0.09),
-                    blurRadius: 10,
-                    offset: Offset(0, 4),
+                    color: color.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
                   ),
                 ],
               ),
+              child: Icon(
+                isActivities ? Icons.sports_score : Icons.miscellaneous_services,
+                color: color,
+                size: 26,
+              ),
+            ),
+            SizedBox(width: 14),
+            Expanded(
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (img != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(iconRadius),
-                      child: Image.asset(
-                        img,
-                        width: iconRadius * 2,
-                        height: iconRadius * 2,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  else
-                    CircleAvatar(
-                      backgroundColor: color.withOpacity(0.18),
-                      radius: iconRadius,
-                      child: Icon(_getIconForItem(item), color: color, size: iconSize),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
-                  SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                    child: Text(
-                      item,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.teal.shade700,
-                        fontWeight: FontWeight.w600,
-                        fontSize: fontSize + 1,
-                        fontFamily: 'Montserrat',
-                        letterSpacing: 0.1,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    '${items.length} ${isActivities ? 'activities' : 'facilities'}',
+                    style: TextStyle(
+                      color: color.withOpacity(0.8),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
                     ),
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          ],
         ),
-        SizedBox(height: 22),
+        SizedBox(height: 16),
+        
+        // Fixed height container for horizontal scrollable list
+        SizedBox(
+          height: 105, // Reduced height to prevent overflow
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: items.length,
+            physics: BouncingScrollPhysics(),
+            padding: EdgeInsets.zero, // Removed padding to prevent overflow
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final img = _getImageForItem(item);
+              
+              return Container(
+                width: 140,
+                margin: EdgeInsets.only(right: 12, bottom: 0), // Removed bottom margin
+                child: Card(
+                  elevation: 4,
+                  shadowColor: color.withOpacity(0.2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.white,
+                          color.withOpacity(0.05),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      border: Border.all(
+                        color: color.withOpacity(0.15),
+                        width: 1,
+                      ),
+                    ),
+                    padding: EdgeInsets.all(10), // Reduced padding
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Icon or Image with animated container
+                        Container(
+                          width: 45, // Reduced size
+                          height: 45, // Reduced size
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: color.withOpacity(0.1),
+                                blurRadius: 8,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: img != null
+                              ? ClipOval(
+                                  child: Image.asset(
+                                    img,
+                                    width: 41, // Reduced size
+                                    height: 41, // Reduced size
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : Icon(
+                                  _getIconForItem(item),
+                                  color: color,
+                                  size: 24, // Reduced size
+                                ),
+                        ),
+                        SizedBox(height: 8), // Reduced spacing
+                        // Item name with better typography
+                        Expanded(
+                          child: Text(
+                            item,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13, // Reduced font size
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        SizedBox(height: 24),
       ],
     );
   }
 
-  // Widget for displaying turf images as a carousel
-  Widget _buildTurfImagesCarousel(List<dynamic> images, String spotlightImage) {
+  // Enhanced widget for displaying turf images as a carousel
+  Widget _buildEnhancedTurfImagesCarousel(List<dynamic> images, String spotlightImage) {
     final allImages = [spotlightImage, ...images];
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Gallery',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+        // Section Header
+        Container(
+          margin: EdgeInsets.only(bottom: 16),
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.photo_library,
+                  color: Colors.purple,
+                  size: 24,
+                ),
+              ),
+              SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Gallery',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    '${allImages.length} photos available',
+                    style: TextStyle(
+                      color: Colors.purple.withOpacity(0.85),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        SizedBox(height: 10),
+        
+        // Enhanced Carousel
         CarouselSlider(
           options: CarouselOptions(
-            height: 220,
+            height: 240,
             enlargeCenterPage: true,
             enableInfiniteScroll: allImages.length > 1,
-            viewportFraction: 0.8,
+            viewportFraction: 0.85,
             autoPlay: allImages.length > 1,
             autoPlayInterval: Duration(seconds: 4),
+            autoPlayAnimationDuration: Duration(milliseconds: 800),
+            autoPlayCurve: Curves.fastOutSlowIn,
           ),
           items: allImages.map((imgUrl) {
             return Container(
               margin: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10), // Sharper edges
+                borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.13),
-                    blurRadius: 12,
-                    offset: Offset(2, 6),
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 15,
+                    offset: Offset(0, 8),
+                  ),
+                  BoxShadow(
+                    color: Colors.purple.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(10), // Sharper edges
-                child: Image.network(
-                  imgUrl,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: 220,
-                  loadingBuilder: (context, child, progress) =>
-                      progress == null
-                          ? child
-                          : Center(child: CircularProgressIndicator()),
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: Colors.grey[300],
-                    child: Icon(Icons.broken_image, color: Colors.grey[600], size: 60),
-                  ),
+                borderRadius: BorderRadius.circular(16),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Image
+                    Image.network(
+                      imgUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: 240,
+                      loadingBuilder: (context, child, progress) =>
+                          progress == null
+                              ? child
+                              : Container(
+                                  color: Colors.grey[200],
+                                  child: Center(
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.purple),
+                                    ),
+                                  ),
+                                ),
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey[300],
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.broken_image, color: Colors.grey[600], size: 60),
+                            SizedBox(height: 8),
+                            Text(
+                              'Image not available',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    
+                    // Gradient overlay for better text readability
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        height: 60,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.7),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      ),
+                    ),
+                    
+                    // Image indicator
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${allImages.indexOf(imgUrl) + 1}/${allImages.length}',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
           }).toList(),
         ),
-        SizedBox(height: 18),
+        SizedBox(height: 24),
       ],
     );
   }
 
-  // Address section widget
-  Widget _buildAddressSection(Map<String, dynamic> turfData) {
+  // Enhanced address section widget
+  Widget _buildEnhancedAddressSection(Map<String, dynamic> turfData) {
     final address = turfData['location'] ?? '';
     final latitude = turfData['latitude'];
     final longitude = turfData['longitude'];
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(height: 10),
-        Row(
-          children: [
-            Icon(Icons.place, color: Colors.teal, size: 26),
-            SizedBox(width: 8),
-            Text('Address', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal)),
-          ],
+        // Section Header
+        Container(
+          margin: EdgeInsets.only(bottom: 16),
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.location_on,
+                  color: Colors.teal,
+                  size: 24,
+                ),
+              ),
+              SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Location',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Find us here',
+                    style: TextStyle(
+                      color: Colors.teal.withOpacity(0.85),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        SizedBox(height: 8),
-        Card(
-          color: Colors.teal.shade50,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          elevation: 2,
+        
+        // Address Card
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.teal.shade50,
+                Colors.white,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.teal.withOpacity(0.2),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 15,
+                offset: Offset(0, 5),
+              ),
+              BoxShadow(
+                color: Colors.teal.withOpacity(0.05),
+                blurRadius: 10,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(20.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Address Row
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.location_on, color: Colors.teal, size: 22),
-                    SizedBox(width: 8),
+                    Container(
+                      padding: EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.location_on,
+                        color: Colors.teal,
+                        size: 24,
+                      ),
+                    ),
+                    SizedBox(width: 16),
                     Expanded(
                       child: latitude != null && longitude != null
                           ? FutureBuilder<String?>(
@@ -653,42 +960,100 @@ class _DetailsPageState extends State<DetailsPage> {
                               builder: (context, snapshot) {
                                 if (snapshot.connectionState == ConnectionState.waiting) {
                                   return Row(children: [
-                                    SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                                      ),
+                                    ),
                                     SizedBox(width: 8),
-                                    Text('Fetching address...', style: TextStyle(fontSize: 15, color: Colors.grey)),
+                                    Text(
+                                      'Fetching address...',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
                                   ]);
                                 }
                                 if (snapshot.hasError) {
-                                  return Text('Unable to fetch address', style: TextStyle(fontSize: 15, color: Colors.red));
+                                  return Text(
+                                    'Unable to fetch address',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      color: Colors.red,
+                                    ),
+                                  );
                                 }
                                 final addr = snapshot.data;
                                 return Text(
                                   (addr != null && addr.isNotEmpty)
                                       ? addr
                                       : (address.isNotEmpty ? address : 'No address available'),
-                                  style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.w500),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 );
                               },
                             )
                           : Text(
                               address.isNotEmpty ? address : 'No address available',
-                              style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.w500),
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                     ),
                   ],
                 ),
+                
+                // Maps Button
                 if (latitude != null && longitude != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 14),
-                    child: SizedBox(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: Container(
                       width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.blue.shade400,
+                            Colors.blue.shade600,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.blue.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
                       child: ElevatedButton.icon(
-                        icon: Icon(Icons.map, color: Colors.white),
-                        label: Text('View on Google Maps', style: TextStyle(color: Colors.white,fontWeight: FontWeight.bold, fontSize: 15)),
+                        icon: Icon(Icons.map, color: Colors.white, size: 20),
+                        label: Text(
+                          'View on Google Maps',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: EdgeInsets.symmetric(vertical: 14),
                         ),
                         onPressed: () async {
                           final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude');
@@ -709,7 +1074,7 @@ class _DetailsPageState extends State<DetailsPage> {
             ),
           ),
         ),
-        SizedBox(height: 18),
+        SizedBox(height: 24),
       ],
     );
   }
@@ -763,56 +1128,134 @@ class _DetailsPageState extends State<DetailsPage> {
 
             return CustomScrollView(
               slivers: [
+                // Enhanced App Bar with better visuals
                 SliverAppBar(
-                  expandedHeight: 260,
+                  expandedHeight: 280,
                   pinned: true,
                   flexibleSpace: FlexibleSpaceBar(
                     title: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.45),
-                        borderRadius: BorderRadius.circular(10),
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
                         widget.documentname,
-                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     background: Stack(
                       fit: StackFit.expand,
                       children: [
+                        // Main Image
                         imageUrl.isNotEmpty
                             ? Image.network(
                                 imageUrl,
                                 fit: BoxFit.cover,
-                                color: Colors.black.withOpacity(0.45),
+                                color: Colors.black.withOpacity(0.3),
                                 colorBlendMode: BlendMode.darken,
                                 alignment: Alignment.center,
                                 filterQuality: FilterQuality.high,
+                                loadingBuilder: (context, child, progress) =>
+                                    progress == null
+                                        ? child
+                                        : Container(
+                                            color: Colors.grey[800],
+                                            child: Center(
+                                              child: CircularProgressIndicator(
+                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                              ),
+                                            ),
+                                          ),
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: Colors.grey[800],
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.image_not_supported, color: Colors.white, size: 60),
+                                        SizedBox(height: 8),
+                                        Text(
+                                          'Image not available',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               )
                             : Container(
-                                color: Colors.grey[700],
+                                color: Colors.grey[800],
                                 child: Center(
-                                  child: Text(
-                                    'Image not available',
-                                    style: TextStyle(color: Colors.white),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.sports_soccer, color: Colors.white, size: 60),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Image not available',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
+                        // Gradient overlay for better text readability
                         Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withOpacity(0.7),
+                              ],
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                             ),
                           ),
                         ),
+                        // Status indicator
+                        if (status.toLowerCase() == 'closed')
+                          Positioned(
+                            top: 16,
+                            right: 16,
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.cancel,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'CLOSED',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
                 ),
+                
+                // Main Content
                 SliverList(
                   delegate: SliverChildListDelegate([
                     Padding(
@@ -820,25 +1263,61 @@ class _DetailsPageState extends State<DetailsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Show carousel if turfImages exist
+                          // Show enhanced carousel if turfImages exist
                           if (turfImages.isNotEmpty)
-                            _buildTurfImagesCarousel(turfImages, imageUrl),
-                          // Address Section
+                            _buildEnhancedTurfImagesCarousel(turfImages, imageUrl),
+                          // Enhanced Address Section
                           if ((snapshot.data!['location'] ?? '').toString().isNotEmpty)
-                            _buildAddressSection(snapshot.data!),
-                          // Activities and Facilities as icon cards
-                          _buildIconCardList('Available Activities', availableGrounds, Colors.blue),
-                          _buildIconCardList('Facilities', facilities, Colors.green),
-                          SizedBox(height: 20),
+                            _buildEnhancedAddressSection(snapshot.data!),
+                          // Fixed Activities and Facilities as compact horizontal cards
+                          if (availableGrounds.isNotEmpty)
+                            _buildCompactActivityCardList(
+                              'Available Activities', 
+                              availableGrounds, 
+                              Colors.blue,
+                              isActivities: true,
+                            ),
+                          if (facilities.isNotEmpty)
+                            _buildCompactActivityCardList(
+                              'Facilities', 
+                              facilities, 
+                              Colors.green,
+                              isActivities: false,
+                            ),
+                          SizedBox(height: 10),
+                          // Enhanced On-Spot Payment Status
                           _buildOnSpotPaymentStatus(isosp),
-                          SizedBox(height: 20),
-                          SizedBox(
+                          SizedBox(height: 24),
+                          // Enhanced Book Now Button
+                          Container(
                             width: double.infinity,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: status.toLowerCase() == 'closed'
+                                    ? [Colors.red.shade400, Colors.red.shade600]
+                                    : [Colors.blue.shade400, Colors.blue.shade600],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(50),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: status.toLowerCase() == 'closed'
+                                      ? Colors.red.withOpacity(0.3)
+                                      : Colors.blue.withOpacity(0.3),
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
                             child: ElevatedButton(
                               onPressed: () {
                                 if (status.toLowerCase() == 'closed') {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Turf is currently unavailable, please check again later!')),
+                                    SnackBar(
+                                      content: Text('Turf is currently unavailable, please check again later!'),
+                                      backgroundColor: Colors.red,
+                                    ),
                                   );
                                   return;
                                 }
@@ -846,7 +1325,10 @@ class _DetailsPageState extends State<DetailsPage> {
                                 User? currentUser = FirebaseAuth.instance.currentUser;
                                 if (currentUser == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('User not logged in')),
+                                    SnackBar(
+                                      content: Text('User not logged in'),
+                                      backgroundColor: Colors.red,
+                                    ),
                                   );
                                   return;
                                 }
@@ -867,22 +1349,36 @@ class _DetailsPageState extends State<DetailsPage> {
                               },
                               style: ElevatedButton.styleFrom(
                                 foregroundColor: Colors.white,
-                                backgroundColor: status.toLowerCase() == 'closed' ? Colors.red : Colors.blueAccent,
-                                padding: EdgeInsets.symmetric(vertical: 16),
+                                backgroundColor: Colors.transparent,
+                                elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(50),
                                 ),
-                                elevation: 5,
+                                padding: EdgeInsets.symmetric(vertical: 18),
                               ),
-                              child: Text(
-                                status.toLowerCase() == 'closed'
-                                    ? '⚠️ Turf is unavailable, please check later ⚠️'
-                                    : 'Book Now',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    status.toLowerCase() == 'closed' ? Icons.warning : Icons.calendar_today,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    status.toLowerCase() == 'closed'
+                                        ? '⚠️ Turf is unavailable, please check later ⚠️'
+                                        : 'Book Now',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          SizedBox(height: 20),
+                          SizedBox(height: 24),
                         ],
                       ),
                     ),

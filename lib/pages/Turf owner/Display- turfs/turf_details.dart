@@ -303,7 +303,7 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Verification Status: ${turfData['turf_status'] ?? 'Not Verified'}',
+                                  'Status: ${turfData['turf_status'] ?? 'Not Verified'}',
                                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange[800]),
                                 ),
                                 Icon(

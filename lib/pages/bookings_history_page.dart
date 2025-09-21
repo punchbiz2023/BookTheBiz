@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:odp/pages/bkdetails.dart';
-
+import 'dart:ui';
 class BookingsPage extends StatefulWidget {
   const BookingsPage({super.key});
 
@@ -189,7 +189,11 @@ class _BookingsPageState extends State<BookingsPage>
 
         var cancelledBookings = filteredBookings.where((booking) {
           var bookingData = booking.data() as Map<String, dynamic>;
-          return bookingData['status'] == 'cancelled' ||
+          // Consider a booking cancelled if:
+          // 1. Status is explicitly 'cancelled'
+          // 2. BookingSlots is empty (which indicates cancellation)
+          // 3. Status is 'cancelled' (case insensitive)
+          return (bookingData['status']?.toLowerCase() == 'cancelled') ||
               (bookingData['bookingSlots']?.isEmpty ?? true);
         }).toList();
 
@@ -247,11 +251,19 @@ class _BookingsPageState extends State<BookingsPage>
                       decoration: BoxDecoration(
                         color: isSelected
                             ? Colors.teal.shade50
-                            : Colors.white,
+                            : (state == 'cancelled' || 
+                               bookingData['status']?.toLowerCase() == 'cancelled' ||
+                               (bookingData['bookingSlots']?.isEmpty ?? true))
+                                ? Colors.red.shade50
+                                : Colors.white,
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.teal.withOpacity(0.07),
+                            color: (state == 'cancelled' || 
+                                   bookingData['status']?.toLowerCase() == 'cancelled' ||
+                                   (bookingData['bookingSlots']?.isEmpty ?? true))
+                                ? Colors.red.withOpacity(0.05)
+                                : Colors.teal.withOpacity(0.07),
                             blurRadius: 10,
                             offset: Offset(0, 4),
                           ),
@@ -259,7 +271,11 @@ class _BookingsPageState extends State<BookingsPage>
                         border: Border.all(
                           color: isSelected
                               ? Colors.teal
-                              : Colors.transparent,
+                              : (state == 'cancelled' || 
+                                 bookingData['status']?.toLowerCase() == 'cancelled' ||
+                                 (bookingData['bookingSlots']?.isEmpty ?? true))
+                                  ? Colors.red.shade200
+                                  : Colors.transparent,
                           width: 1.2,
                         ),
                       ),
@@ -274,18 +290,53 @@ class _BookingsPageState extends State<BookingsPage>
                                 Expanded(
                                   child: Text(
                                     bookingData['turfName'] ?? 'No Turf Name',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
-                                      color: Colors.teal,
+                                      color: (state == 'cancelled' || 
+                                             bookingData['status']?.toLowerCase() == 'cancelled' ||
+                                             (bookingData['bookingSlots']?.isEmpty ?? true))
+                                          ? Colors.red.shade600
+                                          : Colors.teal,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                StatusBadge(
-                                    status: bookingData['status'] ?? 'Confirmed'),
+                                // Show cancelled status more prominently
+                                // Check if this booking is in the cancelled tab or has cancelled status
+                                if (state == 'cancelled' || 
+                                    bookingData['status']?.toLowerCase() == 'cancelled' ||
+                                    (bookingData['bookingSlots']?.isEmpty ?? true))
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.red.shade200, width: 1),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.cancel, size: 14, color: Colors.red.shade600),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'CANCELLED',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.red.shade700,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  StatusBadge(
+                                    status: bookingData['status'] ?? 'Confirmed'
+                                  ),
                               ],
                             ),
                             const SizedBox(height: 10),

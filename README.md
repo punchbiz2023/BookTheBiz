@@ -5,10 +5,10 @@
   
   **A Complete Turf Booking Management System**
   
-  [![Version](https://img.shields.io/badge/Version-20-brightgreen.svg)](https://play.google.com/store)
+  [![Version](https://img.shields.io/badge/Version-22-brightgreen.svg)](https://play.google.com/store)
   [![Platform](https://img.shields.io/badge/Platform-Flutter-blue.svg)](https://flutter.dev)
   [![Firebase](https://img.shields.io/badge/Backend-Firebase-orange.svg)](https://firebase.google.com)
-  [![Live](https://img.shields.io/badge/Status-Live%20on%20PlayStore-success.svg)](https://play.google.com/store)
+  [![Live](https://img.shields.io/badge/Status-Live%22on%22PlayStore-success.svg)](https://play.google.com/store)
 </div>
 
 ---
@@ -17,7 +17,7 @@
 
 **Developed by:** [Punchbiz](https://punchbiz.com)  
 **Lead Developer:** Mohamed Athik R (App Developer)  
-**Current Version:** 20 (Live on Google Play Store)  
+**Current Version:** 22 (Live on Google Play Store)  
 **Platform:** Flutter (Android & iOS)
 
 ---
@@ -912,7 +912,7 @@ stateDiagram-v2
 ## 🚀 **Deployment & Distribution**
 
 ### 📱 **Current Status**
-- **Version:** 20
+- **Version:** 22
 - **Platform:** Google Play Store (Live)
 - **Target:** Android 5.0+ (API 21+)
 - **Architecture:** ARM64, ARMv7, x86_64
@@ -1065,6 +1065,6 @@ lib/
   
   
   
-  [![Download](https://img.shields.io/badge/Download-Google%20Play-green.svg)](https://play.google.com/store)
+  [![Download](https://img.shields.io/badge/Download-Google%22Play-green.svg)](https://play.google.com/store)
   
 </div>

@@ -511,7 +511,7 @@ You can review the most current version of the Terms of Service at any time at t
 We reserve the right, at our sole discretion, to update, change or replace any part of these Terms of Service by posting updates and changes to our website. It is your responsibility to check our website/App periodically for changes. Your continued use of or access to our website/App or the Service following the posting of any changes to these Terms of Service constitutes acceptance of those changes.
 
 SECTION 20 - CONTACT INFORMATION
-Questions about the Terms of Service should be sent to us at thepunchbiz@gmail.com.
+Questions about the Terms of Service should be sent to us at bookthebiz@gmail.com.
 
 -------------------------------------
 ''';
@@ -1066,92 +1066,108 @@ Padding(
 
           final dateFormat = DateFormat("MMMM d, yyyy 'at' hh:mm a");
 
-          return ListView.builder(
-            shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
-            itemCount: tickets.length,
-            itemBuilder: (context, index) {
-              final ticket = tickets[index];
-              final createdAt = ticket['createdAt'] != null &&
-                      ticket['createdAt'] is Timestamp
-                  ? (ticket['createdAt'] as Timestamp).toDate()
-                  : null;
-              final respondedAt = ticket['respondedAt'] != null &&
-                      ticket['respondedAt'] is Timestamp
-                  ? (ticket['respondedAt'] as Timestamp).toDate()
-                  : null;
+          // Constrain previous tickets to a scrollable grey box
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            constraints: BoxConstraints(
+              maxHeight: 260,
+            ),
+            padding: EdgeInsets.all(8),
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: ListView.builder(
+                itemCount: tickets.length,
+                itemBuilder: (context, index) {
+                  final ticketSnap = tickets[index];
+                  final data = ticketSnap.data() as Map<String, dynamic>? ?? {};
 
-              return Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                margin: EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  leading: Icon(Icons.support_agent, color: Colors.teal),
-                  title: Text(ticket['subject'] ?? 'No Subject'),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(height: 4),
-                      Text(ticket['message'] ?? ''),
-                      SizedBox(height: 4),
-                      Text(
-                        "Status: ${ticket['status'] ?? 'open'}",
-                        style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                      ),
-                      if (createdAt != null)
-                        Text(
-                          "Created: ${dateFormat.format(createdAt)}",
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 11,
+                  final createdAt = (data['createdAt'] is Timestamp)
+                      ? (data['createdAt'] as Timestamp).toDate()
+                      : null;
+                  final respondedAt = (data.containsKey('respondedAt') && data['respondedAt'] is Timestamp)
+                      ? (data['respondedAt'] as Timestamp).toDate()
+                      : null;
+                  final subject = (data['subject'] ?? 'No Subject').toString();
+                  final message = (data['message'] ?? '').toString();
+                  final status = (data['status'] ?? 'open').toString();
+                  final adminResponse = (data['adminResponse'] ?? '').toString();
+
+                  return Card(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    margin: EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      leading: Icon(Icons.support_agent, color: Colors.teal),
+                      title: Text(subject),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(height: 4),
+                          if (message.isNotEmpty) Text(message),
+                          SizedBox(height: 4),
+                          Text(
+                            "Status: $status",
+                            style: TextStyle(color: Colors.grey[700], fontSize: 12),
                           ),
-                        ),
-                      if (ticket['adminResponse'] != null &&
-                          ticket['adminResponse'].toString().isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.teal[50],
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Admin Response:",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.teal[700],
-                                  fontSize: 13,
-                                ),
+                          if (createdAt != null)
+                            Text(
+                              "Created: ${dateFormat.format(createdAt)}",
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 11,
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                ticket['adminResponse'],
-                                style: TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: 13,
-                                ),
+                            ),
+                          if (adminResponse.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.teal[50],
+                                borderRadius: BorderRadius.circular(6),
                               ),
-                              if (respondedAt != null)
-                                Text(
-                                  "Responded: ${dateFormat.format(respondedAt)}",
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 11,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Admin Response:",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.teal[700],
+                                      fontSize: 13,
+                                    ),
                                   ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              );
-            },
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    adminResponse,
+                                    style: TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (respondedAt != null)
+                                    Text(
+                                      "Responded: ${dateFormat.format(respondedAt)}",
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           );
         },
       ),

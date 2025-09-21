@@ -18,7 +18,8 @@
         android:label="BookTheBiz"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:requestLegacyExternalStorage="true"> <!-- Remove this for Android 11+ -->
+        android:requestLegacyExternalStorage="true"
+        android:extractNativeLibs="false">
 
         <activity
             android:name=".MainActivity"

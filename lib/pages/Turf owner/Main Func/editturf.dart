@@ -3,8 +3,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:collection';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:reorderables/reorderables.dart';
+import 'package:intl/intl.dart';
 
 class EditTurfPage extends StatefulWidget {
   final String turfId;
@@ -87,6 +90,21 @@ class _EditTurfPageState extends State<EditTurfPage> {
   ];
   Set<String> selectedSlots = {};
   List<dynamic> _allImages = [];
+  String? _turfStatus;
+  String? _rejectionReason;
+  DateTime? _rejectedAt;
+
+  // Store original values to track changes
+  String? _originalName;
+  String? _originalDescription;
+  String? _originalLocation;
+  Map<String, int>? _originalPrice;
+  Set<String>? _originalFacilities;
+  Set<String>? _originalGrounds;
+  String? _originalImageUrl;
+  List<String>? _originalTurfImages;
+  bool? _originalIsosp;
+  Set<String>? _originalSlots;
 
   @override
   void initState() {
@@ -105,12 +123,18 @@ class _EditTurfPageState extends State<EditTurfPage> {
         _descriptionController.text = turfData['description'] ?? '';
         _locationController.text = turfData['location'] ?? '';
 
+        // Store original values
+        _originalName = turfData['name'];
+        _originalDescription = turfData['description'];
+        _originalLocation = turfData['location'];
+
         var priceData = turfData['price'];
         if (priceData is num) {
           _isPriceMap = false;
           _priceController.text = priceData.toString();
           _price.clear();
           _priceControllers.clear();
+          _originalPrice = null;
         } else if (priceData is Map<String, dynamic>) {
           _isPriceMap = true;
           _price = priceData.map((key, value) => MapEntry(key, (value as num).toInt()));
@@ -118,21 +142,42 @@ class _EditTurfPageState extends State<EditTurfPage> {
           _price.forEach((key, value) {
             _priceControllers[key] = TextEditingController(text: value.toString());
           });
+          // Store original price map
+          _originalPrice = Map<String, int>.from(_price);
         }
 
         _imageUrl = turfData['imageUrl'] ?? '';
         _turfImages = turfData['turfimages'] != null ? List<String>.from(turfData['turfimages']) : [];
         _hasMultipleImages = turfData.containsKey('turfimages');
         _isosp = turfData['isosp'] ?? false;
+        
+        // Store original values
+        _originalImageUrl = turfData['imageUrl'];
+        _originalTurfImages = List<String>.from(_turfImages);
+        _originalIsosp = _isosp;
+        
         selectedFacilities = turfData['facilities'] != null ? Set<String>.from(turfData['facilities']) : {};
         selectedGrounds = turfData['availableGrounds'] != null ? Set<String>.from(turfData['availableGrounds']) : {};
-        // Custom grounds are not persisted separately; they are part of availableGrounds selection
+        
+        // Store original values
+        _originalFacilities = Set<String>.from(selectedFacilities);
+        _originalGrounds = Set<String>.from(selectedGrounds);
 
         // Fetch selected slots if they exist
         List<String>? fetchedSlots = turfData['selectedSlots'] != null
             ? List<String>.from(turfData['selectedSlots'])
             : null;
         selectedSlots = fetchedSlots != null ? Set<String>.from(fetchedSlots) : {};
+        
+        // Store original slots
+        _originalSlots = Set<String>.from(selectedSlots);
+
+        // Load rejection information
+        _turfStatus = turfData['turf_status'] ?? 'Not Verified';
+        _rejectionReason = turfData['rejectionReason'];
+        if (turfData['rejectedAt'] != null) {
+          _rejectedAt = (turfData['rejectedAt'] as Timestamp).toDate();
+        }
 
         // Build _allImages list
         _allImages = [];
@@ -143,6 +188,57 @@ class _EditTurfPageState extends State<EditTurfPage> {
     } catch (e) {
       debugPrint('Error loading turf details: $e');
     }
+  }
+
+  // Check if any critical fields have been changed
+  bool _hasCriticalChanges() {
+    // Check if name changed
+    if (_nameController.text != _originalName) return true;
+    
+    // Check if description changed
+    if (_descriptionController.text != _originalDescription) return true;
+    
+    // Check if location changed
+    if (_locationController.text != _originalLocation) return true;
+    
+    // Check if facilities changed
+    if (!setEquals(selectedFacilities, _originalFacilities ?? {})) return true;
+    
+    // Check if grounds changed
+    if (!setEquals(selectedGrounds, _originalGrounds ?? {})) return true;
+    
+    // Check if price changed
+    if (_isPriceMap) {
+      if (_originalPrice == null) return true;
+      if (_price.length != _originalPrice!.length) return true;
+      for (var ground in _price.keys) {
+        if (!_originalPrice!.containsKey(ground) || _originalPrice![ground] != _price[ground]) {
+          return true;
+        }
+      }
+    } else {
+      if (_originalPrice != null) return true;
+      if (double.tryParse(_priceController.text) != double.tryParse(_originalPrice?.toString() ?? '0')) {
+        return true;
+      }
+    }
+    
+    // Check if on-spot payment changed
+    if (_isosp != _originalIsosp) return true;
+    
+    // Check if slots changed
+    if (!setEquals(selectedSlots, _originalSlots ?? {})) return true;
+    
+    // Check if spotlight image changed
+    if (_newImageFile != null) return true;
+    
+    // Check if gallery images changed
+    if (_newImageFiles.isNotEmpty) return true;
+    if (_allImages.length != (_originalImageUrl != null ? 1 : 0) + (_originalTurfImages?.length ?? 0)) {
+      return true;
+    }
+    
+    return false;
   }
 
   Future<void> _pickImages() async {
@@ -188,52 +284,17 @@ class _EditTurfPageState extends State<EditTurfPage> {
     return urls;
   }
 
-  Future<void> _saveTurfDetails() async {
+  Future<void> _reapplyForApproval() async {
     try {
-      // --- Refactored image save logic ---
-      // Separate images into URLs and Files
-      List<String> urlImages = _allImages.whereType<String>().toList();
-      List<File> fileImages = _allImages.whereType<File>().toList();
-      // Upload new images
-      List<String> uploadedUrls = [];
-      if (fileImages.isNotEmpty) {
-        uploadedUrls = await _uploadImages(fileImages);
-      }
-      // Merge URLs: keep order, replace File with uploaded URL
-      List<String> finalImages = [];
-      int uploadIdx = 0;
-      for (var img in _allImages) {
-        if (img is String) {
-          finalImages.add(img);
-        } else if (img is File) {
-          finalImages.add(uploadedUrls[uploadIdx]);
-          uploadIdx++;
-        }
-      }
-      String? newImageUrl = finalImages.isNotEmpty ? finalImages.first : null;
-      List<String> newTurfImages = finalImages.length > 1 ? finalImages.sublist(1) : [];
-      // Save price as either a single number or a map of ground prices
-      dynamic priceData;
-      if (_price.isEmpty && _priceController.text.isNotEmpty) {
-        priceData = double.tryParse(_priceController.text) ?? 0.0;
-      } else {
-        priceData = _price;
-      }
-      List<String> allSelectedSlots = selectedSlots.toList();
-      Map<String, dynamic> updateData = {
-        'name': _nameController.text,
-        'description': _descriptionController.text,
-        'price': priceData,
-        'facilities': selectedFacilities.toList(),
-        'availableGrounds': selectedGrounds.toList(),
-        'isosp': _isosp,
-        if (newImageUrl != null) 'imageUrl': newImageUrl,
-        if (_hasMultipleImages) 'turfimages': newTurfImages,
-        'selectedSlots': allSelectedSlots,
-      };
-      await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update(updateData);
+      await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update({
+        'turf_status': 'Not Verified',
+        'rejectionReason': FieldValue.delete(),
+        'rejectedAt': FieldValue.delete(),
+        'rejectedBy': FieldValue.delete(),
+        'reappliedAt': FieldValue.serverTimestamp(),
+      });
 
-      // Show success dialog instead of snackbar
+      // Show success dialog
       await showDialog(
         context: context,
         builder: (context) => Dialog(
@@ -259,7 +320,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
                 ),
                 SizedBox(height: 20),
                 Text(
-                  'Success!',
+                  'Re-application Submitted!',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -268,7 +329,7 @@ class _EditTurfPageState extends State<EditTurfPage> {
                 ),
                 SizedBox(height: 10),
                 Text(
-                  'Turf details have been updated successfully.',
+                  'Your turf has been re-submitted for admin approval. You will be notified once it\'s reviewed.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
@@ -283,6 +344,243 @@ class _EditTurfPageState extends State<EditTurfPage> {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // Reload turf details to update the status
+      await _loadTurfDetails();
+    } catch (e) {
+      // Show error dialog
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 40,
+                  ),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  'Error',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Failed to re-apply for approval. Please try again.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveTurfDetails() async {
+    try {
+      // Ensure latest prices are captured from controllers before saving
+      if (_isPriceMap) {
+        final Map<String, int> updatedPriceMap = {};
+        _priceControllers.forEach((ground, controller) {
+          final parsed = int.tryParse(controller.text.trim());
+          if (parsed != null) {
+            updatedPriceMap[ground] = parsed;
+          }
+        });
+        // Also include any prices added via chips but missing controllers (fallback)
+        _price.forEach((ground, value) {
+          if (!updatedPriceMap.containsKey(ground)) {
+            updatedPriceMap[ground] = value;
+          }
+        });
+        _price = updatedPriceMap;
+      }
+
+      // --- Refactored image save logic ---
+      // Separate images into URLs and Files
+      List<String> urlImages = _allImages.whereType<String>().toList();
+      List<File> fileImages = _allImages.whereType<File>().toList();
+      // Upload new images
+      List<String> uploadedUrls = [];
+      if (fileImages.isNotEmpty) {
+        uploadedUrls = await _uploadImages(fileImages);
+      }
+      // Merge URLs: keep order, replace File with uploaded URL
+      List<String> finalImages = [];
+      int uploadIdx = 0;
+      for (var img in _allImages) {
+        if (img is String) {
+          finalImages.add(img);
+        } else if (img is File) {
+          finalImages.add(uploadedUrls[uploadIdx]);
+          uploadIdx++;
+        }
+      }
+      String? newImageUrl = finalImages.isNotEmpty ? finalImages.first : null;
+      List<String> newTurfImages = finalImages.length > 1 ? finalImages.sublist(1) : [];
+      // Save price as either a single number or a map of ground prices
+      dynamic priceData;
+      if (!_isPriceMap) {
+        // Single price mode
+        priceData = double.tryParse(_priceController.text) ?? 0.0;
+      } else {
+        // Multi-price mode (per ground)
+        priceData = _price;
+      }
+      List<String> allSelectedSlots = selectedSlots.toList();
+      
+      // Check if critical changes were made that require re-approval
+      bool needsReapproval = _hasCriticalChanges();
+      
+      Map<String, dynamic> updateData = {
+        'name': _nameController.text,
+        'description': _descriptionController.text,
+        'price': priceData,
+        'facilities': selectedFacilities.toList(),
+        'availableGrounds': selectedGrounds.toList(),
+        'isosp': _isosp,
+        if (newImageUrl != null) 'imageUrl': newImageUrl,
+        if (_hasMultipleImages) 'turfimages': newTurfImages,
+        'selectedSlots': allSelectedSlots,
+      };
+      
+      // If critical changes were made and turf was previously verified, change status back to Not Verified
+      if (needsReapproval && _turfStatus == 'Verified') {
+        updateData['turf_status'] = 'Not Verified';
+        updateData['lastModifiedAt'] = FieldValue.serverTimestamp();
+      }
+      
+      await FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).update(updateData);
+
+      // Show success dialog instead of snackbar
+      String message;
+      if (needsReapproval && _turfStatus == 'Verified') {
+        message = 'Turf details have been updated successfully. Since you made changes to critical information, your turf has been set to "Not Verified" status and requires admin approval again.';
+      } else {
+        message = 'Turf details have been updated successfully.';
+      }
+
+      await showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: needsReapproval && _turfStatus == 'Verified' 
+                        ? Colors.orange.shade50 
+                        : Colors.green.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    needsReapproval && _turfStatus == 'Verified' 
+                        ? Icons.warning_amber 
+                        : Icons.check_circle,
+                    color: needsReapproval && _turfStatus == 'Verified' 
+                        ? Colors.orange 
+                        : Colors.green,
+                    size: 40,
+                  ),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  needsReapproval && _turfStatus == 'Verified' 
+                      ? 'Update Pending Approval' 
+                      : 'Success!',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: needsReapproval && _turfStatus == 'Verified' 
+                        ? Colors.orange 
+                        : Colors.black87,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Close dialog
+                    Navigator.pop(context); // Return to previous screen
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: needsReapproval && _turfStatus == 'Verified' 
+                        ? Colors.orange 
+                        : Colors.teal,
                     foregroundColor: Colors.white,
                     padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
                     shape: RoundedRectangleBorder(
@@ -747,6 +1045,147 @@ class _EditTurfPageState extends State<EditTurfPage> {
     }
   }
 
+  Widget _buildRejectionReasonCard() {
+    return Container(
+      margin: EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.red.shade50, Colors.orange.shade50],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.shade200, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withOpacity(0.1),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.cancel_outlined,
+                  color: Colors.red.shade700,
+                  size: 24,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Turf Rejected',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red.shade800,
+                      ),
+                    ),
+                    if (_rejectedAt != null)
+                      Text(
+                        'Rejected on ${DateFormat('MMM dd, yyyy').format(_rejectedAt!)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          
+          // Rejection reason
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reason for Rejection:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  _rejectionReason!,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.grey.shade800,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 16),
+          
+          // Action buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _reapplyForApproval,
+                  icon: Icon(Icons.refresh, color: Colors.white, size: 20),
+                  label: Text(
+                    'Re-apply for Approval',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Please make the necessary changes based on the feedback above and click "Re-apply for Approval" to submit your turf for review again.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildImageEditSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -933,6 +1372,33 @@ class _EditTurfPageState extends State<EditTurfPage> {
             onPressed: _saveTurfDetails,
           ),
         ],
+        bottom: _turfStatus != null ? PreferredSize(
+          preferredSize: Size.fromHeight(40),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Icon(
+                  _turfStatus == 'Verified' ? Icons.check_circle : 
+                  _turfStatus == 'Disapproved' ? Icons.cancel : Icons.pending,
+                  color: _turfStatus == 'Verified' ? Colors.green : 
+                         _turfStatus == 'Disapproved' ? Colors.red : Colors.orange,
+                  size: 20,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Status: ${_turfStatus ?? 'Unknown'}',
+                  style: TextStyle(
+                    color: _turfStatus == 'Verified' ? Colors.green : 
+                           _turfStatus == 'Disapproved' ? Colors.red : Colors.orange,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ) : null,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () async {
@@ -979,6 +1445,9 @@ class _EditTurfPageState extends State<EditTurfPage> {
                 ),
               ),
               SizedBox(height: 16),
+              // Show rejection reason if turf is disapproved
+              if (_turfStatus == 'Disapproved' && _rejectionReason != null)
+                _buildRejectionReasonCard(),
               _buildTextField(_nameController, 'Turf Name'),
               SizedBox(height: 16),
               _buildTextField(_descriptionController, 'Description'),

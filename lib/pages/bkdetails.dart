@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +14,211 @@ class BookingDetailsPage1 extends StatefulWidget {
 }
 
 class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
+  // Moved helper methods into the State class so they can access context and setState
+
+  Future<void> _cancelBooking(String bookID, DateTime startTime, DateTime endTime) async {
+    try {
+      final bookingRef = FirebaseFirestore.instance.collection('bookings');
+
+      // Query to get all documents from the bookings collection
+      final querySnapshot = await bookingRef.get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        for (var doc in querySnapshot.docs) {
+          if (doc.id == bookID) {
+            var bookingData = doc.data() as Map<String, dynamic>;
+
+            // Check if this is a paid booking that needs refund
+            bool isPaidBooking = bookingData['paymentMethod'] == 'Online' &&
+                bookingData['status'] == 'confirmed' &&
+                bookingData['razorpayPaymentId'] != null;
+
+            if (isPaidBooking) {
+              // Create refund request for paid booking
+              await _createRefundRequest(bookingData, bookID);
+            } else {
+              // For non-paid bookings, just remove the slot
+              await _removeBookingSlot(doc, startTime, endTime);
+            }
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      print('Error cancelling booking: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error cancelling booking: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _createRefundRequest(Map<String, dynamic> bookingData, String bookingId) async {
+    try {
+      if (!mounted) return;
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Processing refund request...'),
+              ],
+            ),
+          );
+        },
+      );
+
+      // Call Cloud Function to create refund request
+      final HttpsCallable createRefundRequest = FirebaseFunctions.instance.httpsCallable('createRefundRequest');
+
+      final result = await createRefundRequest({
+        'bookingId': bookingId,
+        'userId': bookingData['userId'],
+        'turfId': bookingData['turfId'],
+        'amount': bookingData['amount'],
+        'paymentId': bookingData['razorpayPaymentId'],
+        'reason': 'User requested slot cancellation',
+        'bookingDate': bookingData['bookingDate'],
+        'turfName': bookingData['turfName'],
+        'ground': bookingData['selectedGround'],
+        'slots': bookingData['bookingSlots'],
+      });
+
+      if (!mounted) return;
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      if (result.data['success'] == true) {
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Refund request submitted successfully! Admin will review and process your refund.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 5),
+          ),
+        );
+
+        // Refresh the page to show updated status
+        if (!mounted) return;
+        setState(() {});
+      } else {
+        throw Exception('Failed to create refund request');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // Close loading dialog if still open
+      Navigator.of(context).maybePop();
+
+      print('Error creating refund request: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error creating refund request: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _removeBookingSlot(QueryDocumentSnapshot doc, DateTime startTime, DateTime endTime) async {
+    try {
+      // Get the current bookingSlots
+      List<dynamic> bookingSlots = List.from(doc['bookingSlots']); // Ensure mutability
+      print('Current bookingSlots: $bookingSlots');
+
+      // Construct the slot to remove with non-zero-padded hours
+      String slotToRemove =
+          '${DateFormat('h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}';
+      print('Slot to remove: $slotToRemove');
+
+      // Helper to normalize slot strings for comparison
+      String normalizeSlot(String s) {
+        return s
+            .replaceAll(RegExp(r'[:\s]'), '') // remove colons and spaces
+            .replaceAll(RegExp(r'am', caseSensitive: false), 'AM')
+            .replaceAll(RegExp(r'pm', caseSensitive: false), 'PM')
+            .toUpperCase();
+      }
+
+      // Find the slot in bookingSlots that matches after normalization
+      int slotIndex = bookingSlots.indexWhere((slot) => normalizeSlot(slot.toString()) == normalizeSlot(slotToRemove));
+      if (slotIndex != -1) {
+        String matchedSlot = bookingSlots[slotIndex];
+        bookingSlots.removeAt(slotIndex);
+
+        // Update the document in Firebase
+        await doc.reference.update({
+          'bookingSlots': bookingSlots,
+          'bookingStatus': FieldValue.arrayUnion([matchedSlot]) // Add the slot directly
+        });
+        print('Updated bookingSlots and bookingStatus.');
+      } else {
+        print('Slot not found in bookingSlots.');
+      }
+
+      // Update the bookings sub-collection in the corresponding turf document
+      String turfId = doc['turfId'];
+      final turfRef = FirebaseFirestore.instance.collection('turfs').doc(turfId);
+      final bookingsSubCollectionRef = turfRef.collection('bookings');
+      final turfBookingDocs = await bookingsSubCollectionRef.get();
+
+      for (var subDoc in turfBookingDocs.docs) {
+        var bookingData = subDoc.data();
+        if (bookingData['selectedGround'] == doc['selectedGround'] &&
+            bookingData['bookingDate'] == doc['bookingDate'] &&
+            listEquals(bookingData['bookingSlots'], doc['bookingSlots']) &&
+            bookingData['userId'] == doc['userId']) {
+          List<dynamic> turfBookingSlots = List.from(bookingData['bookingSlots']);
+          if (turfBookingSlots.isNotEmpty) {
+            // Find the slot in turfBookingSlots that matches after normalization
+            int turfSlotIndex = turfBookingSlots.indexWhere((slot) => normalizeSlot(slot.toString()) == normalizeSlot(slotToRemove));
+            if (turfSlotIndex != -1) {
+              String matchedTurfSlot = turfBookingSlots[turfSlotIndex];
+              turfBookingSlots.removeAt(turfSlotIndex);
+
+              // Update the sub-collection document
+              await bookingsSubCollectionRef.doc(subDoc.id).update({
+                'bookingSlots': turfBookingSlots,
+                'bookingStatus': FieldValue.arrayUnion([matchedTurfSlot])
+              });
+              print('Updated turf bookingSlots and bookingStatus.');
+            } else {
+              print('Slot not found in turfBookingSlots.');
+            }
+          }
+          break;
+        }
+      }
+
+      if (!mounted) return;
+      // Show success message for non-paid booking
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Slot cancelled successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Refresh the page
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      print('Error removing booking slot: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error cancelling slot: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -321,91 +527,5 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
         );
       },
     );
-  }
-}
-
-Future<void> _cancelBooking(String bookID, DateTime startTime, DateTime endTime) async {
-  try {
-    final bookingRef = FirebaseFirestore.instance.collection('bookings');
-
-    // Query to get all documents from the bookings collection
-    final querySnapshot = await bookingRef.get();
-
-    if (querySnapshot.docs.isNotEmpty) {
-      for (var doc in querySnapshot.docs) {
-        if (doc.id == bookID) {
-          // Get the current bookingSlots
-          List<dynamic> bookingSlots = List.from(doc['bookingSlots']); // Ensure mutability
-          print('Current bookingSlots: $bookingSlots');
-
-          // Construct the slot to remove with non-zero-padded hours
-          String slotToRemove =
-              '${DateFormat('h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}';
-          print('Slot to remove: $slotToRemove');
-
-          // Helper to normalize slot strings for comparison
-          String normalizeSlot(String s) {
-            return s
-                .replaceAll(RegExp(r'[:\s]'), '') // remove colons and spaces
-                .replaceAll(RegExp(r'am', caseSensitive: false), 'AM')
-                .replaceAll(RegExp(r'pm', caseSensitive: false), 'PM')
-                .toUpperCase();
-          }
-
-          // Find the slot in bookingSlots that matches after normalization
-          int slotIndex = bookingSlots.indexWhere((slot) => normalizeSlot(slot.toString()) == normalizeSlot(slotToRemove));
-          if (slotIndex != -1) {
-            String matchedSlot = bookingSlots[slotIndex];
-            bookingSlots.removeAt(slotIndex);
-
-            // Update the document in Firebase
-            await bookingRef.doc(doc.id).update({
-              'bookingSlots': bookingSlots,
-              'bookingStatus': FieldValue.arrayUnion([matchedSlot]) // Add the slot directly
-            });
-            print('Updated bookingSlots and bookingStatus.');
-          } else {
-            print('Slot not found in bookingSlots.');
-          }
-
-          // Update the bookings sub-collection in the corresponding turf document
-          String turfId = doc['turfId'];
-          final turfRef = FirebaseFirestore.instance.collection('turfs').doc(turfId);
-          final bookingsSubCollectionRef = turfRef.collection('bookings');
-          final turfBookingDocs = await bookingsSubCollectionRef.get();
-
-          for (var subDoc in turfBookingDocs.docs) {
-            var bookingData = subDoc.data();
-            if (bookingData['selectedGround'] == doc['selectedGround'] &&
-                bookingData['bookingDate'] == doc['bookingDate'] &&
-                listEquals(bookingData['bookingSlots'], doc['bookingSlots']) &&
-                bookingData['userId'] == doc['userId']) {
-              List<dynamic> turfBookingSlots = List.from(bookingData['bookingSlots']);
-              if (turfBookingSlots.isNotEmpty) {
-                // Find the slot in turfBookingSlots that matches after normalization
-                int turfSlotIndex = turfBookingSlots.indexWhere((slot) => normalizeSlot(slot.toString()) == normalizeSlot(slotToRemove));
-                if (turfSlotIndex != -1) {
-                  String matchedTurfSlot = turfBookingSlots[turfSlotIndex];
-                  turfBookingSlots.removeAt(turfSlotIndex);
-
-                  // Update the sub-collection document
-                  await bookingsSubCollectionRef.doc(subDoc.id).update({
-                    'bookingSlots': turfBookingSlots,
-                    'bookingStatus': FieldValue.arrayUnion([matchedTurfSlot])
-                  });
-                  print('Updated turf bookingSlots and bookingStatus.');
-                } else {
-                  print('Slot not found in turfBookingSlots.');
-                }
-              }
-              break;
-            }
-          }
-          break;
-        }
-      }
-    }
-  } catch (e) {
-    print('Error cancelling booking: $e');
   }
 }

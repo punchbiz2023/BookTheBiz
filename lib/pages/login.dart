@@ -465,22 +465,35 @@ class _LoginPageState extends State<LoginApp> {
 
               // Continue without login
               TextButton(
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => ViewTurfsGuestPage()),
-                  );
-                },
-                child: Text(
-                  'Continue without Login',
-                  style: TextStyle(
-                    color: Colors.teal.shade800,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
+  onPressed: () {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => ViewTurfsGuestPage()),
+    );
+  },
+  style: TextButton.styleFrom(
+    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+  ),
+  child: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(
+        Icons.visibility_off_outlined, // closest to Brave's private tab mask
+        color: Colors.teal.shade800,
+        size: 22,
+      ),
+      SizedBox(width: 8),
+      Text(
+        'Continue in Guest Mode',
+        style: TextStyle(
+          color: Colors.teal.shade800,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
+  ),
+),
             ],
           ),
         ),
