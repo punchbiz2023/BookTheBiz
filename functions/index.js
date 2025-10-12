@@ -165,10 +165,58 @@ exports.onBookingCreated = functions.firestore
       // Calculate owner's share internally (confidential business logic)
       const ownerShare = calculateOwnerShare(totalAmount);
       const companyProfit = totalAmount - ownerShare;
+      
+      // Check for pending clawback deductions for this turf owner
+      let totalDeductions = 0;
+      try {
+        // First, resolve ownerId from ownerAccountId
+        let ownerId = null;
+        
+        // Try to get ownerId from booking data first
+        if (data.ownerId) {
+          ownerId = data.ownerId;
+        } else {
+          // Fallback: search users collection for this Razorpay account ID
+          const usersQuery = await db.collection('users')
+            .where('razorpayAccountId', '==', ownerAccountId)
+            .limit(1)
+            .get();
+          
+          if (!usersQuery.empty) {
+            ownerId = usersQuery.docs[0].id;
+          }
+        }
+        
+        if (ownerId) {
+          const deductionsQuery = await db.collection('turf_owner_deductions')
+            .where('ownerId', '==', ownerId)
+            .where('status', '==', 'pending')
+            .get();
+          
+          deductionsQuery.forEach(doc => {
+            totalDeductions += doc.data().amount;
+          });
+          
+          if (totalDeductions > 0) {
+            console.log(`Found pending deductions: ₹${totalDeductions} for owner ${ownerId} (account: ${ownerAccountId})`);
+          }
+        } else {
+          console.log(`Could not resolve ownerId for account ${ownerAccountId}`);
+        }
+      } catch (error) {
+        console.error('Error checking deductions:', error);
+      }
+      
+      // Calculate final payout after deductions
+      const finalPayout = Math.max(0, ownerShare - totalDeductions);
+      const actualDeduction = ownerShare - finalPayout;
+      
       console.log(`Total amount paid by user: ${totalAmount}`);
       console.log(`Owner share (base amount): ${ownerShare}`);
+      console.log(`Pending deductions: ${totalDeductions}`);
+      console.log(`Final payout to owner: ${finalPayout}`);
       console.log(`Company keeps (profit + fees): ${companyProfit}`);
-      console.log(`Breakdown: Base=${ownerShare}, Profit+Fees=${companyProfit}`);
+      console.log(`Breakdown: Base=${ownerShare}, Deductions=${actualDeduction}, FinalPayout=${finalPayout}, Profit+Fees=${companyProfit}`);
 
       // Check if owner has Razorpay connected account or UPI details
       const ownerPaymentMethod = await getOwnerPaymentMethod(ownerAccountId, turfId, data);
@@ -176,8 +224,49 @@ exports.onBookingCreated = functions.firestore
       const client = getRazorpayClient();
       
       if (ownerPaymentMethod.type === 'razorpay') {
-        // Use Razorpay Route transfer
-        await processRazorpayTransfer(client, paymentId, ownerShare, ownerPaymentMethod.accountId);
+        // Use Razorpay Route transfer with final payout amount
+        await processRazorpayTransfer(client, paymentId, finalPayout, ownerPaymentMethod.accountId);
+        
+        // Mark deductions as applied if payout was successful
+        if (totalDeductions > 0) {
+          try {
+            // Use the same ownerId resolution logic
+            let ownerId = null;
+            if (data.ownerId) {
+              ownerId = data.ownerId;
+            } else {
+              const usersQuery = await db.collection('users')
+                .where('razorpayAccountId', '==', ownerAccountId)
+                .limit(1)
+                .get();
+              
+              if (!usersQuery.empty) {
+                ownerId = usersQuery.docs[0].id;
+              }
+            }
+            
+            if (ownerId) {
+              const deductionsQuery = await db.collection('turf_owner_deductions')
+                .where('ownerId', '==', ownerId)
+                .where('status', '==', 'pending')
+                .get();
+              
+              const batch = db.batch();
+              deductionsQuery.forEach(doc => {
+                batch.update(doc.ref, {
+                  status: 'applied',
+                  appliedAt: admin.firestore.FieldValue.serverTimestamp(),
+                  appliedToBooking: context.params.bookingId
+                });
+              });
+              await batch.commit();
+              
+              console.log(`Marked ${deductionsQuery.size} deductions as applied for owner ${ownerId} (account: ${ownerAccountId})`);
+            }
+          } catch (error) {
+            console.error('Error updating deduction status:', error);
+          }
+        }
       } else {
         throw new Error('No valid payment method found for owner');
       }
@@ -192,6 +281,9 @@ exports.onBookingCreated = functions.firestore
         total_paid: totalAmount,
         owner_share: ownerShare,
         platform_profit: companyProfit,
+        pending_deductions: totalDeductions,
+        final_payout: finalPayout,
+        actual_deduction: actualDeduction,
         razorpay_payment_id: paymentId,
         owner_account_id: ownerAccountId,
         settledAt: admin.firestore.FieldValue.serverTimestamp()
@@ -573,6 +665,39 @@ exports.sendBookingConfirmationEmail = functions.https.onCall(async (data, conte
   }
 });
 
+// --- Server-side slot availability check (no writes) ---
+exports.checkTurfSlotAvailability = functions.https.onCall(async (data, context) => {
+  try {
+    const { turfId, selectedGround, bookingDate, slots } = data || {};
+    if (!turfId || !selectedGround || !bookingDate || !Array.isArray(slots) || slots.length === 0) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+
+    const db = admin.firestore();
+    const snap = await db
+      .collection('turfs')
+      .doc(turfId)
+      .collection('bookings')
+      .where('selectedGround', '==', selectedGround)
+      .where('bookingDate', '==', bookingDate)
+      .get();
+
+    let booked = new Set();
+    snap.forEach(doc => {
+      const arr = doc.data().bookingSlots || [];
+      for (const s of arr) booked.add(s);
+    });
+
+    const conflicting = slots.filter(s => booked.has(s));
+    const available = conflicting.length === 0;
+    return { available, conflicting };
+  } catch (error) {
+    console.error('checkTurfSlotAvailability error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to check availability');
+  }
+});
+
 
 // --- FCM Notification Functions ---
 async function sendNotificationToAdmin(title, body, data = {}) {
@@ -925,146 +1050,170 @@ exports.createRefundRequest = functions.https.onCall(async (data, context) => {
 // Function to process refund (admin approval)
 exports.processRefund = functions.https.onCall(async (data, context) => {
   try {
-    const { refundRequestId, action, adminNotes = '' } = data; // action: 'approve' or 'reject'
-    
+    const { refundRequestId, action, adminNotes = '' } = data;
     if (!refundRequestId || !action) {
       throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
     }
 
     const db = admin.firestore();
-    const refundDoc = await db.collection('refund_requests').doc(refundRequestId).get();
-    
-    if (!refundDoc.exists) {
+    const reqSnap = await db.collection('refund_requests').doc(refundRequestId).get();
+    if (!reqSnap.exists) {
       throw new functions.https.HttpsError('not-found', 'Refund request not found');
     }
-
-    const refundData = refundDoc.data();
-    
-    if (refundData.status !== 'pending') {
+    const req = reqSnap.data();
+    if (req.status !== 'pending') {
       throw new functions.https.HttpsError('failed-precondition', 'Refund request already processed');
     }
 
     if (action === 'reject') {
-      // Simply update status to rejected
-      await refundDoc.ref.update({
+      await reqSnap.ref.update({
         status: 'rejected',
         adminNotes,
         processedAt: admin.firestore.FieldValue.serverTimestamp()
       });
-
-      // Notify user about rejection
-      await sendNotificationToUser(refundData.userId, 
-        'Refund Request Rejected',
+      await sendNotificationToUser(req.userId, 'Refund Request Rejected',
         `Your refund request has been rejected. ${adminNotes || 'Please contact support for more details.'}`,
-        {
-          type: 'refund_rejected',
-          refundRequestId,
-          bookingId: refundData.bookingId
-        }
-      );
-
+        { type: 'refund_rejected', refundRequestId, bookingId: req.bookingId });
       return { success: true, message: 'Refund request rejected' };
     }
 
-    if (action === 'approve') {
-      // Process refund with Razorpay
-      const client = getRazorpayClient();
-      const totalAmount = refundData.amount;
-      const paymentId = refundData.paymentId;
-      
+    // APPROVE
+    const client = getRazorpayClient();
+
+    // Validate payment and refundable balance
+    const paymentId = String(req.paymentId || '').trim();
+    const totalAmountInr = Number(req.amount);
+    if (!paymentId || !isFinite(totalAmountInr) || totalAmountInr <= 0) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid paymentId or amount');
+    }
+
+    const payment = await client.payments.fetch(paymentId);
+    if (!payment || payment.status !== 'captured') {
+      throw new functions.https.HttpsError('failed-precondition', 'Payment not captured or not found');
+    }
+    const paidPaise = Number(payment.amount) || 0;
+    const refundedPaise = Number(payment.amount_refunded || 0);
+    const remainingPaise = paidPaise - refundedPaise;
+    const requestedPaise = Math.round(totalAmountInr * 100);
+    if (requestedPaise > remainingPaise) {
+      throw new functions.https.HttpsError('failed-precondition',
+        `Requested refund exceeds remaining refundable amount. Remaining: ${(remainingPaise/100).toFixed(2)}`);
+    }
+
+    // Get booking details to find turf owner
+    const bookingDoc = await db.collection('bookings').doc(req.bookingId).get();
+    const bookingData = bookingDoc.exists ? bookingDoc.data() : {};
+    
+    // Get turf owner's user ID (not turf ID)
+    let turfOwnerId = bookingData.ownerId;
+    if (!turfOwnerId && req.turfId) {
+      // Fallback: get ownerId from turf document
       try {
-        // Calculate amounts
-        const baseTurfAmount = refundData.baseAmount || (totalAmount * 0.85); // Estimate if not stored
-        const platformAmount = totalAmount - baseTurfAmount;
-        
-        console.log(`Refund breakdown: Total=${totalAmount}, Base=${baseTurfAmount}, Platform=${platformAmount}`);
-        
-        // Process refund to user directly - Razorpay will handle the settlement with the turf owner
-        const refundAmount = Math.round(totalAmount * 100); // Full amount in paise
-        const refund = await client.payments.refund(paymentId, {
-          amount: refundAmount,
-          notes: {
-            reason: refundData.reason,
-            booking_id: refundData.bookingId,
-            refund_request_id: refundRequestId,
-            admin_notes: adminNotes
-          }
-        });
-
-        // Update refund request with details
-        await refundDoc.ref.update({
-          status: 'processed',
-          refundId: refund.id,
-          razorpayRefundId: refund.id,
-          refundStatus: refund.status,
-          adminNotes,
-          processedAt: admin.firestore.FieldValue.serverTimestamp(),
-          refundBreakdown: {
-            totalAmount: totalAmount,
-            baseTurfAmount: baseTurfAmount,
-            platformAmount: platformAmount
-          }
-        });
-
-        // Update booking status
-        await db.collection('bookings').doc(refundData.bookingId).update({
-          refundStatus: 'processed',
-          refundId: refund.id,
-          refundedAt: admin.firestore.FieldValue.serverTimestamp(),
-          refundBreakdown: {
-            totalAmount: totalAmount,
-            baseTurfAmount: baseTurfAmount,
-            platformAmount: platformAmount
-          }
-        });
-
-        // Notify user about successful refund
-        await sendNotificationToUser(refundData.userId,
-          'Refund Processed Successfully',
-          `Your refund of ₹${totalAmount} has been processed and will reflect in your account within 5-7 business days.`,
-          {
-            type: 'refund_processed',
-            refundRequestId,
-            bookingId: refundData.bookingId,
-            amount: totalAmount,
-            refundId: refund.id
-          }
-        );
-
-        return { 
-          success: true, 
-          refundId: refund.id,
-          message: 'Refund processed successfully',
-          refundBreakdown: {
-            totalAmount: totalAmount,
-            baseTurfAmount: baseTurfAmount,
-            platformAmount: platformAmount
-          }
-        };
-
-      } catch (razorpayError) {
-        console.error('Razorpay refund failed:', razorpayError);
-        
-        // Update status to failed
-        await refundDoc.ref.update({
-          status: 'failed',
-          adminNotes: `Razorpay refund failed: ${razorpayError.message || razorpayError.toString()}`,
-          processedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        throw new functions.https.HttpsError('internal', `Refund processing failed: ${razorpayError.message || razorpayError.toString()}`);
+        const turfDoc = await db.collection('turfs').doc(req.turfId).get();
+        if (turfDoc.exists) {
+          turfOwnerId = turfDoc.data().ownerId;
+        }
+      } catch (error) {
+        console.error('Error fetching turf owner:', error);
       }
     }
+    
+    // Calculate amounts
+    const baseTurfAmount = Number(req.baseAmount) || (totalAmountInr * 0.85);
+    const platformAmount = totalAmountInr - baseTurfAmount;
+    
+    // Refund the user directly
+    const refund = await client.payments.refund(paymentId, {
+      amount: requestedPaise,
+      notes: {
+        reason: req.reason,
+        booking_id: req.bookingId,
+        refund_request_id: refundRequestId,
+        admin_notes: adminNotes
+      }
+    });
 
-  } catch (error) {
-    console.error('Error processing refund:', error);
-    if (error instanceof functions.https.HttpsError) {
-      throw error; // Preserve original error code like failed-precondition
+    // AUTOMATED CLAWBACK: Deduct base amount from turf owner's future payouts
+    if (baseTurfAmount > 0 && turfOwnerId) {
+      await db.collection('turf_owner_deductions').add({
+        ownerId: turfOwnerId,
+        turfId: req.turfId,
+        bookingId: req.bookingId,
+        refundRequestId: refundRequestId,
+        refundId: refund.id,
+        amount: baseTurfAmount,
+        reason: 'Automated clawback for approved refund',
+        status: 'pending', // pending, applied, failed
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        appliedAt: null,
+        notes: {
+          customerRefund: totalAmountInr,
+          platformAbsorbed: platformAmount,
+          clawbackAmount: baseTurfAmount
+        }
+      });
+      
+      console.log(`Automated clawback created: ₹${baseTurfAmount} to be deducted from turf owner ${turfOwnerId}`);
     }
-    throw new functions.https.HttpsError('internal', error.message || error.toString() || 'Unknown error occurred');
+
+    // Update refund request
+    await reqSnap.ref.update({
+      status: 'processed',
+      refundId: refund.id,
+      razorpayRefundId: refund.id,
+      refundStatus: refund.status,
+      adminNotes,
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+      refundBreakdown: {
+        totalAmount: totalAmountInr,
+        baseTurfAmount: baseTurfAmount,
+        platformAmount: platformAmount,
+        clawbackCreated: baseTurfAmount > 0 && turfOwnerId ? true : false
+      }
+    });
+
+    // Update booking
+    await db.collection('bookings').doc(req.bookingId).update({
+      refundStatus: 'processed',
+      refundId: refund.id,
+      refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+      refundBreakdown: {
+        totalAmount: totalAmountInr,
+        baseTurfAmount: baseTurfAmount,
+        platformAmount: platformAmount,
+        clawbackCreated: baseTurfAmount > 0 && turfOwnerId ? true : false
+      }
+    });
+
+    await sendNotificationToUser(req.userId,
+      'Refund Processed Successfully',
+      `Your refund of ₹${totalAmountInr.toFixed(2)} has been processed and will reflect in your account within 5-7 business days.`,
+      { type: 'refund_processed', refundRequestId, bookingId: req.bookingId, amount: totalAmountInr, refundId: refund.id });
+
+    return { success: true, refundId: refund.id, message: 'Refund processed successfully' };
+
+  } catch (err) {
+    // Unwrap Razorpay errors so UI never shows [object Object]
+    const raw = err?.error || err?.response || err;
+    const rpMsg = raw?.description || raw?.error?.description || raw?.data?.error?.description || raw?.message;
+    const finalMsg = rpMsg || (typeof raw === 'string' ? raw : JSON.stringify(raw));
+    console.error('processRefund error:', finalMsg);
+
+    try {
+      // Best-effort annotate the request if we have an ID in the data payload
+      if (data?.refundRequestId) {
+        await admin.firestore().collection('refund_requests').doc(data.refundRequestId).update({
+          status: 'failed',
+          adminNotes: `Razorpay refund failed: ${finalMsg}`,
+          processedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    } catch (_) {}
+
+    if (err instanceof functions.https.HttpsError) throw err;
+    throw new functions.https.HttpsError('failed-precondition', `Razorpay refund failed: ${finalMsg}`);
   }
 });
-
 // Verify payment with Razorpay and create booking atomically in Firestore
 exports.confirmBookingAndWrite = functions.https.onCall(async (data, context) => {
   try {

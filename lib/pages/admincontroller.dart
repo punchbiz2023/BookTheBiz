@@ -1130,13 +1130,22 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
         throw Exception('Failed to process refund: ${result.data['message'] ?? 'Unknown error'}');
       }
 
-    } catch (e) {
-      // Close loading dialog if still open
+    } on FirebaseFunctionsException catch (e) {
       Navigator.of(context).pop();
-      
+      final code = e.code;
+      final message = e.message ?? 'Unknown error';
+      print('Refund failed: $code - $message');
+      Fluttertoast.showToast(
+        msg: '$code: $message',
+        toastLength: Toast.LENGTH_LONG,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+      );
+    } catch (e) {
+      Navigator.of(context).pop();
       print('Error processing refund: $e');
       Fluttertoast.showToast(
-        msg: 'Error processing refund: ${e.toString()}',
+        msg: e.toString(),
         toastLength: Toast.LENGTH_LONG,
         backgroundColor: Colors.red,
         textColor: Colors.white,

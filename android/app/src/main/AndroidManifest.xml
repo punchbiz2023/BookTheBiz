@@ -19,7 +19,8 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true"
-        android:extractNativeLibs="false">
+        android:extractNativeLibs="false"
+        android:allowNativeHeapPointerTagging="false">
 
         <activity
             android:name=".MainActivity"
@@ -63,6 +64,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
+            
+        <!-- Support for 16 KB memory page sizes (required for Android 15+) -->
+        <meta-data
+            android:name="android.app.lib_name"
+            android:value="flutter" />
     </application>
 
     <!-- Required to query activities that can process text -->

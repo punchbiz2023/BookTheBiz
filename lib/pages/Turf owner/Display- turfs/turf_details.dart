@@ -67,7 +67,7 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
         msg: "Turf status updated to $newStatus",
         toastLength: Toast.LENGTH_SHORT,
         gravity: ToastGravity.BOTTOM,
-        backgroundColor: Colors.green,
+        backgroundColor: Colors.teal,
         textColor: Colors.white,
         fontSize: 16.0,
       );
@@ -83,270 +83,1013 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
     }
   }
 
+  Widget _buildPremiumCard({required Widget child, Color? accentColor}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: (accentColor ?? Colors.teal).withOpacity(0.08),
+            blurRadius: 20,
+            spreadRadius: 0,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            spreadRadius: 0,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildGradientCard({required Widget child, required List<Color> gradientColors}) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: gradientColors,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: gradientColors.first.withOpacity(0.3),
+            blurRadius: 20,
+            spreadRadius: 0,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildSectionHeader(String title, {IconData? icon, Color? accentColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: (accentColor ?? Colors.teal).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: accentColor ?? Colors.teal, size: 22),
+            ),
+            const SizedBox(width: 14),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.grey[600],
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  height: 3,
+                  width: 50,
+                  decoration: BoxDecoration(
+                    color: accentColor ?? Colors.teal,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureChip(String text, {IconData? icon, Color? bgColor, Color? textColor}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor ?? Colors.teal.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(
+          color: (bgColor ?? Colors.teal).withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: textColor ?? (bgColor ?? Colors.teal)),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: textColor ?? (bgColor ?? Colors.teal),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTurfDetails(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                      strokeWidth: 3,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Loading turf details...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         if (snapshot.hasError) {
-          return Center(child: Text('Error fetching turf details.'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(40),
+                  ),
+                  child: Icon(Icons.error_outline, size: 40, color: Colors.red),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Error fetching turf details',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.grey[800],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please try again later',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         if (!snapshot.hasData || !snapshot.data!.exists) {
-          return Center(child: Text('Turf not found.'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(40),
+                  ),
+                  child: Icon(Icons.sports_score_outlined, size: 40, color: Colors.teal),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Turf not found',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.grey[800],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'The turf you are looking for does not exist',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         var turfData = snapshot.data!.data() as Map<String, dynamic>;
 
         return SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15), // Softer glass effect
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.3), // Dark teal shadow with transparency
-                    blurRadius: 12,
-                    spreadRadius: 3,
-                    offset: Offset(0, 6), // Slight elevation effect
-                  ),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.grey[50]!,
+                  Colors.white,
                 ],
-                border: Border.all(color: Colors.teal.shade700.withOpacity(0.4), width: 1.5), // Subtle dark teal border
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Turf Image with Gradient Overlay
-                  Stack(
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Hero Section with Image
+                Container(
+                  height: 250,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.teal,
+                        Colors.teal[700]!,
+                      ],
+                    ),
+                  ),
+                  child: Stack(
                     children: [
+                      // Image with overlay
                       ClipRRect(
-                        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
                         child: Image.network(
                           turfData['imageUrl'] ?? '',
-                          height: 220,
+                          height: 250,
                           width: double.infinity,
                           fit: BoxFit.cover,
+                          color: Colors.black.withOpacity(0.3),
+                          colorBlendMode: BlendMode.darken,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              height: 250,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Colors.teal.withOpacity(0.6),
+                                    Colors.teal[800]!,
+                                  ],
+                                ),
+                              ),
+                              child: Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(50),
+                                      ),
+                                      child: Icon(Icons.image_not_supported, size: 40, color: Colors.white),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No Image Available',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
-                      Container(
-                        height: 220,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.black.withOpacity(0.2), Colors.transparent],
+                      // Content overlay
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [
+                                Colors.black.withOpacity(0.8),
+                                Colors.transparent,
+                              ],
+                            ),
+                            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                turfData['name'] ?? 'No Name',
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black,
+                                      blurRadius: 10,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: turfData['turf_status'] == 'Verified' 
+                                          ? Colors.green.withOpacity(0.9)
+                                          : Colors.orange.withOpacity(0.9),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          turfData['turf_status'] == 'Verified' 
+                                              ? Icons.verified
+                                              : Icons.pending,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          turfData['turf_status'] ?? 'Not Verified',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (turfData['status'] != null) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: turfData['status'] == 'Open' 
+                                            ? Colors.green.withOpacity(0.9)
+                                            : Colors.red.withOpacity(0.9),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            turfData['status'] == 'Open' 
+                                                ? Icons.play_circle
+                                                : Icons.pause_circle,
+                                            size: 14,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            turfData['status'] ?? 'Unknown',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Turf Name
-                        Text(
-                          turfData['name'] ?? 'No Name',
-                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blueAccent),
-                        ),
-                        SizedBox(height: 8),
-                        // Description
-                        Text(
-                          turfData['description'] ?? 'No Description',
-                          style: TextStyle(fontSize: 16, color: Colors.black87),
-                        ),
-                        SizedBox(height: 16),
+                ),
 
-                        // Price Section
-                        Text(
-                          'Pricing:',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8.0,
-                          runSpacing: 4.0,
-                          children: (turfData['price'] is List<dynamic>)
-                              ? (turfData['price'] as List<dynamic>).map<Widget>((price) {
-                            return Chip(
-                              backgroundColor: Colors.green[100],
-                              label: Text('₹${price.toStringAsFixed(2)}', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                            );
-                          }).toList()
-                              : (turfData['price'] is Map<String, dynamic>)
-                              ? (turfData['price'] as Map<String, dynamic>).entries.map<Widget>((entry) {
-                            return Chip(
-                              backgroundColor: Colors.green[100],
-                              label: Text('${entry.key}: ₹${entry.value.toStringAsFixed(2)}',
-                                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                            );
-                          }).toList()
-                              : [
-                            Chip(
-                              backgroundColor: Colors.green[100],
-                              label: Text('₹${turfData['price']?.toStringAsFixed(2) ?? '0.00'}', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 16),
-
-                        // Facilities Section
-                        Text(
-                          'Facilities:',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8.0,
-                          runSpacing: 4.0,
-                          children: (turfData['facilities'] as List<dynamic>?)
-                              ?.map((facility) => Chip(
-                            label: Text(facility ?? 'No Facility'),
-                            avatar: Icon(Icons.check_circle, size: 16, color: Colors.green),
-                          ))
-                              .toList() ??
-                              [Text('No facilities available')],
-                        ),
-                        SizedBox(height: 16),
-
-                        // Available Grounds
-                        Text(
-                          'Available Grounds:',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8.0,
-                          runSpacing: 4.0,
-                          children: (turfData['availableGrounds'] as List<dynamic>?)
-                              ?.map((ground) => Chip(
-                            label: Text(ground ?? 'No Ground'),
-                            avatar: Icon(Icons.sports_soccer, size: 16, color: Colors.blue),
-                          ))
-                              .toList() ??
-                              [Text('No grounds available')],
-                        ),
-                        SizedBox(height: 16),
-
-                        // Selected Slots
-                        if (turfData.containsKey('selectedSlots') && (turfData['selectedSlots']?.isNotEmpty ?? false)) ...[
-                          Text(
-                            'Selected Slots:',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                          SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8.0,
-                            runSpacing: 4.0,
-                            children: List.generate(
-                              turfData['selectedSlots']?.length ?? 0,
-                                  (index) => Chip(
-                                label: Text(turfData['selectedSlots'][index] ?? 'No Slot'),
-                                avatar: Icon(Icons.access_time, size: 16, color: Colors.green),
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 16),
-                        ],
-
-                        // Status Card and Open/Close Buttons - Only show if turf is verified
-                        if (turfData['turf_status'] == 'Verified') ...[
-                          Container(
-                            padding: EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: turfData['status'] == 'Open' ? Colors.green[100] : Colors.red[100],
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: turfData['status'] == 'Open' ? Colors.green : Colors.red, width: 2),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                // Content Section
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Description
+                      if (turfData['description'] != null && turfData['description'].toString().isNotEmpty) ...[
+                        _buildPremiumCard(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                _buildSectionHeader('Description', icon: Icons.description),
+                                const SizedBox(height: 16),
                                 Text(
-                                  'Current Status: ${turfData['status'] ?? 'Opened'}',
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: turfData['status'] == 'Open' ? Colors.green : Colors.red),
-                                ),
-                                Icon(
-                                  turfData['status'] == 'Open' ? Icons.check_circle : Icons.cancel,
-                                  color: turfData['status'] == 'Open' ? Colors.green : Colors.red,
-                                  size: 30,
+                                  turfData['description'] ?? 'No Description',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: Colors.grey[700],
+                                    height: 1.6,
+                                    fontWeight: FontWeight.w400,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          SizedBox(height: 16),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
 
-                          // Open/Close Buttons
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      // Quick Stats
+                      _buildPremiumCard(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _statusButton(context, 'Open', Colors.green),
-                              _statusButton(context, 'Closed', Colors.red),
+                              _buildSectionHeader('Quick Overview', icon: Icons.dashboard),
+                              const SizedBox(height: 20),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'Grounds',
+                                      '${(turfData['availableGrounds'] as List<dynamic>?)?.length ?? 0}',
+                                      Icons.sports_soccer,
+                                      Colors.teal,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'Facilities',
+                                      '${(turfData['facilities'] as List<dynamic>?)?.length ?? 0}',
+                                      Icons.star,
+                                      Colors.orange,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
-                        ] else ...[
-                          // Show verification status if not verified
-                          Container(
-                            padding: EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.orange[100],
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.orange, width: 2),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Status: ${turfData['turf_status'] ?? 'Not Verified'}',
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange[800]),
-                                ),
-                                Icon(
-                                  Icons.pending,
-                                  color: Colors.orange[800],
-                                  size: 30,
-                                ),
-                              ],
-                            ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Pricing
+                      _buildPremiumCard(
+                        accentColor: Colors.green,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildSectionHeader('Pricing', icon: Icons.currency_rupee, accentColor: Colors.green),
+                              const SizedBox(height: 20),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: (turfData['price'] is List<dynamic>)
+                                    ? (turfData['price'] as List<dynamic>).map<Widget>((price) {
+                                  return _buildFeatureChip(
+                                    '₹${price.toStringAsFixed(2)}',
+                                    icon: Icons.currency_rupee,
+                                    bgColor: Colors.green.withOpacity(0.1),
+                                    textColor: Colors.green[800],
+                                  );
+                                }).toList()
+                                    : (turfData['price'] is Map<String, dynamic>)
+                                    ? (turfData['price'] as Map<String, dynamic>).entries.map<Widget>((entry) {
+                                  return _buildFeatureChip(
+                                    '${entry.key}: ₹${entry.value.toStringAsFixed(2)}',
+                                    icon: Icons.currency_rupee,
+                                    bgColor: Colors.green.withOpacity(0.1),
+                                    textColor: Colors.green[800],
+                                  );
+                                }).toList()
+                                    : [
+                                  _buildFeatureChip(
+                                    '₹${turfData['price']?.toStringAsFixed(2) ?? '0.00'}',
+                                    icon: Icons.currency_rupee,
+                                    bgColor: Colors.green.withOpacity(0.1),
+                                    textColor: Colors.green[800],
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          SizedBox(height: 16),
-                          
-                          // Show message about verification
-                          Container(
-                            padding: EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.blue[50],
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.blue[200]!, width: 1),
-                            ),
-                            child: Row(
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Facilities
+                      _buildPremiumCard(
+                        accentColor: Colors.orange,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildSectionHeader('Facilities', icon: Icons.star, accentColor: Colors.orange),
+                              const SizedBox(height: 20),
+                              if ((turfData['facilities'] as List<dynamic>?)?.isEmpty ?? true)
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.grey[300]!),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.info_outline, color: Colors.grey[600], size: 20),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'No facilities available',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[600],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: (turfData['facilities'] as List<dynamic>?)
+                                      ?.map((facility) => _buildFeatureChip(
+                                    facility ?? 'No Facility',
+                                    icon: Icons.check_circle,
+                                    bgColor: Colors.orange.withOpacity(0.1),
+                                    textColor: Colors.orange[800],
+                                  ))
+                                      .toList() ??
+                                      [],
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Available Grounds
+                      _buildPremiumCard(
+                        accentColor: Colors.blue,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildSectionHeader('Available Grounds', icon: Icons.sports_soccer, accentColor: Colors.blue),
+                              const SizedBox(height: 20),
+                              if ((turfData['availableGrounds'] as List<dynamic>?)?.isEmpty ?? true)
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.grey[300]!),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.info_outline, color: Colors.grey[600], size: 20),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'No grounds available',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[600],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: (turfData['availableGrounds'] as List<dynamic>?)
+                                      ?.map((ground) => _buildFeatureChip(
+                                    ground ?? 'No Ground',
+                                    icon: Icons.sports_soccer,
+                                    bgColor: Colors.blue.withOpacity(0.1),
+                                    textColor: Colors.blue[800],
+                                  ))
+                                      .toList() ??
+                                      [],
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Selected Slots (if available)
+                      if (turfData.containsKey('selectedSlots') && (turfData['selectedSlots']?.isNotEmpty ?? false))
+                        _buildPremiumCard(
+                          accentColor: Colors.purple,
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                                                 Icon(Icons.info_outline, color: Colors.blue[700]!, size: 24),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Your turf is pending admin verification. Once approved, you can control its availability status.',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.blue[700],
-                                      fontWeight: FontWeight.w500,
+                                _buildSectionHeader('Selected Slots', icon: Icons.access_time, accentColor: Colors.purple),
+                                const SizedBox(height: 20),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: List.generate(
+                                    turfData['selectedSlots']?.length ?? 0,
+                                        (index) => _buildFeatureChip(
+                                      turfData['selectedSlots'][index] ?? 'No Slot',
+                                      icon: Icons.access_time,
+                                      bgColor: Colors.purple.withOpacity(0.1),
+                                      textColor: Colors.purple[800],
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        ],
+                        ),
+
+                      // Status Section
+                      if (turfData['turf_status'] == 'Verified') ...[
+                        const SizedBox(height: 24),
+                        _buildPremiumCard(
+                          accentColor: Colors.indigo,
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader('Status Control', icon: Icons.settings, accentColor: Colors.indigo),
+                                const SizedBox(height: 20),
+                                Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: turfData['status'] == 'Open' 
+                                        ? Colors.green.withOpacity(0.1)
+                                        : Colors.red.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: turfData['status'] == 'Open' 
+                                          ? Colors.green.withOpacity(0.3)
+                                          : Colors.red.withOpacity(0.3),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: turfData['status'] == 'Open' 
+                                              ? Colors.green.withOpacity(0.2)
+                                              : Colors.red.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Icon(
+                                          turfData['status'] == 'Open' 
+                                              ? Icons.check_circle
+                                              : Icons.cancel,
+                                          color: turfData['status'] == 'Open' 
+                                              ? Colors.green[700]
+                                              : Colors.red[700],
+                                          size: 28,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Current Status',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              turfData['status'] ?? 'Unknown',
+                                              style: TextStyle(
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                                color: turfData['status'] == 'Open' 
+                                                    ? Colors.green[700]
+                                                    : Colors.red[700],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [Colors.green, Colors.green[700]!],
+                                          ),
+                                          borderRadius: BorderRadius.circular(12),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.green.withOpacity(0.3),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: ElevatedButton(
+                                          onPressed: () => _updateTurfStatus(context, 'Open'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            elevation: 0,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.play_arrow, size: 20),
+                                              const SizedBox(width: 8),
+                                              const Text(
+                                                'Open Turf',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [Colors.red, Colors.red[700]!],
+                                          ),
+                                          borderRadius: BorderRadius.circular(12),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.red.withOpacity(0.3),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: ElevatedButton(
+                                          onPressed: () => _updateTurfStatus(context, 'Closed'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            elevation: 0,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.block, size: 20),
+                                              const SizedBox(width: 8),
+                                              const Text(
+                                                'Close Turf',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 24),
+                        _buildPremiumCard(
+                          accentColor: Colors.orange,
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader('Verification Status', icon: Icons.verified, accentColor: Colors.orange),
+                                const SizedBox(height: 20),
+                                Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Colors.orange.withOpacity(0.3),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Icon(
+                                          Icons.pending,
+                                          color: Colors.orange[700],
+                                          size: 28,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Pending Verification',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              turfData['turf_status'] ?? 'Not Verified',
+                                              style: TextStyle(
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.orange[700],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.teal.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.teal.withOpacity(0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.teal.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          Icons.info_outline,
+                                          color: Colors.teal[700],
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'Your turf is pending admin verification. Once approved, you can control its availability status.',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.teal[700],
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );
@@ -354,49 +1097,29 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
     );
   }
 
-// Custom Button for Open/Close
-  Widget _statusButton(BuildContext context, String status, Color color) {
-  return ElevatedButton(
-    onPressed: () => _updateTurfStatus(context, status),
-    style: ElevatedButton.styleFrom(
-      backgroundColor: color,
-      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-      textStyle: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-      ),
-      foregroundColor: Colors.white, // Correct way to set text color in Material 3
-    ),
-    child: Text(status),
-  );
-  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.teal.shade50, // Light background for contrast
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(
-          'Turf Details',
+        title: const Text(
+          'Turf Management',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 22,
-            color: Colors.white, // Better readability
+            color: Colors.white,
           ),
         ),
-        backgroundColor: Colors.teal.shade900.withOpacity(0.85), // Subtle transparency
-        elevation: 4,
-        shadowColor: Colors.black26,
+        backgroundColor: Colors.teal,
+        elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.edit, color: Colors.white),
+            icon: const Icon(Icons.edit, color: Colors.white),
             onPressed: () {
               Navigator.push(
                 context,
@@ -407,46 +1130,30 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
             },
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(50),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15), // Light glass effect
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white.withOpacity(0.75),
-
-              indicatorSize: TabBarIndicatorSize.label, // Keeps it tight to text width
-              labelStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              unselectedLabelStyle: TextStyle(fontSize: 16),
-              tabs: const [
-                Tab(text: 'Details'),
-                Tab(text: 'Bookings'),
-                Tab(text: 'Stats'),
-              ],
-            ),
-          ),
-        ),
-      ),
-      body: Container(
-        padding: EdgeInsets.only(top: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: TabBarView(
+        bottom: TabBar(
           controller: _tabController,
-          children: [
-            _buildTurfDetails(context),
-            BookingDetailsPage(turfId: widget.turfId, bookingData: const {}),
-            Turfstats(turfId: widget.turfId),
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white,
+          indicatorWeight: 3,
+          indicatorSize: TabBarIndicatorSize.label,
+          labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          unselectedLabelStyle: const TextStyle(fontSize: 14),
+          tabs: const [
+            Tab(text: 'Details'),
+            Tab(text: 'Bookings'),
+            Tab(text: 'Analytics'),
           ],
         ),
       ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildTurfDetails(context),
+          BookingDetailsPage(turfId: widget.turfId, bookingData: const {}),
+          Turfstats(turfId: widget.turfId),
+        ],
+      ),
     );
   }
-
 }

@@ -445,7 +445,7 @@ class _BookingPageState extends State<BookingPage> {
       return;
     }
 
-    // Professional, modern AlertDialog
+    
     showDialog(
   context: context,
   barrierDismissible: false,
@@ -621,7 +621,6 @@ class _BookingPageState extends State<BookingPage> {
                           ],
                         ),
                         SizedBox(height: 12),
-                        // Amount breakdown
                         Container(
                           width: double.infinity,
                           padding: EdgeInsets.all(12),
@@ -651,31 +650,12 @@ class _BookingPageState extends State<BookingPage> {
                           children: [
                             Expanded(
                               child: TextButton.icon(
-                                icon: isLoading || isPayingOnSpot 
-                                  ? SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                                      ),
-                                    )
-                                  : Icon(Icons.cancel, color: Colors.red),
-                                label: isLoading || isPayingOnSpot
-                                  ? SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                                      ),
-                                    )
-                                  : Text('Cancel', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                icon: Icon(Icons.cancel, color: Colors.red),
+                                label: Text('Cancel', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                                 onPressed: isLoading || isPayingOnSpot
-                                  ? null // Disable button when loading
+                                  ? null // Disable button when processing
                                   : () {
                                       Navigator.of(context).pop(); // Just close the dialog
-                                      // Removed call to _showCancellationDialog();
                                     },
                               ),
                             ),
@@ -692,17 +672,10 @@ class _BookingPageState extends State<BookingPage> {
                                     )
                                   : Icon(Icons.check_circle, color: Colors.teal),
                                 label: isLoading
-                                  ? SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
-                                      ),
-                                    )
+                                  ? Text("Processing...", style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold))
                                   : Text('Confirm', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
                                 onPressed: isLoading || isPayingOnSpot
-                                  ? null // Disable button when loading
+                                  ? null // Disable button when processing
                                   : () async {
                                       setState(() {
                                         isLoading = true;
@@ -766,6 +739,25 @@ class _BookingPageState extends State<BookingPage> {
                                           return;
                                         }
                                         
+                                        // 1) Server-side availability check before creating order
+                                        final HttpsCallable availabilityFn = FirebaseFunctions.instance.httpsCallable('checkTurfSlotAvailability');
+                                        final availability = await availabilityFn({
+                                          'turfId': widget.documentId,
+                                          'selectedGround': selectedGround,
+                                          'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                                          'slots': selectedSlots,
+                                        });
+                                        final availData = availability.data as Map;
+                                        if (availData['available'] != true) {
+                                          final List conflicts = (availData['conflicting'] as List?) ?? [];
+                                          await _showSuccessDialog(context, conflicts.isNotEmpty
+                                            ? 'Some selected slots are already booked: ${conflicts.join(', ')}'
+                                            : 'Selected slots are no longer available. Please choose different slots.', false);
+                                          setState(() { isLoading = false; });
+                                          return;
+                                        }
+
+                                        // 2) Create order only if available
                                         final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('createRazorpayOrderWithTransfer');
                                         final orderResult = await callable({
                                           'totalAmount': totalAmount,
@@ -951,7 +943,7 @@ class _BookingPageState extends State<BookingPage> {
                             ),
                           ],
                         ),
-                        SizedBox(height: 12), // Adjust spacing as needed
+                        SizedBox(height: 12),
                         if (isosp)
                           TextButton.icon(
                             icon: isPayingOnSpot
@@ -965,24 +957,10 @@ class _BookingPageState extends State<BookingPage> {
                                 )
                               : Icon(Icons.payments, color: Colors.teal),
                             label: isPayingOnSpot
-                              ? Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
-                                      ),
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text('Processing...', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-                                  ],
-                                )
+                              ? Text("Processing...", style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold))
                               : Text('Pay On Spot', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
                             onPressed: isLoading || isPayingOnSpot
-                              ? null // Disable button when loading
+                              ? null // Disable button when processing
                               : () async {
                                   setState(() {
                                     isPayingOnSpot = true;
@@ -1061,7 +1039,7 @@ class _BookingPageState extends State<BookingPage> {
       },
     );
   },
-);// After dialog is closed, restore main UI
+);// Professional, modern AlertDialog
     setState(() {
       isBookingConfirmed = false;
     });
