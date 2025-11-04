@@ -11,7 +11,9 @@ import '../Display- turfs/turf_details.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
-
+import 'spot_events_page.dart';
+import 'event_bookings_page.dart';
+import 'PendingClawbackDetailsPage.dart';
 class HomePage2 extends StatefulWidget {
   User? user;
 
@@ -76,6 +78,285 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
           .snapshots();
     });
   }
+  /// Build pending clawback warning card
+Widget buildPendingClawbackWarningCard() {
+  final userId = widget.user?.uid;
+  if (userId == null) return SizedBox();
+
+  return StreamBuilder<QuerySnapshot>(
+    stream: FirebaseFirestore.instance
+        .collection('manual_clawback_payments')
+        .where('ownerId', isEqualTo: userId)
+        .where('status', whereIn: ['pending_payment', 'overdue'])
+        .snapshots(),
+    builder: (context, snapshot) {
+      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        return SizedBox(); // No pending clawbacks
+      }
+
+      List<Map<String, dynamic>> pendingClawbacks = [];
+      double totalAmount = 0;
+
+      for (var doc in snapshot.data!.docs) {
+        var data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        pendingClawbacks.add(data);
+        totalAmount += (data['amount'] ?? 0).toDouble();
+      }
+
+      // Calculate days overdue
+      int maxDaysOverdue = 0;
+      for (var clawback in pendingClawbacks) {
+        if (clawback['createdAt'] != null) {
+          DateTime createdDate = (clawback['createdAt'] as Timestamp).toDate();
+          int days = DateTime.now().difference(createdDate).inDays;
+          if (days > maxDaysOverdue) maxDaysOverdue = days;
+        }
+      }
+
+      bool isUrgent = maxDaysOverdue > 10; // Red alert after 10 days
+
+      return Container(
+        margin: EdgeInsets.symmetric(vertical: 16, horizontal: 4),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isUrgent
+                ? [Colors.red[700]!, Colors.red[500]!]
+                : [Colors.orange[700]!, Colors.orange[500]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: (isUrgent ? Colors.red : Colors.orange).withOpacity(0.3),
+              blurRadius: 15,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PendingClawbackDetailsPage(
+                    pendingClawbacks: pendingClawbacks,
+                    totalAmount: totalAmount,
+                  ),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header Row
+                  Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isUrgent ? Icons.error : Icons.warning_amber_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                      SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isUrgent ? '🚨 URGENT ACTION REQUIRED' : '⚠️ Payment Required',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Pending for $maxDaysOverdue days',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  SizedBox(height: 20),
+
+                  // Amount Section
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Outstanding Balance',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          '₹${totalAmount.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 36,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          '${pendingClawbacks.length} pending transaction(s)',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  SizedBox(height: 16),
+
+                  // Warning Message
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isUrgent
+                              ? 'Your account will be suspended if not paid immediately'
+                              : 'Customer cancellations require settlement to continue',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  SizedBox(height: 20),
+
+                  // Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => PendingClawbackDetailsPage(
+                                  pendingClawbacks: pendingClawbacks,
+                                  totalAmount: totalAmount,
+                                ),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: isUrgent ? Colors.red[700] : Colors.orange[700],
+                            padding: EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.payment, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Pay Now',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => PendingClawbackDetailsPage(
+                                  pendingClawbacks: pendingClawbacks,
+                                  totalAmount: totalAmount,
+                                ),
+                              ),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            side: BorderSide(color: Colors.white, width: 2),
+                          ),
+                          child: Text(
+                            'Details',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
 
   Future<void> _checkCurrentUser() async {
     User? currentUser = FirebaseAuth.instance.currentUser;
@@ -392,6 +673,8 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
                         },
                       ),
                     ),
+                    SizedBox(height: 28),
+                    buildPendingClawbackWarningCard(),
                     SizedBox(height: 30),
                     // --- Add Turf Button ---
                     Center(
@@ -789,6 +1072,28 @@ class _HomePage2State extends State<HomePage2> with SingleTickerProviderStateMix
                           );
                         },
                       ),
+    _buildSidebarItem(
+      Icons.event_outlined,
+      'Add Spot Events',
+      () {
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => SpotEventsPage(user: widget.user)),
+        );
+      },
+    ),
+    _buildSidebarItem(
+      Icons.event_available,
+      'Event Bookings',
+      () {
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => EventBookingsPage(user: widget.user)),
+        );
+      },
+    ),
                       _buildSidebarItem(
                         Icons.help_outline,
                         'Help & Support',

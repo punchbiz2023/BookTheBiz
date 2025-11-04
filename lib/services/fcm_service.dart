@@ -11,46 +11,56 @@ class FCMService {
 
   // Initialize FCM service
   static Future<void> initialize() async {
-    // Request permission for notifications
-    NotificationSettings settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
+    try {
+      // Request permission for notifications
+      NotificationSettings settings = await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('User granted permission');
-    } else {
-      print('User declined or has not accepted permission');
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        print('User granted permission');
+      } else {
+        print('User declined or has not accepted permission');
+      }
+
+      // Get FCM token with error handling
+      try {
+        String? token = await _messaging.getToken();
+        if (token != null) {
+          await _saveTokenToFirestore(token);
+        }
+      } catch (e) {
+        print('Error getting FCM token: $e');
+        // Continue without FCM token if there's an error
+      }
+
+      // Listen for token refresh
+      _messaging.onTokenRefresh.listen((newToken) {
+        _saveTokenToFirestore(newToken);
+      });
+
+      // Initialize local notifications
+      await _initializeLocalNotifications();
+
+      // Handle background messages
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+      // Handle foreground messages
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        _handleForegroundMessage(message);
+      });
+
+      // Handle notification taps when app is in background
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        _handleNotificationTap(message);
+      });
+    } catch (e) {
+      print('Error initializing FCM service: $e');
+      // Continue app initialization even if FCM fails
     }
-
-    // Get FCM token
-    String? token = await _messaging.getToken();
-    if (token != null) {
-      await _saveTokenToFirestore(token);
-    }
-
-    // Listen for token refresh
-    _messaging.onTokenRefresh.listen((newToken) {
-      _saveTokenToFirestore(newToken);
-    });
-
-    // Initialize local notifications
-    await _initializeLocalNotifications();
-
-    // Handle background messages
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _handleForegroundMessage(message);
-    });
-
-    // Handle notification taps when app is in background
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      _handleNotificationTap(message);
-    });
   }
 
   // Save FCM token to Firestore

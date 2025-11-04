@@ -12,7 +12,9 @@ import 'package:odp/pages/details.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-
+import 'my_events_page.dart';
+import 'spot_events_page.dart';
+import 'dart:ui';
 class MemoizedSearchBar extends StatefulWidget {
     final List<Map<String, dynamic>> allTurfs;
     final TextEditingController searchController;
@@ -919,6 +921,10 @@ class _HomePage1State extends State<HomePage1>
           ),
           SizedBox(height: 15),
           _buildNearbyTurfs(),
+          SizedBox(height: 20),
+          _buildSpotEventsSection(),
+          SizedBox(height: 20),
+          _buildMyEventsSection(),
           SizedBox(height: 20),
           
         ],
@@ -2454,6 +2460,1348 @@ class _HomePage1State extends State<HomePage1>
     
     return filteredTurfs;
   }
+
+// Build My Events Section
+Widget _buildMyEventsSection() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Container(
+        padding: EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Color(0xFFE0F7FA),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.event_available, color: Color(0xFF00838F), size: 24),
+            ),
+            SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'My Events',
+                style: TextStyle(
+                  color: Color(0xFF00838F),
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: Color(0xFFE0F7FA),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextButton(
+                onPressed: () => _navigateToMyEvents(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'View All',
+                      style: TextStyle(
+                        color: Color(0xFF00838F),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.arrow_forward, color: Color(0xFF00838F), size: 16),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      SizedBox(height: 16),
+      StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('event_registrations')
+            .where('userId', isEqualTo: widget.user?.uid)
+            .orderBy('registeredAt', descending: true)
+            .limit(3)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Container(
+              height: 140,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00838F)),
+                ),
+              ),
+            );
+          }
+
+          if (snapshot.hasError) {
+            return Container(
+              height: 140,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 32, color: Colors.red.shade400),
+                    SizedBox(height: 8),
+                    Text(
+                      'Error loading events',
+                      style: TextStyle(
+                        color: Colors.red.shade400,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Container(
+              height: 140,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFF5F5F5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.event_busy, size: 32, color: Color(0xFF00838F)),
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        'No events registered yet',
+                        style: TextStyle(
+                          color: Color(0xFF00838F),
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Register for events to see them here',
+                        style: TextStyle(
+                          color: Color(0xFF757575),
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return Container(
+            height: 296,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: snapshot.data!.docs.length,
+              itemBuilder: (context, index) {
+                final registration = snapshot.data!.docs[index];
+                final data = registration.data() as Map<String, dynamic>;
+                
+                return Container(
+                  width: 280,
+                  margin: EdgeInsets.only(right: 12),
+                  child: _buildMyEventCard(data, registration.id),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    ],
+  );
+}
+Widget _buildMyEventCard(Map<String, dynamic> registrationData, String registrationId) {
+  final eventDate = registrationData['eventDate'];
+  DateTime? eventDateTime;
+  bool isUpcoming = true;
+
+  if (eventDate != null) {
+    if (eventDate is Timestamp) {
+      eventDateTime = eventDate.toDate();
+    } else {
+      eventDateTime = DateTime.parse(eventDate.toString());
+    }
+    isUpcoming = eventDateTime.isAfter(DateTime.now());
+  }
+
+  // Format time to 12-hour format with AM/PM
+  String formattedTime = '';
+  if (registrationData['eventTime'] != null) {
+    final timeStr = registrationData['eventTime'];
+    final parts = timeStr.split(':');
+    if (parts.length >= 2) {
+      int hour = int.tryParse(parts[0]) ?? 0;
+      int minute = int.tryParse(parts[1]) ?? 0;
+      String period = hour >= 12 ? 'PM' : 'AM';
+      hour = hour % 12;
+      hour = hour == 0 ? 12 : hour;
+      formattedTime = '$hour:${minute.toString().padLeft(2, '0')} $period';
+    }
+  }
+
+  return GestureDetector(
+    onTap: () => _showMyEventDetails(registrationData, registrationId),
+    child: AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      margin: EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      transform: Matrix4.identity()
+        ..scale(1.0)
+        ..translate(0.0, 0.0),
+      child: Stack(
+        children: [
+          // Shadow layer
+          Positioned(
+            top: 5,
+            left: 0,
+            right: 0,
+            bottom: -5,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+          
+          // Main card
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Color(0xFFD4AF37), width: 1.5), // Gold border
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipPath(
+              clipper: TicketClipper(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Premium header with gradient
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0xFF00695C), // Dark teal
+                          Color(0xFF00838F), // Teal
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withOpacity(0.3), width: 0.5),
+                          ),
+                          child: Text(
+                            isUpcoming ? 'UPCOMING' : 'PAST',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                        Spacer(),
+                        // Gold ticket icon
+                        Container(
+                          padding: EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Color(0xFFD4AF37).withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.confirmation_number,
+                            size: 18,
+                            color: Color(0xFFD4AF37),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // Elegant divider
+                  Container(
+                    height: 1.5,
+                    margin: EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Color(0xFFD4AF37).withOpacity(0.5),
+                          Colors.transparent,
+                        ],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                    ),
+                  ),
+                  
+                  // Ticket content
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Event name with underline
+                        Container(
+                          padding: EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Color(0xFFE0F2F1),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            registrationData['eventName'] ?? 'Event',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Color(0xFF00695C),
+                              letterSpacing: 0.3,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        
+                        SizedBox(height: 14),
+                        
+                        // Date with icon
+                        _buildInfoRow(
+                          icon: Icons.event,
+                          text: _formatEventDate(registrationData['eventDate']),
+                          iconBgColor: Color(0xFFE0F2F1),
+                          iconColor: Color(0xFF00838F),
+                        ),
+                        
+                        // Time with icon (if available)
+                        if (registrationData['eventTime'] != null) ...[
+                          SizedBox(height: 10),
+                          _buildInfoRow(
+                            icon: Icons.access_time,
+                            text: formattedTime.isNotEmpty ? formattedTime : registrationData['eventTime'],
+                            iconBgColor: Color(0xFFE0F2F1),
+                            iconColor: Color(0xFF00838F),
+                          ),
+                        ],
+                        
+                        SizedBox(height: 10),
+                        
+                        // Payment info with icon
+                        _buildInfoRow(
+                          icon: Icons.payment,
+                          text: '${registrationData['paymentType'] ?? 'Free'}${registrationData['paymentType'] != 'Free' && registrationData['price'] != null ? ' - ₹${registrationData['price']}' : ''}',
+                          iconBgColor: Color(0xFFE0F2F1),
+                          iconColor: Color(0xFF00838F),
+                        ),
+                        
+                        SizedBox(height: 12),
+                        
+                        // View button with animation
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TweenAnimationBuilder(
+                            tween: Tween<double>(begin: 0.95, end: 1.0),
+                            duration: Duration(milliseconds: 500),
+                            curve: Curves.elasticOut,
+                            builder: (context, value, child) {
+                              return Transform.scale(
+                                scale: value,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Color(0xFFD4AF37),
+                                        Color(0xFFFFD700),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Color(0xFFD4AF37).withOpacity(0.3),
+                                        blurRadius: 6,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'View Details',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                      SizedBox(width: 6),
+                                      Icon(
+                                        Icons.arrow_forward,
+                                        size: 14,
+                                        color: Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Subtle shimmer effect
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: ShaderMask(
+                shaderCallback: (bounds) {
+                  return LinearGradient(
+                    colors: [
+                      Colors.white.withOpacity(0.0),
+                      Colors.white.withOpacity(0.05),
+                      Colors.white.withOpacity(0.0),
+                    ],
+                    stops: [0.0, 0.5, 1.0],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    tileMode: TileMode.mirror,
+                  ).createShader(bounds);
+                },
+                blendMode: BlendMode.overlay,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.transparent,
+                        Colors.white.withOpacity(0.03),
+                        Colors.transparent,
+                      ],
+                      stops: [0.0, 0.5, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildInfoRow({required IconData icon, required String text, required Color iconBgColor, required Color iconColor}) {
+  return Row(
+    children: [
+      Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: iconBgColor,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: iconColor,
+        ),
+      ),
+      SizedBox(width: 12),
+      Expanded(
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF424242),
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    ],
+  );
+}
+
+
+void _navigateToMyEvents() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => MyEventsPage(user: widget.user),
+    ),
+  );
+}
+
+void _showMyEventDetails(Map<String, dynamic> registrationData, String registrationId) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.white,
+          systemOverlayStyle: SystemUiOverlayStyle.dark,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: Color(0xFF00838F)),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text(
+            'Event Details',
+            style: TextStyle(
+              color: Color(0xFF00838F),
+              fontWeight: FontWeight.bold,
+              fontSize: 22,
+            ),
+          ),
+          centerTitle: true,
+        ),
+        body: SingleChildScrollView(
+          child: Column(
+            children: [
+              // Enhanced Header Card
+              Container(
+                margin: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF00838F),
+                      Color(0xFF26A69A),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0xFF00838F).withOpacity(0.3),
+                      blurRadius: 15,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.verified,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Registration Confirmed',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 20,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'You\'re all set for this event',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.9),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 20),
+                      Container(
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Successfully Registered',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Event Details Card
+              Container(
+                margin: EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Event Information',
+                        style: TextStyle(
+                          color: Color(0xFF00838F),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      _buildEnhancedDetailRow(
+                        Icons.event,
+                        'Event Name',
+                        registrationData['eventName'] ?? 'N/A',
+                      ),
+                      _buildEnhancedDetailRow(
+                        Icons.calendar_today,
+                        'Event Date',
+                        _formatEventDate(registrationData['eventDate']),
+                      ),
+                      if (registrationData['eventTime'] != null)
+                        _buildEnhancedDetailRow(
+                          Icons.access_time,
+                          'Event Time',
+                          registrationData['eventTime'],
+                        ),
+                      _buildEnhancedDetailRow(
+                        Icons.payment,
+                        'Payment Type',
+                        registrationData['paymentType'] ?? 'N/A',
+                      ),
+                      if (registrationData['paymentType'] != 'Free' && registrationData['price'] != null)
+                        _buildEnhancedDetailRow(
+                          Icons.attach_money,
+                          'Price',
+                          '₹${registrationData['price']}',
+                        ),
+                      _buildEnhancedDetailRow(
+                        Icons.app_registration,
+                        'Registration Date',
+                        _formatEventDate(registrationData['registeredAt']),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Next Steps Card
+              Container(
+                margin: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Color(0xFFE0F7FA),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.lightbulb,
+                              color: Color(0xFF00838F),
+                              size: 24,
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Next Steps',
+                            style: TextStyle(
+                              color: Color(0xFF00838F),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 16),
+                      _buildStepItem(
+                        Icons.email,
+                        'Check your email',
+                        'Look for the confirmation message',
+                      ),
+                      _buildStepItem(
+                        Icons.phone,
+                        'Stay reachable',
+                        'Organizers may contact you with updates',
+                      ),
+                      _buildStepItem(
+                        Icons.schedule,
+                        'Arrive on time',
+                        'Plan to reach the venue before the event starts',
+                      ),
+                      _buildStepItem(
+                        Icons.inventory_2,
+                        'Bring required items',
+                        'Check if there\'s anything you need to bring',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Action Button
+              Container(
+                margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF00838F),
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 4,
+                    shadowColor: Color(0xFF00838F).withOpacity(0.3),
+                  ),
+                  child: Text(
+                    'Back to My Events',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// Helper widget for enhanced detail rows
+Widget _buildEnhancedDetailRow(IconData icon, String label, String value) {
+  return Padding(
+    padding: EdgeInsets.only(bottom: 16),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Color(0xFFE0F7FA),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            icon,
+            color: Color(0xFF00838F),
+            size: 20,
+          ),
+        ),
+        SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF757575),
+                  fontSize: 14,
+                ),
+              ),
+              SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  color: Color(0xFF424242),
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// Helper widget for step items
+Widget _buildStepItem(IconData icon, String title, String description) {
+  return Padding(
+    padding: EdgeInsets.only(bottom: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Color(0xFFE0F7FA),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            color: Color(0xFF00838F),
+            size: 18,
+          ),
+        ),
+        SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF00838F),
+                  fontSize: 15,
+                ),
+              ),
+              SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  color: Color(0xFF757575),
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// Build Spot Events Section
+Widget _buildSpotEventsSection() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Container(
+        padding: EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Color(0xFFE0F7FA),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.event_outlined, color: Color(0xFF00838F), size: 24),
+            ),
+            SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'Spot Events',
+                style: TextStyle(
+                  color: Color(0xFF00838F),
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: Color(0xFFE0F7FA),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextButton(
+                onPressed: () => _navigateToAllEvents(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'View All',
+                      style: TextStyle(
+                        color: Color(0xFF00838F),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.arrow_forward, color: Color(0xFF00838F), size: 16),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      SizedBox(height: 16),
+      StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('spot_events')
+            .where('status', isEqualTo: 'approved')
+            .orderBy('eventDate', descending: false)
+            .limit(3)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Container(
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00838F)),
+                ),
+              ),
+            );
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Container(
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFF5F5F5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.event_outlined,
+                          size: 32,
+                          color: Color(0xFF00838F),
+                        ),
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        'No Events Available',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF00838F),
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Check back later for exciting events',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF757575),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return Container(
+            height: 200,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: snapshot.data!.docs.length,
+              itemBuilder: (context, index) {
+                final eventData = snapshot.data!.docs[index].data() as Map<String, dynamic>;
+                return _buildEventCard(eventData, snapshot.data!.docs[index].id);
+              },
+            ),
+          );
+        },
+      ),
+    ],
+  );
+}
+
+// Build individual event card
+Widget _buildEventCard(Map<String, dynamic> eventData, String eventId) {
+  return Container(
+    width: 280,
+    height: 200,
+    margin: EdgeInsets.only(right: 16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.08),
+          blurRadius: 12,
+          offset: Offset(0, 4),
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showEventDetails(eventData, eventId),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Event Image
+              Container(
+                height: 100,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF00838F),
+                      Color(0xFF26A69A),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Image.network(
+                        eventData['imageUrl'] ?? 'https://picsum.photos/280/120',
+                        fit: BoxFit.cover,
+                        colorBlendMode: BlendMode.softLight,
+                        color: Colors.white.withOpacity(0.3),
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.grey.shade200,
+                          child: Icon(Icons.event_outlined, size: 40, color: Colors.grey.shade400),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          eventData['eventType'] ?? 'Event',
+                          style: TextStyle(
+                            color: Color(0xFF00838F),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Event Details
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        eventData['name'] ?? 'Unnamed Event',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF212121),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        eventData['description'] ?? 'No description available',
+                        style: TextStyle(
+                          color: Color(0xFF757575),
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Color(0xFFE0F7FA),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.calendar_today,
+                              size: 12,
+                              color: Color(0xFF00838F),
+                            ),
+                          ),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _formatEventDate(eventData['eventDate']),
+                              style: TextStyle(
+                                color: Color(0xFF00838F),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Color(0xFFE0F7FA),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'View',
+                              style: TextStyle(
+                                color: Color(0xFF00838F),
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// Navigate to all events page
+void _navigateToAllEvents() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => SpotEventsPage(user: widget.user),
+    ),
+  );
+}
+
+// Show event details dialog
+void _showEventDetails(Map<String, dynamic> eventData, String eventId) {
+  showDialog(
+    context: context,
+    builder: (context) => EventDetailsDialog(
+      eventData: eventData,
+      eventId: eventId,
+      user: widget.user,
+    ),
+  );
+}
+
+// Format event date
+String _formatEventDate(dynamic date) {
+  if (date is Timestamp) {
+    final dateTime = date.toDate();
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+  }
+  return date.toString();
+}
+
+Widget _buildDetailRow(String label, String value) {
+  return Padding(
+    padding: EdgeInsets.only(bottom: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            '$label:',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF00838F),
+              fontSize: 16,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: Color(0xFF424242),
+              fontSize: 16,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
 }
 
 // 2. Add this new SupportPage widget (place it at the end of this file):
@@ -3576,4 +4924,1343 @@ class _AllNearbyTurfsPageState extends State<AllNearbyTurfsPage> {
       ),
     );
   }
+}
+
+// All Events Page for normal users
+class AllEventsPage extends StatefulWidget {
+  final User? user;
+
+  AllEventsPage({super.key, this.user});
+
+  @override
+  _AllEventsPageState createState() => _AllEventsPageState();
+}
+
+class _AllEventsPageState extends State<AllEventsPage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _selectedEventType = 'All';
+  String _selectedPaymentType = 'All';
+
+  final List<String> _eventTypes = [
+    'All',
+    'Marathon',
+    'Hackathon',
+    'Marriage Function',
+    'Ceremony',
+    'Sports Tournament',
+    'Cultural Event',
+    'Workshop',
+    'Other'
+  ];
+
+  final List<String> _paymentTypes = [
+    'All',
+    'Free',
+    'Paid',
+    'On-Spot Payment'
+  ];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.teal.shade700,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Spot Events',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ),
+      body: Column(
+        children: [
+          // Search and Filter Section
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  blurRadius: 5,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Search Bar
+                TextField(
+                  controller: _searchController,
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value.toLowerCase();
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Search events...',
+                    prefixIcon: Icon(Icons.search, color: Colors.teal.shade600),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+                SizedBox(height: 12),
+                // Filter Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedEventType,
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedEventType = value!;
+                          });
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Event Type',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        items: _eventTypes.map((String type) {
+                          return DropdownMenuItem<String>(
+                            value: type,
+                            child: Text(type),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedPaymentType,
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedPaymentType = value!;
+                          });
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Payment Type',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        items: _paymentTypes.map((String type) {
+                          return DropdownMenuItem<String>(
+                            value: type,
+                            child: Text(type),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Events List
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('spot_events')
+                  .where('status', isEqualTo: 'approved')
+                  .where('isBookingOpen', isEqualTo: true)
+                  .orderBy('eventDate', descending: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator(color: Colors.teal));
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.event_outlined,
+                          size: 80,
+                          color: Colors.grey[400],
+                        ),
+                        SizedBox(height: 20),
+                        Text(
+                          'No Events Available',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'Check back later for exciting events',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // Filter events
+                final filteredEvents = snapshot.data!.docs.where((doc) {
+                  final eventData = doc.data() as Map<String, dynamic>;
+                  
+                  // Search filter
+                  if (_searchQuery.isNotEmpty) {
+                    final eventName = (eventData['name'] ?? '').toString().toLowerCase();
+                    final eventDescription = (eventData['description'] ?? '').toString().toLowerCase();
+                    final eventType = (eventData['eventType'] ?? '').toString().toLowerCase();
+                    
+                    if (!eventName.contains(_searchQuery) && 
+                        !eventDescription.contains(_searchQuery) &&
+                        !eventType.contains(_searchQuery)) {
+                      return false;
+                    }
+                  }
+                  
+                  // Event type filter
+                  if (_selectedEventType != 'All' && eventData['eventType'] != _selectedEventType) {
+                    return false;
+                  }
+                  
+                  // Payment type filter
+                  if (_selectedPaymentType != 'All' && eventData['paymentType'] != _selectedPaymentType) {
+                    return false;
+                  }
+                  
+                  return true;
+                }).toList();
+
+                if (filteredEvents.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 80, color: Colors.grey[400]),
+                        SizedBox(height: 20),
+                        Text(
+                          'No events found',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'Try adjusting your search criteria',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: EdgeInsets.all(16),
+                  itemCount: filteredEvents.length,
+                  itemBuilder: (context, index) {
+                    final eventData = filteredEvents[index].data() as Map<String, dynamic>;
+                    return _buildEventCard(eventData, filteredEvents[index].id);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventCard(Map<String, dynamic> eventData, String eventId) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 10,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _showEventDetails(eventData, eventId),
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          eventData['imageUrl'] ?? 'https://picsum.photos/80/80',
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            width: 80,
+                            height: 80,
+                            color: Colors.grey[200],
+                            child: Icon(Icons.event_outlined, size: 40, color: Colors.grey[400]),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              eventData['name'] ?? 'Unnamed Event',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              eventData['description'] ?? 'No description available',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 14,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.calendar_today,
+                                  size: 16,
+                                  color: Colors.teal.shade600,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  _formatEventDate(eventData['eventDate']),
+                                  style: TextStyle(
+                                    color: Colors.teal.shade600,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Spacer(),
+                                Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.teal.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    eventData['eventType'] ?? 'Event',
+                                    style: TextStyle(
+                                      color: Colors.teal.shade700,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.payment,
+                        size: 16,
+                        color: Colors.green.shade600,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        eventData['paymentType'] ?? 'Free',
+                        style: TextStyle(
+                          color: Colors.green.shade600,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (eventData['price'] != null && eventData['price'] > 0) ...[
+                        SizedBox(width: 8),
+                        Text(
+                          '₹${eventData['price']}',
+                          style: TextStyle(
+                            color: Colors.green.shade700,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                      Spacer(),
+                      ElevatedButton(
+                        onPressed: () => _showEventDetails(eventData, eventId),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal.shade600,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          'View Details',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEventDetails(Map<String, dynamic> eventData, String eventId) {
+    showDialog(
+      context: context,
+      builder: (context) => EventDetailsDialog(
+        eventData: eventData,
+        eventId: eventId,
+        user: widget.user,
+      ),
+    );
+  }
+
+  String _formatEventDate(dynamic date) {
+    if (date is Timestamp) {
+      final dateTime = date.toDate();
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+    return date.toString();
+  }
+}
+
+// Event Details Dialog for normal users
+class EventDetailsDialog extends StatefulWidget {
+  final Map<String, dynamic> eventData;
+  final String eventId;
+  final User? user;
+
+  EventDetailsDialog({
+    super.key,
+    required this.eventData,
+    required this.eventId,
+    required this.user,
+  });
+
+  @override
+  _EventDetailsDialogState createState() => _EventDetailsDialogState();
+}
+
+class _EventDetailsDialogState extends State<EventDetailsDialog> {
+  bool _isRegistering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.all(16),
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxWidth: MediaQuery.of(context).size.width * 0.9,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 20,
+              spreadRadius: 0,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Compact Header
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF00838F),
+                    Color(0xFF26A69A),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.event_outlined, color: Colors.white, size: 24),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      widget.eventData['name'] ?? 'Event Details',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Icon(Icons.close, color: Colors.white, size: 20),
+                  ),
+                ],
+              ),
+            ),
+            // Compact Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Compact Event Image
+                    if (widget.eventData['imageUrl'] != null)
+                      Container(
+                        width: double.infinity,
+                        height: 160,
+                        margin: EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 8,
+                              spreadRadius: 0,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            widget.eventData['imageUrl'],
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              color: Color(0xFFF5F5F5),
+                              child: Center(
+                                child: Icon(Icons.event_outlined, size: 48, color: Color(0xFF00838F)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    
+                    // Compact Event Details Grid
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 2.5,
+                      children: [
+                        _buildCompactDetailRow(Icons.category_outlined, 'Type', widget.eventData['eventType'] ?? 'N/A'),
+                        _buildCompactDetailRow(Icons.payments_outlined, 'Payment', widget.eventData['paymentType'] ?? 'N/A'),
+                    if (widget.eventData['price'] != null && widget.eventData['price'] > 0)
+                          _buildCompactDetailRow(Icons.currency_rupee_outlined, 'Price', '₹${widget.eventData['price']}'),
+                        _buildCompactDetailRow(Icons.group_outlined, 'Max People', widget.eventData['maxParticipants']?.toString() ?? 'N/A'),
+                        _buildCompactDetailRow(Icons.calendar_today_outlined, 'Date', _formatEventDate(widget.eventData['eventDate'])),
+                        _buildCompactDetailRow(Icons.access_time_outlined, 'Time', _formatEventTime(widget.eventData['eventTime'])),
+                      ],
+                    ),
+                    
+                    SizedBox(height: 16),
+                    
+                    // Compact Description
+                    if (widget.eventData['description'] != null && widget.eventData['description'].isNotEmpty)
+                      Container(
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                            Row(
+                              children: [
+                                Icon(Icons.description_outlined, color: Color(0xFF00838F), size: 18),
+                                SizedBox(width: 8),
+                          Text(
+                            'Description',
+                            style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF00838F),
+                                  ),
+                                ),
+                              ],
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            widget.eventData['description'],
+                            style: TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF616161),
+                                height: 1.4,
+                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    
+                    // Compact Content
+                    if (widget.eventData['content'] != null && widget.eventData['content'].isNotEmpty)
+                      Container(
+                        margin: EdgeInsets.only(top: 16),
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                            Row(
+                              children: [
+                                Icon(Icons.article_outlined, color: Color(0xFF00838F), size: 18),
+                                SizedBox(width: 8),
+                          Text(
+                            'Event Content',
+                            style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF00838F),
+                                  ),
+                                ),
+                              ],
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            widget.eventData['content'],
+                            style: TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF616161),
+                                height: 1.4,
+                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            // Compact Footer - Fixed overflow issue
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                ),
+                ),
+              child: IntrinsicHeight( // Added IntrinsicHeight to prevent overflow
+              child: Row(
+                children: [
+                  Expanded(
+                      child: SizedBox(
+                        height: 44,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            backgroundColor: Color(0xFFE0E0E0),
+                            foregroundColor: Color(0xFF757575),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                      child: Text(
+                        'Close',
+                        style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                    ),
+                    SizedBox(width: 12),
+                  Expanded(
+                      child: SizedBox(
+                        height: 44,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Color(0xFF00838F),
+                                Color(0xFF26A69A),
+                              ],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0xFF00838F).withOpacity(0.3),
+                                blurRadius: 8,
+                                spreadRadius: 0,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _isRegistering ? null : _registerForEvent,
+                              borderRadius: BorderRadius.circular(10),
+                              splashColor: Colors.white.withOpacity(0.2),
+                              highlightColor: Colors.white.withOpacity(0.1),
+                              child: Center(
+                      child: _isRegistering
+                          ? SizedBox(
+                                        height: 18,
+                                        width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Text(
+                                        'Register',
+                              style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactDetailRow(IconData icon, String label, String value) {
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Color(0xFFE0F7FA),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Color(0xFF00838F), size: 16),
+          ),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+                Text(
+                  label,
+              style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF757575),
+                    fontSize: 12,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+              value,
+              style: TextStyle(
+                    color: Color(0xFF424242),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+              ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _registerForEvent() async {
+    if (widget.user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please login to register for events'),
+          backgroundColor: Color(0xFFFF9800),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isRegistering = true;
+    });
+
+    try {
+      // Check if user is already registered
+      final existingRegistration = await FirebaseFirestore.instance
+          .collection('event_registrations')
+          .where('eventId', isEqualTo: widget.eventId)
+          .where('userId', isEqualTo: widget.user!.uid)
+          .get();
+
+      if (existingRegistration.docs.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('You are already registered for this event'),
+            backgroundColor: Color(0xFFFF9800),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+        return;
+      }
+
+      // Check if event is full
+      final currentRegistrations = await FirebaseFirestore.instance
+          .collection('event_registrations')
+          .where('eventId', isEqualTo: widget.eventId)
+          .get();
+
+      final maxParticipants = widget.eventData['maxParticipants'] ?? 0;
+      if (maxParticipants > 0 && currentRegistrations.docs.length >= maxParticipants) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Event is full. No more registrations accepted.'),
+            backgroundColor: Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+        return;
+      }
+
+      // Register user for event
+      await FirebaseFirestore.instance.collection('event_registrations').add({
+        'eventId': widget.eventId,
+        'userId': widget.user!.uid,
+        'userName': widget.user!.displayName ?? 'User',
+        'userEmail': widget.user!.email ?? '',
+        'eventName': widget.eventData['name'],
+        'eventDate': widget.eventData['eventDate'],
+        'eventTime': widget.eventData['eventTime'],
+        'paymentType': widget.eventData['paymentType'],
+        'price': widget.eventData['price'] ?? 0,
+        'registeredAt': FieldValue.serverTimestamp(),
+        'status': 'registered',
+      });
+
+      // Show success dialog with registration details
+      _showRegistrationSuccessDialog();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error registering for event: $e'),
+          backgroundColor: Color(0xFFD32F2F),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    } finally {
+      setState(() {
+        _isRegistering = false;
+      });
+    }
+  }
+
+  void _showRegistrationSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.all(16),
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.9,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 20,
+                spreadRadius: 0,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+          children: [
+              // Compact Success Header
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF00C853),
+                      Color(0xFF00E676),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white, size: 24),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+              'Registration Successful!',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+            ),
+          ],
+        ),
+              ),
+              
+              // Compact Success Content
+              Padding(
+                padding: EdgeInsets.all(16),
+                child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                      'You have registered for:',
+                      style: TextStyle(
+                        fontSize: 15, 
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF424242),
+                      ),
+            ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                        color: Color(0xFFE8F5E9),
+                        borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.eventData['name'] ?? 'Event',
+                    style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: Color(0xFF2E7D32),
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                          _buildCompactRegistrationDetailRow(Icons.calendar_today_outlined, 'Date', _formatEventDate(widget.eventData['eventDate'])),
+                  if (widget.eventData['eventTime'] != null)
+                            _buildCompactRegistrationDetailRow(Icons.access_time_outlined, 'Time', _formatEventTime(widget.eventData['eventTime'])),
+                          _buildCompactRegistrationDetailRow(Icons.category_outlined, 'Type', widget.eventData['eventType'] ?? 'N/A'),
+                          _buildCompactRegistrationDetailRow(Icons.payments_outlined, 'Payment', widget.eventData['paymentType'] ?? 'N/A'),
+                  if (widget.eventData['paymentType'] != 'Free' && widget.eventData['price'] != null)
+                            _buildCompactRegistrationDetailRow(Icons.currency_rupee_outlined, 'Price', '₹${widget.eventData['price']}'),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+                      'What\'s next:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700, 
+                        fontSize: 15,
+                        color: Color(0xFF00838F),
+                      ),
+            ),
+            SizedBox(height: 8),
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildCompactNextStepItem('View your registered events in "My Events"'),
+                          _buildCompactNextStepItem('Event organizers will contact you with details'),
+                          _buildCompactNextStepItem('Check your email for confirmation'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Compact Success Actions - Fixed overflow issue
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
+                  ),
+                ),
+                child: IntrinsicHeight( // Added IntrinsicHeight to prevent overflow
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 44,
+                          child: TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close dialog
+              Navigator.of(context).pop(); // Close event details
+            },
+                            style: TextButton.styleFrom(
+                              backgroundColor: Color(0xFFE0E0E0),
+                              foregroundColor: Color(0xFF757575),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: Text(
+                              'View My Events',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: SizedBox(
+                          height: 44,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Color(0xFF00C853),
+                                  Color(0xFF00E676),
+                                ],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Color(0xFF00C853).withOpacity(0.3),
+                                  blurRadius: 8,
+                                  spreadRadius: 0,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+              Navigator.of(context).pop(); // Close dialog
+              Navigator.of(context).pop(); // Close event details
+            },
+                                borderRadius: BorderRadius.circular(10),
+                                splashColor: Colors.white.withOpacity(0.2),
+                                highlightColor: Colors.white.withOpacity(0.1),
+                                child: Center(
+                                  child: Text(
+                                    'Done',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactRegistrationDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Color(0xFFC8E6C9),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: Color(0xFF2E7D32),
+              size: 14,
+            ),
+          ),
+          SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF2E7D32),
+              fontSize: 13,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: Color(0xFF1B5E20),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactNextStepItem(String text) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: EdgeInsets.only(top: 2, right: 8),
+            padding: EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: Color(0xFFE0F7FA),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.check_outlined,
+              color: Color(0xFF00838F),
+              size: 14,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF616161),
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatEventDate(dynamic date) {
+    if (date is Timestamp) {
+      final dateTime = date.toDate();
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+    return date.toString();
+  }
+
+  String _formatEventTime(dynamic time) {
+    if (time == null) return 'TBA';
+    
+    String timeStr = time.toString();
+    
+    // If time is already in 12-hour format with AM/PM, return as is
+    if (timeStr.contains('AM') || timeStr.contains('PM')) {
+      return timeStr;
+    }
+    
+    // Try to parse time in HH:MM format
+    try {
+      List<String> parts = timeStr.split(':');
+      if (parts.length >= 2) {
+        int hour = int.parse(parts[0]);
+        int minute = int.parse(parts[1]);
+        
+        String period = hour >= 12 ? 'PM' : 'AM';
+        hour = hour % 12;
+        hour = hour == 0 ? 12 : hour;
+        
+        return '$hour:${minute.toString().padLeft(2, '0')} $period';
+      }
+    } catch (e) {
+      // If parsing fails, return original time string
+      return timeStr;
+    }
+    
+    return timeStr;
+  }
+}
+
+
+class TicketClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    final radius = 16.0;
+    final notchRadius = 6.0;
+    final notchDepth = 8.0;
+    
+    // Start from top-left corner
+    path.moveTo(0, radius);
+    path.quadraticBezierTo(0, 0, radius, 0);
+    
+    // Top edge
+    path.lineTo(size.width - radius, 0);
+    path.quadraticBezierTo(size.width, 0, size.width, radius);
+    
+    // Right edge with notch
+    path.lineTo(size.width, size.height * 0.45 - notchDepth);
+    path.arcToPoint(
+      Offset(size.width, size.height * 0.45 + notchDepth),
+      radius: Radius.circular(notchRadius),
+      clockwise: false,
+    );
+    
+    path.lineTo(size.width, size.height * 0.55 - notchDepth);
+    path.arcToPoint(
+      Offset(size.width, size.height * 0.55 + notchDepth),
+      radius: Radius.circular(notchRadius),
+      clockwise: false,
+    );
+    
+    path.lineTo(size.width, size.height - radius);
+    path.quadraticBezierTo(size.width, size.height, size.width - radius, size.height);
+    
+    // Bottom edge
+    path.lineTo(radius, size.height);
+    path.quadraticBezierTo(0, size.height, 0, size.height - radius);
+    
+    // Left edge with notch
+    path.lineTo(0, size.height * 0.55 + notchDepth);
+    path.arcToPoint(
+      Offset(0, size.height * 0.55 - notchDepth),
+      radius: Radius.circular(notchRadius),
+      clockwise: false,
+    );
+    
+    path.lineTo(0, size.height * 0.45 + notchDepth);
+    path.arcToPoint(
+      Offset(0, size.height * 0.45 - notchDepth),
+      radius: Radius.circular(notchRadius),
+      clockwise: false,
+    );
+    
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }

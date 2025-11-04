@@ -91,8 +91,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
       // Initialize FCM service (skip on web unless you have web setup)
       if (!kIsWeb) {
-        await FCMService.initialize();
-        print('FCM service initialized successfully.');
+        try {
+          await FCMService.initialize();
+          print('FCM service initialized successfully.');
+        } catch (e) {
+          print('FCM service initialization failed: $e');
+          // Continue app initialization even if FCM fails
+        }
       }
 
       if (mounted) {

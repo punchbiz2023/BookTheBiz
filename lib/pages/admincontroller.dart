@@ -6,10 +6,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:intl/intl.dart';
 import 'package:geocoding/geocoding.dart';
-
+import 'clawback.dart';
 import 'login.dart';
 import 'AdminSupportTicketsPage.dart';
 import 'UserDetailsPage.dart';
+import 'EventManager.dart';
 
 class AdminControllersPage extends StatefulWidget {
   const AdminControllersPage({super.key});
@@ -21,6 +22,7 @@ class AdminControllersPage extends StatefulWidget {
 class _AdminControllersPageState extends State<AdminControllersPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final EventManager _eventManager = EventManager();
   
   // State for users
   bool isLoadingUsers = true;
@@ -38,17 +40,26 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
   String refundSearchQuery = '';
   DateTime? refundFilterDate;
   
+  // State for events
+  bool isLoadingEvents = true;
+  String eventSearchQuery = '';
+  DateTime? eventFilterDate;
+  
   // Current selected page
   String currentPage = 'pendingUsers';
   
   // Drawer items
-  final List<Map<String, dynamic>> drawerItems = [
-    {'id': 'pendingUsers', 'title': 'Pending Users', 'icon': Icons.person},
-    {'id': 'verifiedUsers', 'title': 'Verified Users', 'icon': Icons.verified_user},
-    {'id': 'pendingTurfs', 'title': 'Pending Turfs', 'icon': Icons.stadium},
-    {'id': 'verifiedTurfs', 'title': 'Verified Turfs', 'icon': Icons.verified},
-    {'id': 'refundRequests', 'title': 'Refund Requests', 'icon': Icons.replay},
-  ];
+    final List<Map<String, dynamic>> drawerItems = [
+      {'id': 'pendingUsers', 'title': 'Pending Users', 'icon': Icons.person},
+      {'id': 'verifiedUsers', 'title': 'Verified Users', 'icon': Icons.verified_user},
+      {'id': 'pendingTurfs', 'title': 'Pending Turfs', 'icon': Icons.stadium},
+      {'id': 'verifiedTurfs', 'title': 'Verified Turfs', 'icon': Icons.verified},
+        {'id': 'pendingEvents', 'title': 'Pending Events', 'icon': Icons.event_outlined},
+        {'id': 'approvedEvents', 'title': 'Approved Events', 'icon': Icons.event_available},
+        {'id': 'eventAnalytics', 'title': 'Event Analytics', 'icon': Icons.analytics},
+        {'id': 'refundRequests', 'title': 'Refund Requests', 'icon': Icons.replay},
+        {'id': 'overdueClawbacks', 'title': 'Overdue Clawbacks', 'icon': Icons.money_off},
+    ];
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -2057,6 +2068,12 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
         return _buildTurfList(showPending: true);
       case 'verifiedTurfs':
         return _buildTurfList(showPending: false);
+        case 'pendingEvents':
+          return _eventManager.buildEventList(showPending: true, eventSearchQuery: eventSearchQuery, eventFilterDate: eventFilterDate, context: context);
+        case 'approvedEvents':
+          return _eventManager.buildEventList(showPending: false, eventSearchQuery: eventSearchQuery, eventFilterDate: eventFilterDate, context: context);
+        case 'eventAnalytics':
+          return _eventManager.buildEventAnalytics();
       case 'refundRequests':
         return _buildRefundRequestsList();
       default:
@@ -2502,7 +2519,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
                             fontSize: 16,
                           ),
                         ),
-                        onTap: () {
+                        onTap: () async {
                           setState(() {
                             currentPage = item['id'];
                             // Reset filters when changing tabs
@@ -2515,6 +2532,15 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
                             refundFilterDate = null;
                           });
                           Navigator.pop(context); // Close the drawer
+
+                          // ADD THIS: Navigate to separate page for overdue clawbacks
+                          if (item['id'] == 'overdueClawbacks') {
+                            await Future.delayed(Duration(milliseconds: 230)); // Wait for drawer close animation
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => OverdueClawbacksPage()),
+                            );
+                          }
                         },
                       ),
                     ),
@@ -2627,6 +2653,26 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
       case 'verifiedTurfs':
         return _buildTurfSearchBar();
         
+        case 'pendingEvents':
+        case 'approvedEvents':
+          return _eventManager.buildEventSearchBar(
+            onSearchChanged: (value) {
+              setState(() {
+                eventSearchQuery = value.toLowerCase();
+              });
+            },
+            onDateChanged: (date) {
+              setState(() {
+                eventFilterDate = date;
+              });
+            },
+            eventSearchQuery: eventSearchQuery,
+            eventFilterDate: eventFilterDate,
+            context: context,
+          );
+        case 'eventAnalytics':
+          return Container(); // No search bar for analytics
+        
       case 'refundRequests':
         return _buildRefundSearchBar();
         
@@ -2634,6 +2680,11 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
         return Container();
     }
   }
+
+
+
+
+
 }
 
 // Glassmorphism Card Widget

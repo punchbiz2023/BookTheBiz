@@ -40,8 +40,8 @@ android {
         applicationId "com.PunchBiz.odp"
         minSdkVersion 25
         targetSdkVersion flutter.targetSdkVersion
-        versionCode 29
-        versionName "1.0.29"
+        versionCode 31
+        versionName "1.0.31"
         multiDexEnabled true
         
         // Support for 16 KB memory page sizes (required for Android 15+)
