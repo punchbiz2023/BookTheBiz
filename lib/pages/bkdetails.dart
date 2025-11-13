@@ -34,8 +34,11 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
                 bookingData['razorpayPaymentId'] != null;
 
             if (isPaidBooking) {
-              // Create refund request for paid booking
-              await _createRefundRequest(bookingData, bookID);
+              // Create refund request for paid booking and also move the slot in the same click
+              final created = await _createRefundRequest(bookingData, bookID);
+              if (created) {
+                await _removeBookingSlot(doc, startTime, endTime);
+              }
             } else {
               // For non-paid bookings, just remove the slot
               await _removeBookingSlot(doc, startTime, endTime);
@@ -56,9 +59,9 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
     }
   }
 
-  Future<void> _createRefundRequest(Map<String, dynamic> bookingData, String bookingId) async {
+  Future<bool> _createRefundRequest(Map<String, dynamic> bookingData, String bookingId) async {
     try {
-      if (!mounted) return;
+      if (!mounted) return false;
       // Show loading dialog
       showDialog(
         context: context,
@@ -92,7 +95,7 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
         'slots': bookingData['bookingSlots'],
       });
 
-      if (!mounted) return;
+      if (!mounted) return false;
       // Close loading dialog
       Navigator.of(context).pop();
 
@@ -100,20 +103,24 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Refund request submitted successfully! Admin will review and process your refund.'),
+            content: Text(
+              'Refund request submitted! Amount will be refunded within 3-5 business days. Need help? Reach support anytime.',
+            ),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 5),
+            duration: Duration(seconds: 6),
           ),
         );
 
         // Refresh the page to show updated status
-        if (!mounted) return;
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
+        return true;
       } else {
         throw Exception('Failed to create refund request');
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       // Close loading dialog if still open
       Navigator.of(context).maybePop();
 
@@ -124,6 +131,7 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
           backgroundColor: Colors.red,
         ),
       );
+      return false;
     }
   }
 

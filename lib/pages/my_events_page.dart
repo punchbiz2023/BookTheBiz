@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class MyEventsPage extends StatefulWidget {
   final User? user;
@@ -14,8 +15,60 @@ class MyEventsPage extends StatefulWidget {
 class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMixin {
   String searchQuery = '';
   String selectedFilter = 'All';
+  bool _showCancelledOnly = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+
+  String _derivePaymentType(Map<String, dynamic> data) {
+    final explicitType = (data['paymentType'] ?? data['paymentMethod'])?.toString();
+    if (explicitType != null && explicitType.trim().isNotEmpty) {
+      final lowered = explicitType.toLowerCase();
+      if (lowered == 'free' || lowered == 'paid' || lowered == 'online' || lowered == 'offline') {
+        if (lowered == 'online') {
+          return (_parseDouble(data['price']) ?? 0) > 0 ? 'Paid' : 'Free';
+        }
+        return lowered == 'free' ? 'Free' : 'Paid';
+      }
+    }
+    return (_parseDouble(data['price']) ?? _parseDouble(data['baseAmount']) ?? 0) > 0 ? 'Paid' : 'Free';
+  }
+
+  double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  String _formatCurrency(double? amount) {
+    if (amount == null) return '';
+    if (amount == amount.roundToDouble()) {
+      return '₹${amount.toStringAsFixed(0)}';
+    }
+    return '₹${amount.toStringAsFixed(2)}';
+  }
+
+  DateTime? _parseEventDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String && value.isNotEmpty) {
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) return parsed;
+      // Handle plain YYYY-MM-DD strings (parse already covers, but fallback to DateTime components)
+      try {
+        final sanitized = value.replaceAll('/', '-');
+        return DateTime.parse(sanitized);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  DateTime _fallbackDateTime(Map<String, dynamic> data, {DateTime? fallback}) {
+    return _parseEventDateTime(data['eventDate']) ??
+        _parseEventDateTime(data['createdAt']) ??
+        _parseEventDateTime(data['updatedAt']) ??
+        fallback ?? DateTime.fromMillisecondsSinceEpoch(0);
+  }
 
   @override
   void initState() {
@@ -71,7 +124,6 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
                 stream: FirebaseFirestore.instance
                     .collection('event_registrations')
                     .where('userId', isEqualTo: widget.user?.uid)
-                    .orderBy('registeredAt', descending: true)
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -86,53 +138,123 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
                     return _buildEmptyState();
                   }
 
-                  List<QueryDocumentSnapshot> filteredDocs = snapshot.data!.docs.where((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    final eventName = (data['eventName'] ?? '').toLowerCase();
-                    final eventDate = data['eventDate'];
-                    
-                    // Search filter
+                  final docs = snapshot.data?.docs ?? [];
+                  final now = DateTime.now();
+
+                  if (_showCancelledOnly) {
+                    final cancelledDocs = docs.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final status = (data['status'] ?? '').toString().toLowerCase();
+                      if (status != 'cancelled') return false;
+                      final eventName = (data['eventName'] ?? '').toString().toLowerCase();
                     if (searchQuery.isNotEmpty && !eventName.contains(searchQuery)) {
                       return false;
                     }
-                    
-                    // Status filter
-                    if (selectedFilter != 'All') {
-                      final now = DateTime.now();
-                      if (eventDate != null) {
-                        DateTime eventDateTime;
-                        if (eventDate is Timestamp) {
-                          eventDateTime = eventDate.toDate();
-                        } else {
-                          eventDateTime = DateTime.parse(eventDate.toString());
-                        }
-                        
-                        if (selectedFilter == 'Upcoming' && eventDateTime.isBefore(now)) {
-                          return false;
-                        }
-                        if (selectedFilter == 'Past' && eventDateTime.isAfter(now)) {
-                          return false;
-                        }
-                      }
-                    }
-                    
-                    return true;
-                  }).toList();
+                      return true;
+                    }).toList();
 
-                  if (filteredDocs.isEmpty) {
+                    cancelledDocs.sort((a, b) {
+                      final dataA = a.data() as Map<String, dynamic>;
+                      final dataB = b.data() as Map<String, dynamic>;
+                      final dateA = _parseEventDateTime(dataA['cancelledAt']) ??
+                          _parseEventDateTime(dataA['updatedAt']) ??
+                          _fallbackDateTime(dataA);
+                      final dateB = _parseEventDateTime(dataB['cancelledAt']) ??
+                          _parseEventDateTime(dataB['updatedAt']) ??
+                          _fallbackDateTime(dataB);
+                      return dateB.compareTo(dateA);
+                    });
+
+                    if (cancelledDocs.isEmpty) {
+                      return _buildNoResultsState();
+                    }
+
+                    return ListView.builder(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      itemCount: cancelledDocs.length,
+                      itemBuilder: (context, index) {
+                        final registration = cancelledDocs[index];
+                        final data = registration.data() as Map<String, dynamic>;
+                        return Padding(
+                          padding: EdgeInsets.only(bottom: 16),
+                          child: _buildEventTicketCard(
+                            data,
+                            registration.id,
+                            isCancelled: true,
+                          ),
+                        );
+                      },
+                    );
+                  }
+
+                  final List<QueryDocumentSnapshot> upcoming = [];
+                  final List<QueryDocumentSnapshot> past = [];
+
+                  for (final doc in docs) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final status = (data['status'] ?? '').toString().toLowerCase();
+                    if (status != 'confirmed') continue;
+
+                    final eventName = (data['eventName'] ?? '').toString().toLowerCase();
+                    if (searchQuery.isNotEmpty && !eventName.contains(searchQuery)) {
+                      continue;
+                    }
+
+                    final eventDateTime = _parseEventDateTime(data['eventDate']);
+                    final isUpcoming = eventDateTime != null && eventDateTime.isAfter(now);
+
+                    if (selectedFilter == 'Upcoming' && !isUpcoming) continue;
+                    if (selectedFilter == 'Past' && isUpcoming) continue;
+
+                    if (isUpcoming) {
+                      upcoming.add(doc);
+                    } else {
+                      past.add(doc);
+                    }
+                  }
+
+                  upcoming.sort((a, b) {
+                    final dataA = a.data() as Map<String, dynamic>;
+                    final dataB = b.data() as Map<String, dynamic>;
+                    final dateA = _parseEventDateTime(dataA['eventDate']) ?? _fallbackDateTime(dataA, fallback: DateTime.now());
+                    final dateB = _parseEventDateTime(dataB['eventDate']) ?? _fallbackDateTime(dataB, fallback: DateTime.now());
+                    return dateA.compareTo(dateB);
+                  });
+
+                  past.sort((a, b) {
+                    final dataA = a.data() as Map<String, dynamic>;
+                    final dataB = b.data() as Map<String, dynamic>;
+                    final dateA = _parseEventDateTime(dataA['eventDate']) ?? _fallbackDateTime(dataA);
+                    final dateB = _parseEventDateTime(dataB['eventDate']) ?? _fallbackDateTime(dataB);
+                    return dateB.compareTo(dateA);
+                  });
+
+                  List<QueryDocumentSnapshot> orderedDocs;
+                  if (selectedFilter == 'Upcoming') {
+                    orderedDocs = upcoming;
+                  } else if (selectedFilter == 'Past') {
+                    orderedDocs = past;
+                  } else {
+                    orderedDocs = [...upcoming, ...past];
+                  }
+
+                  if (orderedDocs.isEmpty) {
                     return _buildNoResultsState();
                   }
 
                   return ListView.builder(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    itemCount: filteredDocs.length,
+                    itemCount: orderedDocs.length,
                     itemBuilder: (context, index) {
-                      final registration = filteredDocs[index];
+                      final registration = orderedDocs[index];
                       final data = registration.data() as Map<String, dynamic>;
-                      
                       return Padding(
                         padding: EdgeInsets.only(bottom: 16),
-                        child: _buildEventTicketCard(data, registration.id),
+                        child: _buildEventTicketCard(
+                          data,
+                          registration.id,
+                          isCancelled: false,
+                        ),
                       );
                     },
                   );
@@ -195,7 +317,10 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
           ),
           SizedBox(height: 12),
           // Filter Dropdown
-          Container(
+          Row(
+            children: [
+              Expanded(
+                child: Container(
             decoration: BoxDecoration(
               color: Color(0xFFF5F5F5),
               borderRadius: BorderRadius.circular(12),
@@ -235,19 +360,279 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
               onChanged: (String? newValue) {
                 setState(() {
                   selectedFilter = newValue!;
+                        _showCancelledOnly = false;
+                      });
+                    },
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: _showCancelledOnly ? const Color(0xFFFFEBEE) : const Color(0xFFFFF5F5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _showCancelledOnly ? const Color(0xFFE53935) : const Color(0xFFFFCDD2),
+                    width: 1.2,
+                  ),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.delete_sweep_rounded,
+                    color: _showCancelledOnly ? const Color(0xFFC62828) : const Color(0xFFE53935),
+                  ),
+                  tooltip: _showCancelledOnly ? 'Show active bookings' : 'View cancelled bookings',
+                  onPressed: () {
+                    setState(() {
+                      _showCancelledOnly = !_showCancelledOnly;
+                      if (_showCancelledOnly) {
+                        selectedFilter = 'All';
+                      }
                 });
               },
             ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEventTicketCard(Map<String, dynamic> registrationData, String registrationId) {
+  Future<void> _showCancelRegistrationSheet(
+      Map<String, dynamic> registrationData,
+      String registrationId,
+      bool isPaid,
+      bool isUpcoming) async {
+    if (!isUpcoming) return;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final price = _parseDouble(registrationData['price']) ??
+            _parseDouble(registrationData['baseAmount']) ??
+            0;
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            left: 24,
+            right: 24,
+            top: 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Icon(
+                Icons.cancel_schedule_send_rounded,
+                color: isPaid ? const Color(0xFFFF7043) : const Color(0xFFD32F2F),
+                size: 42,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Cancel Event Booking?',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                  color: Colors.grey.shade900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isPaid
+                    ? 'You will receive a refund within 3-5 business days once admin processes the request.'
+                    : 'This will release your spot for other participants.',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (isPaid && price > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3E0),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.payments, color: Color(0xFFFFA726)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Amount to refund: ${_formatCurrency(price)}',
+                          style: const TextStyle(
+                            color: Color(0xFFEF6C00),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey.shade700,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Keep Booking'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        await _cancelEventRegistration(
+                          registrationData,
+                          registrationId,
+                          isPaid,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD32F2F),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Yes, Cancel'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _cancelEventRegistration(
+      Map<String, dynamic> registrationData,
+      String registrationId,
+      bool isPaid) async {
+    try {
+      final docRef = FirebaseFirestore.instance
+          .collection('event_registrations')
+          .doc(registrationId);
+      final currentSnap = await docRef.get();
+      if (!currentSnap.exists) {
+        throw Exception('Registration not found.');
+      }
+      final currentData = currentSnap.data() as Map<String, dynamic>;
+      final currentStatus =
+          (currentData['status'] ?? '').toString().toLowerCase();
+      if (currentStatus == 'cancelled') {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This booking has already been cancelled.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+      if (currentData['refundRequestId'] != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Refund request already submitted for this booking.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      if (isPaid) {
+        final refundFn =
+            FirebaseFunctions.instance.httpsCallable('createEventRefundRequest');
+        await refundFn({
+          'registrationId': registrationId,
+          'userId': widget.user?.uid,
+          'eventId': registrationData['eventId'],
+          'amount': registrationData['price'],
+          'paymentId': registrationData['razorpayPaymentId'],
+          'reason': 'User requested cancellation',
+          'eventDate': registrationData['eventDate'],
+          'eventName': registrationData['eventName'],
+        });
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Event booking cancelled. Refund request sent to admin.'),
+            backgroundColor: Colors.deepOrange,
+          ),
+        );
+      } else {
+        await docRef.update({
+          'status': 'cancelled',
+          'cancelledAt': FieldValue.serverTimestamp(),
+        });
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Event booking cancelled.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error cancelling booking: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Widget _buildEventTicketCard(
+      Map<String, dynamic> registrationData,
+      String registrationId,
+      {bool isCancelled = false}) {
     final eventDate = registrationData['eventDate'];
     DateTime? eventDateTime;
     bool isUpcoming = true;
+    final paymentType = _derivePaymentType(registrationData);
+    final price = _parseDouble(registrationData['price']) ??
+        _parseDouble(registrationData['baseAmount']) ??
+        0;
+    final bool isPaid = paymentType == 'Paid' && price > 0;
+    final statusValue =
+        (registrationData['status'] ?? '').toString().toLowerCase();
+    final bool isCancelledStatus = isCancelled || statusValue == 'cancelled';
     
     if (eventDate != null) {
       if (eventDate is Timestamp) {
@@ -257,14 +642,19 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
       }
       isUpcoming = eventDateTime.isAfter(DateTime.now());
     }
+    if (isCancelledStatus) {
+      isUpcoming = false;
+    }
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isCancelledStatus ? const Color(0xFFFFEBEE) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: isCancelledStatus
+                ? Colors.red.withOpacity(0.08)
+                : Colors.black.withOpacity(0.08),
             blurRadius: 20,
             spreadRadius: 0,
             offset: Offset(0, 8),
@@ -279,10 +669,9 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
             padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  Color(0xFF00838F),
-                  Color(0xFF26A69A),
-                ],
+                colors: isCancelledStatus
+                    ? [const Color(0xFFFF8A80), const Color(0xFFD32F2F)]
+                    : [const Color(0xFF00838F), const Color(0xFF26A69A)],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
               ),
@@ -296,13 +685,17 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: isUpcoming 
-                              ? Color(0xFF00C853) 
-                              : Color(0xFF757575),
+                    color: isCancelledStatus
+                        ? const Color(0xFFC62828)
+                        : (isUpcoming
+                            ? const Color(0xFF00C853)
+                            : const Color(0xFF757575)),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    isUpcoming ? 'UPCOMING' : 'PAST',
+                    isCancelledStatus
+                        ? 'CANCELLED'
+                        : (isUpcoming ? 'UPCOMING' : 'PAST'),
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 10,
@@ -313,7 +706,7 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
                 ),
                 Spacer(),
                 Icon(
-                  Icons.confirmation_number, 
+                  isCancelledStatus ? Icons.cancel : Icons.confirmation_number,
                   color: Colors.white,
                   size: 24,
                 ),
@@ -385,7 +778,9 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
                     Expanded(
                       child: _buildInfoItem(
                         Icons.payments, 
-                        '${registrationData['paymentType'] ?? 'Free'}${registrationData['paymentType'] != 'Free' && registrationData['price'] != null ? ' - ₹${registrationData['price']}' : ''}',
+                        isPaid
+                            ? '$paymentType - ${_formatCurrency(price)}'
+                            : paymentType,
                         'Payment',
                       ),
                     ),
@@ -393,7 +788,11 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
                     Expanded(
                       child: _buildInfoItem(
                         Icons.app_registration,
-                        _formatEventDate(registrationData['registeredAt']),
+                        _formatEventDate(
+                          registrationData['registeredAt'] ??
+                              registrationData['createdAt'] ??
+                              registrationData['updatedAt'],
+                        ),
                         'Registered',
                       ),
                     ),
@@ -449,6 +848,33 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
                     ),
                   ],
                 ),
+                if (isUpcoming && !isCancelledStatus) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                  child: OutlinedButton.icon(
+                      onPressed: () => _showCancelRegistrationSheet(
+                        registrationData,
+                        registrationId,
+                        isPaid,
+                        isUpcoming,
+                      ),
+                      icon: const Icon(Icons.cancel),
+                      label: const Text(
+                        'Cancel Booking',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFD32F2F),
+                        side: const BorderSide(color: Color(0xFFD32F2F)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -644,11 +1070,16 @@ class _MyEventsPageState extends State<MyEventsPage> with TickerProviderStateMix
   }
 
   String _formatEventDate(dynamic date) {
+    DateTime? dateTime;
     if (date is Timestamp) {
-      final dateTime = date.toDate();
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      dateTime = date.toDate();
+    } else if (date is DateTime) {
+      dateTime = date;
+    } else if (date is String && date.isNotEmpty) {
+      dateTime = DateTime.tryParse(date);
     }
-    return date.toString();
+    if (dateTime == null) return date?.toString() ?? 'N/A';
+    return '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';
   }
 
   String _formatEventTime(dynamic time) {
@@ -696,6 +1127,36 @@ class EventDetailsPage extends StatelessWidget {
     required this.registrationData,
     required this.registrationId,
   });
+
+  String get _eventPaymentType {
+    final rawType = (registrationData['paymentType'] ?? registrationData['paymentMethod'])?.toString().trim();
+    if (rawType != null && rawType.isNotEmpty) {
+      final lowered = rawType.toLowerCase();
+      if (lowered == 'free') return 'Free';
+      if (lowered == 'paid') return 'Paid';
+    }
+    final price = _eventPrice ?? 0;
+    return price > 0 ? 'Paid' : 'Free';
+  }
+
+  double? get _eventPrice {
+    final price = _tryParseDouble(registrationData['price']);
+    if (price != null) return price;
+    return _tryParseDouble(registrationData['baseAmount']);
+  }
+
+  double? _tryParseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  String _formatCurrency(double amount) {
+    if (amount == amount.roundToDouble()) {
+      return '₹${amount.toStringAsFixed(0)}';
+    }
+    return '₹${amount.toStringAsFixed(2)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -830,6 +1291,9 @@ class EventDetailsPage extends StatelessWidget {
   }
 
   Widget _buildEventInfoCard() {
+    final paymentType = _eventPaymentType;
+    final price = _eventPrice;
+
     return Container(
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -856,14 +1320,30 @@ class EventDetailsPage extends StatelessWidget {
             ),
           ),
           SizedBox(height: 16),
-          _buildDetailRow(Icons.calendar_today, 'Date', _formatEventDate(registrationData['eventDate'])),
+          _buildDetailRow(
+            Icons.calendar_today,
+            'Date',
+            _formatEventDate(registrationData['eventDate']),
+          ),
           SizedBox(height: 12),
           if (registrationData['eventTime'] != null)
-            _buildDetailRow(Icons.access_time, 'Time', _formatEventTime(registrationData['eventTime'])),
+            _buildDetailRow(
+              Icons.access_time,
+              'Time',
+              _formatEventTime(registrationData['eventTime']),
+            ),
           SizedBox(height: 12),
-          _buildDetailRow(Icons.payments, 'Payment Type', registrationData['paymentType'] ?? 'Free'),
-          if (registrationData['paymentType'] != 'Free' && registrationData['price'] != null)
-            _buildDetailRow(Icons.attach_money, 'Price', '₹${registrationData['price']}'),
+          _buildDetailRow(
+            Icons.payments,
+            'Payment Type',
+            paymentType,
+          ),
+          if (paymentType == 'Paid' && price != null)
+            _buildDetailRow(
+              Icons.attach_money,
+              'Price',
+              _formatCurrency(price),
+            ),
         ],
       ),
     );
@@ -1007,11 +1487,20 @@ class EventDetailsPage extends StatelessWidget {
   }
 
   String _formatEventDate(dynamic date) {
+    DateTime? dateTime;
     if (date is Timestamp) {
-      final dateTime = date.toDate();
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      dateTime = date.toDate();
+    } else if (date is DateTime) {
+      dateTime = date;
+    } else if (date is String && date.isNotEmpty) {
+      dateTime = DateTime.tryParse(date);
     }
-    return date.toString();
+
+    if (dateTime == null) {
+      return date?.toString() ?? 'N/A';
+    }
+
+    return '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';
   }
 
   String _formatEventTime(dynamic time) {
@@ -1060,6 +1549,41 @@ class RegistrationInfoPage extends StatelessWidget {
     required this.registrationId,
   });
 
+  bool get _isCancelled {
+    final status = (registrationData['status'] ?? '').toString().toLowerCase();
+    return status == 'cancelled';
+  }
+
+  String get _registrationPaymentType {
+    final rawType = (registrationData['paymentType'] ?? registrationData['paymentMethod'])?.toString().trim();
+    if (rawType != null && rawType.isNotEmpty) {
+      final lowered = rawType.toLowerCase();
+      if (lowered == 'free') return 'Free';
+      if (lowered == 'paid') return 'Paid';
+    }
+    final price = _registrationPrice ?? 0;
+    return price > 0 ? 'Paid' : 'Free';
+  }
+
+  double? get _registrationPrice {
+    final price = _tryParseDouble(registrationData['price']);
+    if (price != null) return price;
+    return _tryParseDouble(registrationData['baseAmount']);
+  }
+
+  double? _tryParseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  String _formatCurrency(double amount) {
+    if (amount == amount.roundToDouble()) {
+      return '₹${amount.toStringAsFixed(0)}';
+    }
+    return '₹${amount.toStringAsFixed(2)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1097,6 +1621,11 @@ class RegistrationInfoPage extends StatelessWidget {
   }
 
   Widget _buildRegistrationStatusCard() {
+    final Color accentColor = _isCancelled ? const Color(0xFFD32F2F) : const Color(0xFF00C853);
+    final Color bgColor = _isCancelled ? const Color(0xFFFFEBEE) : const Color(0xFFE8F5E9);
+    final String title = _isCancelled ? 'Registration Status' : 'Registration Status';
+    final String subtitle = _isCancelled ? 'Booking Cancelled' : 'Successfully Registered';
+
     return Container(
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1116,10 +1645,14 @@ class RegistrationInfoPage extends StatelessWidget {
           Container(
             padding: EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Color(0xFFE8F5E9),
+              color: bgColor,
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.check_circle, color: Color(0xFF00C853), size: 32),
+            child: Icon(
+              _isCancelled ? Icons.cancel_rounded : Icons.check_circle,
+              color: accentColor,
+              size: 32,
+            ),
           ),
           SizedBox(width: 16),
           Expanded(
@@ -1127,7 +1660,7 @@ class RegistrationInfoPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Registration Status',
+                  title,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF757575),
@@ -1136,11 +1669,25 @@ class RegistrationInfoPage extends StatelessWidget {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Successfully Registered',
+                  subtitle,
                   style: TextStyle(
-                    color: Color(0xFF00C853),
+                    color: accentColor,
                     fontWeight: FontWeight.w700,
                     fontSize: 20,
+                  ),
+                ),
+                if (_isCancelled)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6.0),
+                    child: Text(
+                      _registrationPaymentType == 'Paid'
+                          ? 'Refund request will reflect once reviewed by admin.'
+                          : 'This registration is no longer active.'
+                      ,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
                   ),
                 ),
               ],
@@ -1152,6 +1699,8 @@ class RegistrationInfoPage extends StatelessWidget {
   }
 
   Widget _buildRegistrationDetailsCard() {
+    final paymentType = _registrationPaymentType;
+    final price = _registrationPrice;
     return Container(
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1185,12 +1734,20 @@ class RegistrationInfoPage extends StatelessWidget {
           if (registrationData['eventTime'] != null)
             _buildDetailRow(Icons.access_time, 'Event Time', _formatEventTime(registrationData['eventTime'])),
           SizedBox(height: 12),
-          _buildDetailRow(Icons.payments, 'Payment Type', registrationData['paymentType'] ?? 'N/A'),
+          _buildDetailRow(Icons.payments, 'Payment Type', paymentType),
           SizedBox(height: 12),
-          if (registrationData['paymentType'] != 'Free' && registrationData['price'] != null)
-            _buildDetailRow(Icons.attach_money, 'Price', '₹${registrationData['price']}'),
+          if (paymentType == 'Paid' && price != null)
+            _buildDetailRow(Icons.attach_money, 'Price', _formatCurrency(price)),
           SizedBox(height: 12),
-          _buildDetailRow(Icons.app_registration, 'Registration Date', _formatEventDate(registrationData['registeredAt'])),
+          _buildDetailRow(
+            Icons.app_registration,
+            'Registration Date',
+            _formatEventDate(
+              registrationData['registeredAt'] ??
+                  registrationData['createdAt'] ??
+                  registrationData['updatedAt'],
+            ),
+          ),
         ],
       ),
     );
@@ -1219,23 +1776,36 @@ class RegistrationInfoPage extends StatelessWidget {
               Container(
                 padding: EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Color(0xFFF0F9FA),
+                  color: _isCancelled ? const Color(0xFFFFEBEE) : const Color(0xFFF0F9FA),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.next_plan, color: Color(0xFF00838F), size: 24),
+                child: Icon(
+                  _isCancelled ? Icons.info_outline : Icons.next_plan,
+                  color: _isCancelled ? const Color(0xFFD32F2F) : const Color(0xFF00838F),
+                  size: 24,
+                ),
               ),
               SizedBox(width: 12),
               Text(
-                'Next Steps',
+                _isCancelled ? 'Cancellation Notes' : 'Next Steps',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF00838F),
+                  color: _isCancelled ? const Color(0xFFD32F2F) : const Color(0xFF00838F),
                   fontSize: 20,
                 ),
               ),
             ],
           ),
           SizedBox(height: 16),
+          if (_isCancelled) ...[
+            _buildStepItem(
+              _registrationPaymentType == 'Paid'
+                  ? 'Refund request submitted. Admin will process within 3-5 business days.'
+                  : 'Your spot has been released to other participants.',
+            ),
+            SizedBox(height: 12),
+            _buildStepItem('Need help? Reach out via Support anytime.'),
+          ] else ...[
           _buildStepItem('Event organizers will contact you with further details'),
           SizedBox(height: 12),
           _buildStepItem('Check your email for confirmation'),
@@ -1243,6 +1813,7 @@ class RegistrationInfoPage extends StatelessWidget {
           _buildStepItem('Arrive on time for the event'),
           SizedBox(height: 12),
           _buildStepItem('Bring any required items mentioned by organizers'),
+          ],
         ],
       ),
     );
@@ -1256,12 +1827,12 @@ class RegistrationInfoPage extends StatelessWidget {
           margin: EdgeInsets.only(top: 2),
           padding: EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: Color(0xFFF0F9FA),
+            color: _isCancelled ? const Color(0xFFFFEBEE) : const Color(0xFFF0F9FA),
             shape: BoxShape.circle,
           ),
           child: Icon(
-            Icons.check,
-            color: Color(0xFF00838F),
+            _isCancelled ? Icons.info_outline : Icons.check,
+            color: _isCancelled ? const Color(0xFFD32F2F) : const Color(0xFF00838F),
             size: 16,
           ),
         ),
@@ -1270,7 +1841,7 @@ class RegistrationInfoPage extends StatelessWidget {
           child: Text(
             text,
             style: TextStyle(
-              color: Color(0xFF616161),
+              color: Colors.grey.shade700,
               fontSize: 16,
               height: 1.5,
             ),
@@ -1364,11 +1935,20 @@ class RegistrationInfoPage extends StatelessWidget {
   }
 
   String _formatEventDate(dynamic date) {
+    DateTime? dateTime;
     if (date is Timestamp) {
-      final dateTime = date.toDate();
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      dateTime = date.toDate();
+    } else if (date is DateTime) {
+      dateTime = date;
+    } else if (date is String && date.isNotEmpty) {
+      dateTime = DateTime.tryParse(date);
     }
-    return date.toString();
+
+    if (dateTime == null) {
+      return date?.toString() ?? 'N/A';
+    }
+
+    return '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';
   }
 
   String _formatEventTime(dynamic time) {

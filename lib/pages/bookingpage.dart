@@ -7,6 +7,8 @@ import 'package:table_calendar/table_calendar.dart';
 import 'BookingSuccessPage.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class BookingPage extends StatefulWidget {
   final String documentId;
@@ -72,12 +74,44 @@ class _BookingPageState extends State<BookingPage> {
     return total - turfRate - profit;
   }
 
+  // ===================================================================
+  // ✅ BUG FIX #2: PAYMENT PERSISTENCE & RECOVERY FUNCTIONS
+  // ===================================================================
+
+  // Save pending payment data to local storage
+  Future<void> _savePendingPayment(String orderId, Map<String, dynamic> bookingData) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pending_order_id', orderId);
+      await prefs.setString('pending_booking_data', jsonEncode(bookingData));
+      await prefs.setInt('pending_payment_timestamp', DateTime.now().millisecondsSinceEpoch);
+      print('[PaymentPersistence] Saved pending payment: $orderId');
+    } catch (e) {
+      print('[PaymentPersistence] Error saving pending payment: $e');
+    }
+  }
+
+  // Clear pending payment data after success
+  Future<void> _clearPendingPayment() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pending_order_id');
+      await prefs.remove('pending_booking_data');
+      await prefs.remove('pending_payment_timestamp');
+      print('[PaymentPersistence] Cleared pending payment data');
+    } catch (e) {
+      print('[PaymentPersistence] Error clearing pending payment: $e');
+    }
+  }
+
+
   @override
   void initState() {
     super.initState();
     _razorpay = Razorpay();
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+    
     _fetchAllTurfData();
   }
 
@@ -758,13 +792,30 @@ class _BookingPageState extends State<BookingPage> {
                                         }
 
                                         // 2) Create order only if available
+                                        final bookingId = widget.documentId + '_' + DateTime.now().millisecondsSinceEpoch.toString();
+                                        final bookingData = {
+                                          'userId': currentUser.uid,
+                                          'userName': userName,
+                                          'turfId': widget.documentId,
+                                          'turfName': widget.documentname,
+                                          'ownerId': _turfData != null ? _turfData!['ownerId'] : null,
+                                          'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                                          'selectedGround': selectedGround,
+                                          'slots': selectedSlots,
+                                          'totalHours': totalHours,
+                                          'baseAmount': totalAmount,
+                                          'payableAmount': payableAmount,
+                                        };
+                                        
                                         final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('createRazorpayOrderWithTransfer');
                                         final orderResult = await callable({
                                           'totalAmount': totalAmount,
                                           'payableAmount': payableAmount,
                                           'ownerAccountId': ownerAccountId,
-                                          'bookingId': widget.documentId + '_' + DateTime.now().millisecondsSinceEpoch.toString(),
+                                          'bookingId': bookingId,
                                           'turfId': widget.documentId,
+                                          'userId': currentUser.uid,
+                                          'bookingData': bookingData, // Store booking data for recovery
                                         });
                                         final orderId = orderResult.data['orderId'];
                                         if (orderId == null) {
@@ -799,8 +850,17 @@ class _BookingPageState extends State<BookingPage> {
                                         print('Ground: $selectedGround');
                                         print('Date: ${DateFormat('yyyy-MM-dd').format(selectedDate!)}');
 
+                                        // ✅ SAVE PAYMENT DATA LOCALLY BEFORE OPENING RAZORPAY (backup)
+                                        await _savePendingPayment(orderId, bookingData);
+
+                                        print('[Payment] Saved pending payment data locally');
+
                                         _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
                                           try {
+                                            print('[PaymentSuccess] Payment response: ${response.paymentId}');
+                                            
+                                            // ✅ CLEAR PENDING PAYMENT IMMEDIATELY ON SUCCESS
+                                            await _clearPendingPayment();
                                             final HttpsCallable confirmFn = FirebaseFunctions.instance.httpsCallable('confirmBookingAndWrite');
                                             final result = await confirmFn({
                                               'orderId': response.orderId,
@@ -889,33 +949,25 @@ class _BookingPageState extends State<BookingPage> {
 
                                         _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) async {
                                           try {
-                                            print('Payment failed:  ${response.message}');
-                                            print('Error code: ${response.code}');
-                                            await _showSuccessDialog(context, "Oops! Payment failed Please try again", false);
+                                            print('[PaymentError] Payment failed: ${response.message}');
+                                            print('[PaymentError] Code: ${response.code}');
+                                            
+                                            await _showSuccessDialog(context, "Oops! Payment failed. Please try again", false);
                                           } catch (e) {
-                                            print('Error in payment error handler: $e');
-                                          } finally {
-                                            // Always redirect to BookingFailedPage on payment error
-                                            Navigator.of(context).pushAndRemoveUntil(
-                                              MaterialPageRoute(
-                                                builder: (context) => BookingFailedPage(
-                                                  documentId: widget.documentId,
-                                                  documentname: widget.documentname,
-                                                  userId: widget.userId,
-                                                ),
-                                              ),
-                                              (Route<dynamic> route) => false,
-                                            );
+                                            print('[Error] in payment error handler: $e');
                                           }
+                                          // DO NOT navigate on payment error - let user retry
+                                          // Payment data is still in SharedPreferences for recovery
                                         });
 
                                         try {
-                                          print('Opening Razorpay payment...');
-                                          print('Amount: ${payableAmount * 100} paise');
-                                          print('User: $userEmail, Phone: $userPhone');
+                                          print('[Payment] Opening Razorpay payment...');
+                                          print('[Payment] Amount: ${payableAmount * 100} paise');
+                                          print('[Payment] User: $userEmail, Phone: $userPhone');
                                           _razorpay.open(options);
                                         } catch (e) {
-                                          print("Razorpay error: $e");
+                                          print("[Razorpay] Error: $e");
+                                          await _clearPendingPayment(); // Clear if failed to open
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(
                                               content: Text('Failed to open payment: $e'),

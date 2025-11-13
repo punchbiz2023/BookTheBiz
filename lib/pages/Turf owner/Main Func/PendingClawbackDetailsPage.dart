@@ -152,9 +152,9 @@ class _PendingClawbackDetailsPageState extends State<PendingClawbackDetailsPage>
                   _buildExplanationCard(
                     icon: Icons.event_busy,
                     iconColor: Colors.orange,
-                    title: 'Customer Cancelled Booking',
+                    title: 'Customer Cancelled Booking/Event',
                     description:
-                        'One or more customers cancelled their bookings after payment was already processed and transferred to you.',
+                        'One or more customers cancelled their bookings or event registrations after payment was already processed and transferred to you.',
                   ),
                   SizedBox(height: 12),
                   _buildExplanationCard(
@@ -389,10 +389,28 @@ class _PendingClawbackDetailsPageState extends State<PendingClawbackDetailsPage>
 
   Widget _buildClawbackDetailCard(Map<String, dynamic> clawback) {
     double amount = (clawback['amount'] ?? 0).toDouble();
-    String bookingId = clawback['bookingId'] ?? 'Unknown';
+    
+    // Determine if this is an event or turf clawback
+    final isEventClawback = clawback['eventId'] != null || 
+                            clawback['registrationId'] != null || 
+                            (clawback['type'] == 'event') ||
+                            (clawback['notes'] != null && 
+                             (clawback['notes'] as Map<String, dynamic>?)?['type'] == 'event');
+    
+    String bookingId = clawback['bookingId'] ?? 'N/A';
+    String registrationId = clawback['registrationId'] ?? 'N/A';
+    String referenceId = isEventClawback ? registrationId : bookingId;
     DateTime? createdDate;
     if (clawback['createdAt'] != null) {
       createdDate = (clawback['createdAt'] as Timestamp).toDate();
+    }
+    
+    // Fetch event name if event clawback
+    String? eventName;
+    if (isEventClawback && clawback['eventId'] != null) {
+      // We'll fetch this asynchronously or pass it from parent
+      // For now, show event ID
+      eventName = null; // Will be fetched if needed
     }
 
     return Container(
@@ -444,7 +462,28 @@ class _PendingClawbackDetailsPageState extends State<PendingClawbackDetailsPage>
             ],
           ),
           SizedBox(height: 12),
-          _buildDetailRow('Booking ID', bookingId),
+          // Show event info for event clawbacks, booking info for turf clawbacks
+          if (isEventClawback) ...[
+            if (registrationId != 'N/A')
+              _buildDetailRow('Registration ID', registrationId),
+            if (clawback['eventId'] != null)
+              FutureBuilder<DocumentSnapshot>(
+                future: firestore.collection('spot_events').doc(clawback['eventId']).get(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return _buildDetailRow('Event', 'Loading...');
+                  }
+                  if (snapshot.hasData && snapshot.data!.exists) {
+                    final eventName = (snapshot.data!.data() as Map<String, dynamic>)?['name'] ?? 'Unknown Event';
+                    return _buildDetailRow('Event', eventName);
+                  }
+                  return _buildDetailRow('Event ID', clawback['eventId'] ?? 'N/A');
+                },
+              ),
+          ] else ...[
+            if (bookingId != 'N/A')
+              _buildDetailRow('Booking ID', bookingId),
+          ],
           if (createdDate != null)
             _buildDetailRow(
               'Refund Date',
@@ -452,7 +491,9 @@ class _PendingClawbackDetailsPageState extends State<PendingClawbackDetailsPage>
             ),
           SizedBox(height: 8),
           Text(
-            clawback['reason'] ?? 'Customer cancelled booking after payment was transferred to your account.',
+            clawback['reason'] ?? (isEventClawback 
+              ? 'Customer cancelled event registration after payment was transferred to your account.'
+              : 'Customer cancelled booking after payment was transferred to your account.'),
             style: TextStyle(
               fontSize: 13,
               color: Colors.grey[600],

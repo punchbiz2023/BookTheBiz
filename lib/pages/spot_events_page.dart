@@ -3,7 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:ui';
+import 'dart:convert';
 import 'package:intl/intl.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SpotEventsPage extends StatefulWidget {
   final User? user;
@@ -24,6 +28,13 @@ class _SpotEventsPageState extends State<SpotEventsPage>
   late Animation<double> _shimmerAnimation;
   late Animation<Offset> _floatAnimation;
   Map<String, bool> _registrationStatus = {};
+  List<Map<String, dynamic>> _cachedUpcomingEvents = [];
+  String? _userProfileName;
+  String? _userProfileEmail;
+  String? _userProfilePhone;
+  String? _userProfileImageUrl;
+  Future<void>? _profileFuture;
+  bool _hasLoadedProfile = false;
 
   @override
   void initState() {
@@ -55,6 +66,10 @@ class _SpotEventsPageState extends State<SpotEventsPage>
     ).animate(CurvedAnimation(parent: _floatController, curve: Curves.easeInOut));
     
     _animationController.forward();
+
+    if (widget.user != null) {
+      _profileFuture = _loadUserProfile();
+    }
   }
 
   @override
@@ -369,6 +384,21 @@ class _SpotEventsPageState extends State<SpotEventsPage>
     );
   }
 
+  DateTime? _parseEventDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
+
+  String _normalizeEventType(dynamic value) {
+    if (value == null) return '';
+    return value.toString().trim().toLowerCase();
+  }
+
   Widget _buildEventsStream() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -386,16 +416,13 @@ class _SpotEventsPageState extends State<SpotEventsPage>
           final data = doc.data() as Map<String, dynamic>;
           final eventName = (data['name'] ?? '').toLowerCase();
           final eventDate = data['eventDate'];
-          
+
           if (searchQuery.isNotEmpty && !eventName.contains(searchQuery)) return false;
-          
+
           if (selectedFilter != 'All') {
             final now = DateTime.now();
-            if (eventDate != null) {
-              DateTime eventDateTime = eventDate is Timestamp 
-                  ? eventDate.toDate() 
-                  : DateTime.parse(eventDate.toString());
-              
+            final eventDateTime = _parseEventDateTime(eventDate);
+            if (eventDateTime != null) {
               if (selectedFilter == 'Upcoming' && eventDateTime.isBefore(now)) return false;
               if (selectedFilter == 'Past' && eventDateTime.isAfter(now)) return false;
             }
@@ -405,13 +432,54 @@ class _SpotEventsPageState extends State<SpotEventsPage>
 
         if (filteredDocs.isEmpty) return _buildNoResultsState();
 
+        final now = DateTime.now();
+        final upcomingDocs = <QueryDocumentSnapshot>[];
+        final pastDocs = <QueryDocumentSnapshot>[];
+
+        for (final doc in filteredDocs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final eventDateTime = _parseEventDateTime(data['eventDate']);
+          if (eventDateTime != null && eventDateTime.isBefore(now)) {
+            pastDocs.add(doc);
+          } else {
+            upcomingDocs.add(doc);
+          }
+        }
+
+        int compareByEventDate(QueryDocumentSnapshot a, QueryDocumentSnapshot b, {bool ascending = true}) {
+          final dataA = a.data() as Map<String, dynamic>;
+          final dataB = b.data() as Map<String, dynamic>;
+          final dateA = _parseEventDateTime(dataA['eventDate']) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final dateB = _parseEventDateTime(dataB['eventDate']) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final result = dateA.compareTo(dateB);
+          return ascending ? result : -result;
+        }
+
+        upcomingDocs.sort((a, b) => compareByEventDate(a, b, ascending: true));
+        pastDocs.sort((a, b) => compareByEventDate(a, b, ascending: false));
+
+        _cachedUpcomingEvents = upcomingDocs.map((doc) {
+          final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
+          return {
+            'id': doc.id,
+            'data': data,
+            'type': _normalizeEventType(data['eventType']),
+          };
+        }).toList();
+
+        final combinedDocs = [...upcomingDocs, ...pastDocs];
+
+        if (combinedDocs.isEmpty) return _buildNoResultsState();
+
         return ListView.builder(
           padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          itemCount: filteredDocs.length,
+          itemCount: combinedDocs.length,
           itemBuilder: (context, index) {
-            final eventData = filteredDocs[index];
-            final data = eventData.data() as Map<String, dynamic>;
-            
+            final eventDoc = combinedDocs[index];
+            final data = Map<String, dynamic>.from(eventDoc.data() as Map<String, dynamic>);
+            final eventDateTime = _parseEventDateTime(data['eventDate']);
+            final isUpcoming = !(eventDateTime != null && eventDateTime.isBefore(now));
+
             return TweenAnimationBuilder(
               duration: Duration(milliseconds: 400 + (index * 100)),
               tween: Tween<double>(begin: 0, end: 1),
@@ -424,7 +492,7 @@ class _SpotEventsPageState extends State<SpotEventsPage>
               },
               child: Container(
                 margin: EdgeInsets.only(bottom: 16),
-                child: _buildEventCard(data, eventData.id),
+                child: _buildEventCard(data, eventDoc.id, isUpcoming: isUpcoming),
               ),
             );
           },
@@ -433,14 +501,12 @@ class _SpotEventsPageState extends State<SpotEventsPage>
     );
   }
 
-  Widget _buildEventCard(Map<String, dynamic> eventData, String eventId) {
+  Widget _buildEventCard(Map<String, dynamic> eventData, String eventId, {required bool isUpcoming}) {
     final eventDate = eventData['eventDate'];
     DateTime? eventDateTime;
-    bool isUpcoming = true;
     
     if (eventDate != null) {
-      eventDateTime = eventDate is Timestamp ? eventDate.toDate() : DateTime.parse(eventDate.toString());
-      isUpcoming = eventDateTime.isAfter(DateTime.now());
+      eventDateTime = _parseEventDateTime(eventDate);
     }
 
     return Container(
@@ -467,7 +533,7 @@ class _SpotEventsPageState extends State<SpotEventsPage>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _showEventDetailsBottomSheet(eventData, eventId),
+          onTap: () => _showEventDetailsBottomSheet(eventData, eventId, isUpcoming: isUpcoming),
           borderRadius: BorderRadius.circular(20),
           splashColor: Color(0xFF00897B).withOpacity(0.1),
           highlightColor: Color(0xFF00897B).withOpacity(0.05),
@@ -699,7 +765,7 @@ class _SpotEventsPageState extends State<SpotEventsPage>
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: () => _showEventDetailsBottomSheet(eventData, eventId),
+                          onTap: () => _showEventDetailsBottomSheet(eventData, eventId, isUpcoming: isUpcoming),
                           borderRadius: BorderRadius.circular(12),
                           splashColor: Colors.white.withOpacity(0.3),
                           highlightColor: Colors.white.withOpacity(0.2),
@@ -1038,7 +1104,12 @@ class _SpotEventsPageState extends State<SpotEventsPage>
     );
   }
 
-  void _showEventDetailsBottomSheet(Map<String, dynamic> eventData, String eventId) {
+  void _showEventDetailsBottomSheet(Map<String, dynamic> eventData, String eventId, {required bool isUpcoming}) {
+    if (!isUpcoming) {
+      _showPastEventInfoSheet(eventData, eventId);
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1047,6 +1118,323 @@ class _SpotEventsPageState extends State<SpotEventsPage>
         eventData: eventData,
         eventId: eventId,
         user: widget.user,
+        isUpcoming: isUpcoming,
+      ),
+    );
+  }
+
+  void _showPastEventInfoSheet(Map<String, dynamic> eventData, String eventId) {
+    final eventDate = _parseEventDateTime(eventData['eventDate']);
+    final formattedDate = eventDate != null
+        ? DateFormat('MMMM dd, yyyy').format(eventDate)
+        : 'an earlier date';
+
+    final currentType = _normalizeEventType(eventData['eventType']);
+
+    final similarEvents = _cachedUpcomingEvents.where((entry) {
+      final id = entry['id'] as String;
+      if (id == eventId) return false;
+
+      if (currentType.isEmpty) {
+        // If the source event has no type, just surface upcoming events excluding itself
+        return true;
+      }
+
+      final entryType = entry['type'] as String? ?? _normalizeEventType((entry['data'] as Map<String, dynamic>)['eventType']);
+      return entryType == currentType;
+    }).toList();
+
+    final displayEvents = similarEvents.take(3).toList();
+    final hasMore = similarEvents.length > displayEvents.length;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.5,
+          maxChildSize: 0.75,
+          minChildSize: 0.4,
+          builder: (context, controller) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(28),
+                  topRight: Radius.circular(28),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 20,
+                    offset: Offset(0, -6),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(24, 20, 24, 24),
+                child: ListView(
+                  controller: controller,
+                  children: [
+                    Center(
+                      child: Container(
+                        height: 5,
+                        width: 46,
+                        decoration: BoxDecoration(
+                          color: Color(0xFFB2DFDB),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Color(0xFFFFEBEE),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(Icons.history_rounded, color: Color(0xFFD32F2F)),
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Missed This One 🪦',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'This event already wrapped up on $formattedDate.',
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 14,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 24),
+                    Text(
+                      'Discover similar upcoming events',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF00897B),
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    if (displayEvents.isEmpty)
+                      Container(
+                        padding: EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFE0F2F1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.event_available, color: Color(0xFF00897B)),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'We will add more events like this soon. Stay tuned!'
+                                ,
+                                style: TextStyle(
+                                  color: Color(0xFF006064),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            height: 160,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: displayEvents.length,
+                              separatorBuilder: (_, __) => SizedBox(width: 12),
+                              itemBuilder: (context, index) {
+                                final event = displayEvents[index];
+                                final data = event['data'] as Map<String, dynamic>;
+                                final id = event['id'] as String;
+                                return _buildSimilarEventCard(data, id);
+                              },
+                            ),
+                          ),
+                          if (hasMore)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  _openSimilarEventsPage(
+                                    title: 'Events you may be interested in',
+                                    events: similarEvents,
+                                  );
+                                },
+                                icon: Icon(Icons.arrow_forward_rounded, color: Color(0xFF00897B)),
+                                label: Text(
+                                  'View more',
+                                  style: TextStyle(
+                                    color: Color(0xFF00897B),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _openSimilarEventsPage(
+                          title: 'Fresh events you may love',
+                          events: similarEvents,
+                        );
+                      },
+                      icon: Icon(Icons.explore_outlined, color: Color(0xFF00897B)),
+                      label: Text(
+                        'Explore other events',
+                        style: TextStyle(
+                          color: Color(0xFF00897B),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Color(0xFF00897B).withOpacity(0.4)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSimilarEventCard(Map<String, dynamic> data, String eventId) {
+    return GestureDetector(
+      onTap: () => _showEventDetailsBottomSheet(data, eventId, isUpcoming: true),
+      child: Container(
+        width: 160,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 12,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+              child: Image.network(
+                data['imageUrl'] ?? 'https://picsum.photos/200/120',
+                height: 90,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 90,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFFE0F2F1), Color(0xFFB2DFDB)],
+                    ),
+                  ),
+                  child: Icon(Icons.event_rounded, color: Color(0xFF00897B)),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      data['name'] ?? 'Event',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E293B),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      _formatEventDate(data['eventDate']),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openSimilarEventsPage({required String title, required List<dynamic> events}) {
+    final upcomingEvents = events.whereType<Map<String, dynamic>>().toList();
+    if (upcomingEvents.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No similar events available right now. Stay tuned!'),
+        ),
+      );
+      return;
+    }
+
+    upcomingEvents.sort((a, b) {
+      final dataA = a['data'] as Map<String, dynamic>;
+      final dataB = b['data'] as Map<String, dynamic>;
+      final dtA = _parseEventDateTime(dataA['eventDate']) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final dtB = _parseEventDateTime(dataB['eventDate']) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return dtA.compareTo(dtB);
+    });
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SimilarEventsPage(
+          title: title,
+          events: upcomingEvents,
+          onEventSelected: (event) {
+            Navigator.of(context).pop();
+            final data = event['data'] as Map<String, dynamic>;
+            final id = event['id'] as String;
+            _showEventDetailsBottomSheet(data, id, isUpcoming: true);
+          },
+        ),
       ),
     );
   }
@@ -1083,18 +1471,121 @@ class _SpotEventsPageState extends State<SpotEventsPage>
     
     return time.toString();
   }
+
+  Future<void> _ensureUserProfileLoaded() async {
+    if (_hasLoadedProfile) return;
+    _profileFuture ??= _loadUserProfile();
+    await _profileFuture;
+  }
+
+  Future<void> _loadUserProfile() async {
+    if (widget.user == null) {
+      _hasLoadedProfile = true;
+      return;
+    }
+
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('users').doc(widget.user!.uid).get();
+      final data = snapshot.data();
+
+      String? name;
+      if (data != null) {
+        final rawName = (data['name'] ?? data['fullName']) as String?;
+        if (rawName != null && rawName.trim().isNotEmpty) {
+          name = rawName.trim();
+        }
+      }
+
+      String? email;
+      if (data != null) {
+        final rawEmail = (data['email'] ?? data['userEmail']) as String?;
+        if (rawEmail != null && rawEmail.trim().isNotEmpty) {
+          email = rawEmail.trim();
+        }
+      }
+
+      String? phone;
+      if (data != null) {
+        final rawPhone = (data['mobile'] ?? data['phoneNumber']) as String?;
+        if (rawPhone != null && rawPhone.trim().isNotEmpty) {
+          phone = rawPhone.trim();
+        }
+      }
+
+      String? imageUrl;
+      if (data != null) {
+        final rawImage = (data['imageUrl'] ?? data['photoUrl']) as String?;
+        if (rawImage != null && rawImage.trim().isNotEmpty) {
+          imageUrl = rawImage.trim();
+        }
+      }
+
+      if (!mounted) {
+        _hasLoadedProfile = true;
+        return;
+      }
+
+      setState(() {
+        _userProfileName = name;
+        _userProfileEmail = email;
+        _userProfilePhone = phone;
+        _userProfileImageUrl = imageUrl;
+        _hasLoadedProfile = true;
+      });
+    } catch (e) {
+      if (!mounted) {
+        _hasLoadedProfile = true;
+        return;
+      }
+      setState(() {
+        _hasLoadedProfile = true;
+      });
+      print('[EventProfile] Failed to load user profile: $e');
+    }
+  }
+
+  String _resolveUserName() {
+    if (_userProfileName != null && _userProfileName!.isNotEmpty) {
+      return _userProfileName!;
+    }
+    final displayName = widget.user?.displayName;
+    if (displayName != null && displayName.trim().isNotEmpty) {
+      return displayName.trim();
+    }
+    final email = widget.user?.email;
+    if (email != null && email.isNotEmpty) {
+      return email.split('@').first;
+    }
+    return 'User';
+  }
+
+  String _resolveUserEmail() {
+    if (_userProfileEmail != null && _userProfileEmail!.isNotEmpty) {
+      return _userProfileEmail!;
+    }
+    return widget.user?.email ?? '';
+  }
+
+  String _resolveUserPhone() {
+    if (_userProfilePhone != null && _userProfilePhone!.isNotEmpty) {
+      return _userProfilePhone!;
+    }
+    return widget.user?.phoneNumber ?? '';
+  }
 }
 
 class PremiumEventDetailsBottomSheet extends StatefulWidget {
   final Map<String, dynamic> eventData;
   final String eventId;
   final User? user;
+  final bool isUpcoming;
 
   const PremiumEventDetailsBottomSheet({
     Key? key,
     required this.eventData,
     required this.eventId,
     required this.user,
+    required this.isUpcoming,
   }) : super(key: key);
 
   @override
@@ -1109,6 +1600,195 @@ class _PremiumEventDetailsBottomSheetState extends State<PremiumEventDetailsBott
   late Animation<double> _scaleAnimation;
   bool _isRegistered = false;
   bool _isLoading = true;
+  bool _isProcessingPayment = false;
+  late Razorpay _razorpay;
+  
+  // User profile state
+  String? _userProfileName;
+  String? _userProfileEmail;
+  String? _userProfilePhone;
+  String? _userProfileImageUrl;
+  bool _hasLoadedProfile = false;
+  Future<void>? _profileFuture;
+  
+  // Payment calculation helpers (same as turf bookings)
+  double _platformProfit(double eventPrice) {
+    if (eventPrice <= 1000) {
+      return eventPrice * 0.15;
+    } else if (eventPrice <= 3000) {
+      return 110;
+    } else {
+      return 210;
+    }
+  }
+  
+  double _razorpayFeePercent() {
+    return 0.02 * 1.18; // 2% + 18% GST = 2.36%
+  }
+  
+  double _totalToCharge(double eventPrice) {
+    double profit = _platformProfit(eventPrice);
+    double feePercent = _razorpayFeePercent();
+    return (eventPrice + profit) / (1 - feePercent);
+  }
+  
+  // Convert dynamic date (Timestamp | DateTime | String) to YYYY-MM-DD for JSON-safe payloads
+  String _toYmdString(dynamic date) {
+    try {
+      DateTime dt;
+      if (date is Timestamp) {
+        dt = date.toDate();
+      } else if (date is DateTime) {
+        dt = date;
+      } else if (date is String) {
+        // Attempt to parse; if fails, return as-is
+        try {
+          dt = DateTime.parse(date);
+        } catch (_) {
+          return date;
+        }
+      } else {
+        return '';
+      }
+      return DateFormat('yyyy-MM-dd').format(dt);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  // ===================================================================
+  // USER PROFILE LOADING & RESOLUTION
+  // ===================================================================
+
+  Future<void> _ensureUserProfileLoaded() async {
+    if (_hasLoadedProfile) return;
+    _profileFuture ??= _loadUserProfile();
+    await _profileFuture;
+  }
+
+  Future<void> _loadUserProfile() async {
+    if (widget.user == null) {
+      _hasLoadedProfile = true;
+      return;
+    }
+
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('users').doc(widget.user!.uid).get();
+      final data = snapshot.data();
+
+      String? name;
+      if (data != null) {
+        final rawName = (data['name'] ?? data['fullName']) as String?;
+        if (rawName != null && rawName.trim().isNotEmpty) {
+          name = rawName.trim();
+        }
+      }
+
+      String? email;
+      if (data != null) {
+        final rawEmail = (data['email'] ?? data['userEmail']) as String?;
+        if (rawEmail != null && rawEmail.trim().isNotEmpty) {
+          email = rawEmail.trim();
+        }
+      }
+
+      String? phone;
+      if (data != null) {
+        final rawPhone = (data['mobile'] ?? data['phoneNumber']) as String?;
+        if (rawPhone != null && rawPhone.trim().isNotEmpty) {
+          phone = rawPhone.trim();
+        }
+      }
+
+      String? imageUrl;
+      if (data != null) {
+        final rawImage = (data['imageUrl'] ?? data['photoUrl']) as String?;
+        if (rawImage != null && rawImage.trim().isNotEmpty) {
+          imageUrl = rawImage.trim();
+        }
+      }
+
+      if (!mounted) {
+        _hasLoadedProfile = true;
+        return;
+      }
+
+      setState(() {
+        _userProfileName = name;
+        _userProfileEmail = email;
+        _userProfilePhone = phone;
+        _userProfileImageUrl = imageUrl;
+        _hasLoadedProfile = true;
+      });
+    } catch (e) {
+      if (!mounted) {
+        _hasLoadedProfile = true;
+        return;
+      }
+      setState(() {
+        _hasLoadedProfile = true;
+      });
+      print('[EventProfile] Failed to load user profile: $e');
+    }
+  }
+
+  String _resolveUserName() {
+    if (_userProfileName != null && _userProfileName!.isNotEmpty) {
+      return _userProfileName!;
+    }
+    final displayName = widget.user?.displayName;
+    if (displayName != null && displayName.trim().isNotEmpty) {
+      return displayName.trim();
+    }
+    final email = widget.user?.email;
+    if (email != null && email.isNotEmpty) {
+      return email.split('@').first;
+    }
+    return 'User';
+  }
+
+  String _resolveUserEmail() {
+    if (_userProfileEmail != null && _userProfileEmail!.isNotEmpty) {
+      return _userProfileEmail!;
+    }
+    return widget.user?.email ?? '';
+  }
+
+  String _resolveUserPhone() {
+    if (_userProfilePhone != null && _userProfilePhone!.isNotEmpty) {
+      return _userProfilePhone!;
+    }
+    return widget.user?.phoneNumber ?? '';
+  }
+
+  // ===================================================================
+  // PAYMENT PERSISTENCE & RECOVERY FUNCTIONS
+  // ===================================================================
+
+  Future<void> _savePendingEventPayment(String orderId, Map<String, dynamic> registrationData) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pending_event_order_id', orderId);
+      await prefs.setString('pending_event_registration_data', jsonEncode(registrationData));
+      await prefs.setInt('pending_event_payment_timestamp', DateTime.now().millisecondsSinceEpoch);
+      print('[EventPaymentPersistence] Saved pending payment: $orderId');
+    } catch (e) {
+      print('[EventPaymentPersistence] Error saving: $e');
+    }
+  }
+
+  Future<void> _clearPendingEventPayment() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pending_event_order_id');
+      await prefs.remove('pending_event_registration_data');
+      await prefs.remove('pending_event_payment_timestamp');
+      print('[EventPaymentPersistence] Cleared pending payment');
+    } catch (e) {
+      print('[EventPaymentPersistence] Error clearing: $e');
+    }
+  }
+
 
   @override
   void initState() {
@@ -1133,12 +1813,19 @@ class _PremiumEventDetailsBottomSheetState extends State<PremiumEventDetailsBott
     _animationController.forward();
     _scaleController.forward();
     _checkRegistrationStatus();
+    
+    // Initialize Razorpay
+    _razorpay = Razorpay();
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
   }
 
   @override
   void dispose() {
     _animationController.dispose();
     _scaleController.dispose();
+    _razorpay.clear();
     super.dispose();
   }
 
@@ -1385,7 +2072,7 @@ class _PremiumEventDetailsBottomSheetState extends State<PremiumEventDetailsBott
                             'Max Participants', '${widget.eventData['maxParticipants'] ?? 'Unlimited'}'),
                           SizedBox(height: 24),
                           // Register Button
-                          _isLoading
+                          _isLoading || _isProcessingPayment
                               ? Center(
                                   child: Container(
                                     padding: EdgeInsets.all(16),
@@ -1433,7 +2120,7 @@ class _PremiumEventDetailsBottomSheetState extends State<PremiumEventDetailsBott
                                   child: Material(
                                     color: Colors.transparent,
                                     child: InkWell(
-                                      onTap: _isRegistered ? null : () => _registerForEvent(),
+                                      onTap: _isRegistered || _isProcessingPayment ? null : () => _registerForEvent(),
                                       borderRadius: BorderRadius.circular(16),
                                       splashColor: Colors.white.withOpacity(0.3),
                                       highlightColor: Colors.white.withOpacity(0.2),
@@ -1448,7 +2135,7 @@ class _PremiumEventDetailsBottomSheetState extends State<PremiumEventDetailsBott
                                             ),
                                             SizedBox(width: 10),
                                             Text(
-                                              _isRegistered ? 'Already Registered' : 'Register Now',
+                                              _isRegistered ? 'Already Registered' : (widget.eventData['price'] != null && widget.eventData['price'] > 0 ? 'Pay & Register' : 'Register Now'),
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 16,
@@ -1568,20 +2255,71 @@ class _PremiumEventDetailsBottomSheetState extends State<PremiumEventDetailsBott
       return;
     }
 
+    final eventPrice = (widget.eventData['price'] ?? 0).toDouble();
+    final isPaidEvent = eventPrice > 0;
+
+    if (isPaidEvent) {
+      // Handle paid event registration with Razorpay
+      await _handlePaidEventRegistration(eventPrice);
+    } else {
+      // Handle free event registration
+      await _handleFreeEventRegistration();
+    }
+  }
+
+  Future<void> _handleFreeEventRegistration() async {
     try {
-      await FirebaseFirestore.instance.collection('event_registrations').add({
+      setState(() => _isProcessingPayment = true);
+      await _ensureUserProfileLoaded();
+
+      final userName = _resolveUserName();
+      final userEmail = _resolveUserEmail();
+      final userPhone = _resolveUserPhone();
+      final userImage = _userProfileImageUrl ?? '';
+
+      final registrationsCollection = FirebaseFirestore.instance.collection('event_registrations');
+      final registrationRef = await registrationsCollection.add({
         'eventId': widget.eventId,
         'eventName': widget.eventData['name'],
         'eventDate': widget.eventData['eventDate'],
         'eventTime': widget.eventData['eventTime'],
+        'eventLocation': widget.eventData['location'] ?? '',
+        'eventType': widget.eventData['eventType'] ?? '',
         'userId': widget.user!.uid,
-        'userName': widget.user!.displayName ?? 'User',
-        'userEmail': widget.user!.email,
-        'paymentType': widget.eventData['price'] != null && widget.eventData['price'] > 0 ? 'Paid' : 'Free',
-        'price': widget.eventData['price'] ?? 0,
-        'status': 'registered',
+        'userName': userName,
+        'userEmail': userEmail,
+        'userPhone': userPhone,
+        'userImageUrl': userImage,
+        'paymentType': 'Free',
+        'price': 0,
+        'status': 'confirmed',
+        'paymentMethod': 'Free',
         'registeredAt': Timestamp.now(),
       });
+
+      // Send confirmation email for free events too
+      try {
+        final HttpsCallable emailFn = FirebaseFunctions.instance.httpsCallable('sendEventRegistrationConfirmationEmail');
+        await emailFn({
+          'to': userEmail,
+          'userName': userName,
+          'userEmail': userEmail,
+          'userPhone': userPhone,
+          'registrationId': registrationRef.id,
+          'eventName': widget.eventData['name'],
+          'eventDate': _toYmdString(widget.eventData['eventDate']), // Convert Timestamp to string for Cloud Function
+          'eventTime': widget.eventData['eventTime'],
+          'eventLocation': widget.eventData['location'] ?? '',
+          'eventType': widget.eventData['eventType'] ?? '',
+          'amount': 0,
+          'paymentMethod': 'Free',
+          'paymentReference': '',
+        });
+      } catch (e) {
+        print('[FreeEventEmail] Error sending confirmation email: $e');
+        print('[FreeEventEmail] Error details: ${e.toString()}');
+        // Don't fail the registration if email fails, but log it
+      }
 
       Navigator.pop(context);
       _showPremiumSnackBar(
@@ -1590,12 +2328,288 @@ class _PremiumEventDetailsBottomSheetState extends State<PremiumEventDetailsBott
         Icons.check_circle_rounded,
       );
     } catch (e) {
+      setState(() => _isProcessingPayment = false);
       _showPremiumSnackBar(
         'Registration failed: ${e.toString()}',
         Colors.red,
         Icons.error_rounded,
       );
     }
+  }
+
+  Future<void> _handlePaidEventRegistration(double eventPrice) async {
+    try {
+      setState(() => _isProcessingPayment = true);
+      await _ensureUserProfileLoaded();
+
+      final userName = _resolveUserName();
+      final userEmail = _resolveUserEmail();
+      final userPhone = _resolveUserPhone();
+      final userImage = _userProfileImageUrl ?? '';
+
+      // Get event owner account ID
+      final eventDoc = await FirebaseFirestore.instance.collection('spot_events').doc(widget.eventId).get();
+      if (!eventDoc.exists) {
+        throw Exception('Event not found');
+      }
+
+      final eventData = eventDoc.data()!;
+      final ownerId = eventData['ownerId'];
+      
+      String? ownerAccountId;
+      if (ownerId != null) {
+        final ownerDoc = await FirebaseFirestore.instance.collection('users').doc(ownerId).get();
+        if (ownerDoc.exists) {
+          ownerAccountId = ownerDoc.data()?['razorpayAccountId'];
+        }
+      }
+
+      if (ownerAccountId == null || !ownerAccountId.toString().startsWith('acc_')) {
+        setState(() => _isProcessingPayment = false);
+        _showPremiumSnackBar(
+          'Event owner does not have a valid Razorpay Account ID. Please contact support.',
+          Colors.red,
+          Icons.error_rounded,
+        );
+        return;
+      }
+
+      // Calculate amounts
+      final baseAmount = eventPrice;
+      final payableAmount = _totalToCharge(baseAmount);
+      final registrationId = '${widget.eventId}_${DateTime.now().millisecondsSinceEpoch}';
+      
+      // Prepare registration data for recovery
+      // Note: All values must be JSON-safe (String, int, double, bool, List, Map, null)
+      // Timestamp objects cannot be passed directly to Cloud Functions
+      final registrationData = {
+        'userId': widget.user!.uid,
+        'eventId': widget.eventId,
+        'eventName': widget.eventData['name'],
+        'eventLocation': widget.eventData['location'] ?? '',
+        'eventType': widget.eventData['eventType'] ?? '',
+        'ownerId': ownerId,
+        // Use JSON-safe string for callable payloads
+        'eventDate': _toYmdString(widget.eventData['eventDate']),
+        'eventTime': widget.eventData['eventTime'],
+        'baseAmount': baseAmount,
+        'payableAmount': payableAmount,
+        'userName': userName,
+        'userEmail': userEmail,
+        'userPhone': userPhone,
+        'userImageUrl': userImage,
+        'paymentType': 'Paid',
+        'price': eventPrice,
+        'status': 'confirmed',
+        'paymentMethod': 'Online',
+        'registeredAt': DateTime.now().toIso8601String(), // Convert to ISO string for Cloud Function
+      };
+
+      // Create Razorpay order with transfer
+      final HttpsCallable orderFn = FirebaseFunctions.instance.httpsCallable('createRazorpayOrderWithTransferForEvent');
+      final orderResult = await orderFn({
+        'totalAmount': baseAmount,
+        'payableAmount': payableAmount,
+        'ownerAccountId': ownerAccountId,
+        'registrationId': registrationId,
+        'eventId': widget.eventId,
+        'userId': widget.user!.uid,
+        'registrationData': registrationData, // Store registration data for recovery
+      });
+
+      final orderId = orderResult.data['orderId'];
+      if (orderId == null) {
+        setState(() => _isProcessingPayment = false);
+        _showPremiumSnackBar(
+          'Failed to create payment order. Please try again.',
+          Colors.red,
+          Icons.error_rounded,
+        );
+        return;
+      }
+
+      // ✅ SAVE PAYMENT DATA LOCALLY BEFORE OPENING RAZORPAY (backup)
+      await _savePendingEventPayment(orderId, registrationData);
+
+      print('[EventPayment] Saved pending payment data locally');
+
+      // Open Razorpay checkout
+      var options = {
+        'key': 'rzp_live_lUkgWvIy2IHCWA',
+        'amount': (payableAmount * 100).round(),
+        'name': widget.eventData['name'] ?? 'Event Registration',
+        'description': 'Event Registration: ${widget.eventData['name']} - Total: ₹${payableAmount.toStringAsFixed(2)}',
+        'order_id': orderId,
+        'prefill': {
+          'contact': userPhone,
+          'email': userEmail,
+        },
+        'theme': {
+          'color': '#00897B',
+        },
+      };
+
+      try {
+        print('[EventPayment] Opening Razorpay payment...');
+        _razorpay.open(options);
+      } catch (e) {
+        print('[Razorpay] Error opening: $e');
+        await _clearPendingEventPayment();
+        setState(() => _isProcessingPayment = false);
+        _showPremiumSnackBar(
+          'Failed to open payment. Please try again.',
+          Colors.red,
+          Icons.error_rounded,
+        );
+      }
+      
+    } catch (e) {
+      setState(() => _isProcessingPayment = false);
+      _showPremiumSnackBar(
+        'Error during registration: ${e.toString()}',
+        Colors.red,
+        Icons.error_rounded,
+      );
+    }
+  }
+
+  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    try {
+      setState(() => _isProcessingPayment = true);
+      
+      print('[EventPaymentSuccess] Payment response: ${response.paymentId}');
+      
+      // ✅ CLEAR PENDING PAYMENT IMMEDIATELY ON SUCCESS
+      await _clearPendingEventPayment();
+
+      // Get event details
+      final eventPrice = (widget.eventData['price'] ?? 0).toDouble();
+      final baseAmount = eventPrice;
+      final payableAmount = _totalToCharge(baseAmount);
+
+      // Get event owner account ID
+      final eventDoc = await FirebaseFirestore.instance.collection('spot_events').doc(widget.eventId).get();
+      final eventData = eventDoc.data()!;
+      final ownerId = eventData['ownerId'];
+
+      String? ownerAccountId;
+      if (ownerId != null) {
+        final ownerDoc = await FirebaseFirestore.instance.collection('users').doc(ownerId).get();
+        if (ownerDoc.exists) {
+          ownerAccountId = ownerDoc.data()?['razorpayAccountId'];
+        }
+      }
+
+      // Confirm registration and write to Firestore with timeout handling
+      final HttpsCallable confirmFn = FirebaseFunctions.instance.httpsCallable('confirmEventRegistrationAndWrite');
+      
+      final confirmResult = await confirmFn({
+        'orderId': response.orderId,
+        'paymentId': response.paymentId,
+        'userId': widget.user!.uid,
+        'eventId': widget.eventId,
+        'eventName': widget.eventData['name'],
+        'ownerId': ownerId,
+        // JSON-safe date string for callable payloads
+        'eventDate': _toYmdString(widget.eventData['eventDate']),
+        'eventTime': widget.eventData['eventTime'],
+        'baseAmount': baseAmount,
+        'payableAmount': payableAmount,
+        'userName': widget.user!.displayName ?? 'User',
+        'userEmail': widget.user!.email ?? '',
+        'userPhone': widget.user!.phoneNumber ?? '',
+        'eventLocation': widget.eventData['location'] ?? '',
+        'eventType': widget.eventData['eventType'] ?? '',
+        'paymentReference': response.paymentId ?? '',
+      }).timeout(
+        Duration(seconds: 30),
+        onTimeout: () {
+          throw TimeoutException('Registration confirmation timed out. Please check your booking status or contact support.');
+        },
+      );
+
+      if (confirmResult.data['ok'] == true) {
+        // Send confirmation email with error handling (don't fail if email fails)
+        try {
+          // Ensure user profile is loaded for email
+          await _ensureUserProfileLoaded();
+          final emailUserName = _resolveUserName();
+          final emailUserEmail = _resolveUserEmail();
+          final emailUserPhone = _resolveUserPhone();
+          
+          final HttpsCallable emailFn = FirebaseFunctions.instance.httpsCallable('sendEventRegistrationConfirmationEmail');
+          await emailFn.call({
+            'to': emailUserEmail,
+            'userName': emailUserName,
+            'userEmail': emailUserEmail,
+            'userPhone': emailUserPhone,
+            'registrationId': confirmResult.data['registrationId'] ?? '',
+            'eventName': widget.eventData['name'],
+            'eventDate': _toYmdString(widget.eventData['eventDate']), // Convert Timestamp to string for Cloud Function
+            'eventTime': widget.eventData['eventTime'],
+            'eventLocation': widget.eventData['location'] ?? '',
+            'eventType': widget.eventData['eventType'] ?? '',
+            'amount': payableAmount,
+            'paymentMethod': 'Online',
+            'paymentReference': response.paymentId ?? '',
+          }).timeout(Duration(seconds: 15));
+        } catch (e) {
+          // Don't fail the whole process if email fails
+          print('[PaidEventEmail] Email notification failed: $e');
+          print('[PaidEventEmail] Error details: ${e.toString()}');
+        }
+
+        Navigator.pop(context);
+        _showPremiumSnackBar(
+          'Successfully registered! 🎉',
+          Color(0xFF00C853),
+          Icons.check_circle_rounded,
+        );
+      } else {
+        setState(() => _isProcessingPayment = false);
+        _showPremiumSnackBar(
+          'Registration confirmation failed. Please contact support.',
+          Colors.red,
+          Icons.error_rounded,
+        );
+      }
+    } on TimeoutException catch (e) {
+      setState(() => _isProcessingPayment = false);
+      _showPremiumSnackBar(
+        e.message ?? 'Request timed out. Please check your booking status or contact support.',
+        Colors.orange,
+        Icons.warning_rounded,
+      );
+    } catch (e) {
+      setState(() => _isProcessingPayment = false);
+      _showPremiumSnackBar(
+        'Error processing payment: ${e.toString()}',
+        Colors.red,
+        Icons.error_rounded,
+      );
+    }
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    print('[EventPaymentError] Payment failed: ${response.message}');
+    print('[EventPaymentError] Code: ${response.code}');
+    
+    setState(() => _isProcessingPayment = false);
+    _showPremiumSnackBar(
+      'Payment failed: ${response.message ?? 'Unknown error'}',
+      Colors.red,
+      Icons.error_rounded,
+    );
+    // DO NOT clear pending payment - user can retry
+    // Payment data is still in SharedPreferences for recovery
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    _showPremiumSnackBar(
+      'External wallet selected: ${response.walletName}',
+      Colors.blue,
+      Icons.account_balance_wallet_rounded,
+    );
   }
 
   void _showPremiumSnackBar(String message, Color color, IconData icon) {
@@ -1672,5 +2686,225 @@ class _PremiumEventDetailsBottomSheetState extends State<PremiumEventDetailsBott
     }
     
     return time.toString();
+  }
+}
+
+class SimilarEventsPage extends StatelessWidget {
+  final String title;
+  final List<Map<String, dynamic>> events;
+  final void Function(Map<String, dynamic> event) onEventSelected;
+
+  const SimilarEventsPage({
+    Key? key,
+    required this.title,
+    required this.events,
+    required this.onEventSelected,
+  }) : super(key: key);
+
+  String _formatDate(dynamic value) {
+    if (value == null) return 'TBA';
+    try {
+      DateTime dateTime;
+      if (value is Timestamp) {
+        dateTime = value.toDate();
+      } else if (value is DateTime) {
+        dateTime = value;
+      } else {
+        dateTime = DateTime.parse(value.toString());
+      }
+      return DateFormat('MMM dd, yyyy').format(dateTime);
+    } catch (e) {
+      return value.toString();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Color(0xFFF8FAFB),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: IconThemeData(color: Color(0xFF00897B)),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: Color(0xFF00897B),
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
+          ),
+        ),
+      ),
+      body: events.isEmpty
+          ? Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.event_available, size: 48, color: Color(0xFF00897B)),
+                    SizedBox(height: 12),
+                    Text(
+                      'No similar events available at the moment.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E293B),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : ListView.separated(
+              padding: EdgeInsets.all(20),
+              separatorBuilder: (_, __) => SizedBox(height: 16),
+              itemCount: events.length,
+              itemBuilder: (context, index) {
+                final event = events[index];
+                final data = event['data'] as Map<String, dynamic>;
+                final id = event['id'] as String;
+
+                return GestureDetector(
+                  onTap: () => onEventSelected(event),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 15,
+                          offset: Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                          child: Image.network(
+                            data['imageUrl'] ?? 'https://picsum.photos/300/180',
+                            height: 180,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              height: 180,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Color(0xFFE0F2F1), Color(0xFFB2DFDB)],
+                                ),
+                              ),
+                              child: Center(
+                                child: Icon(Icons.event, color: Color(0xFF00897B), size: 40),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Color(0xFFE0F7FA),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      data['eventType'] ?? 'Event',
+                                      style: TextStyle(
+                                        color: Color(0xFF00897B),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  Spacer(),
+                                  Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF94A3B8)),
+                                ],
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                data['name'] ?? 'Event Name',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1E293B),
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Icon(Icons.calendar_today, size: 16, color: Color(0xFF00897B)),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    _formatDate(data['eventDate']),
+                                    style: TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Icon(Icons.access_time, size: 16, color: Color(0xFF00897B)),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    data['eventTime'] ?? 'TBA',
+                                    style: TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Icon(Icons.location_on, size: 16, color: Color(0xFF00897B)),
+                                  SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      data['location'] ?? 'Location TBD',
+                                      style: TextStyle(
+                                        color: Color(0xFF64748B),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                data['description'] ?? 'No description available',
+                                style: TextStyle(
+                                  color: Color(0xFF475569),
+                                  fontSize: 14,
+                                  height: 1.4,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
   }
 }

@@ -570,12 +570,29 @@ exports.onBookingCreated = functions.firestore
 // BOOKING CONFIRMATION
 // =========================
 
-exports.confirmBookingAndWrite = functions.https.onCall(async (data, context) => {
-  const lockRef = null;
-  try {
-    // Validate and sanitize input
-    const validatedData = validateBookingInput(data);
-    const { orderId, paymentId, userId, turfId, turfName = '', ownerId = '', bookingDate, selectedGround, slots, totalHours, baseAmount, payableAmount } = validatedData;
+// Internal function to create booking (shared logic)
+async function createBookingInternal(validatedData) {
+  const { orderId, paymentId, userId, turfId, turfName = '', ownerId = '', bookingDate, selectedGround, slots, totalHours, baseAmount, payableAmount } = validatedData;
+    
+    const db = admin.firestore();
+    
+    // Check for duplicate booking with same payment ID (idempotency)
+    const existingBooking = await db.collection('bookings')
+      .where('razorpayPaymentId', '==', paymentId)
+      .limit(1)
+      .get();
+    
+    if (!existingBooking.empty) {
+      const existing = existingBooking.docs[0].data();
+      console.log('Duplicate booking attempt detected for payment:', paymentId);
+      return {
+        ok: true,
+        status: 'confirmed',
+        turfBookingId: existingBooking.docs[0].id,
+        bookingId: existingBooking.docs[0].id,
+        message: 'Booking already exists for this payment'
+      };
+    }
     
     const client = getRazorpayClient();
     const payment = await client.payments.fetch(paymentId);
@@ -589,18 +606,30 @@ exports.confirmBookingAndWrite = functions.https.onCall(async (data, context) =>
     }
     
     const paidAmountInr = Number(payment.amount) / 100.0;
-    if (Math.abs(paidAmountInr - payableAmount) > 1) {
-      throw new functions.https.HttpsError('failed-precondition', 'Paid amount mismatch');
+    if (Math.abs(paidAmountInr - payableAmount) > 0.01) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `Payment verification failed. Expected: ₹${payableAmount.toFixed(2)}, Received: ₹${paidAmountInr.toFixed(2)}`
+      );
     }
     
-    const db = admin.firestore();
     const lockId = `${turfId}_${selectedGround}_${bookingDate}_${slots.sort().join('_')}`;
     const lockRef = db.collection('slot_locks').doc(lockId);
     
     try {
       const result = await db.runTransaction(async (tx) => {
+        // ✅ BUG FIX #1: ALL READS FIRST, THEN ALL WRITES
+        // STEP 1: Do ALL READS FIRST
         const lockDoc = await tx.get(lockRef);
         
+        const bookingsCol = db.collection('turfs').doc(turfId).collection('bookings');
+        const q = await tx.get(
+          bookingsCol
+            .where('selectedGround', '==', selectedGround)
+            .where('bookingDate', '==', bookingDate)
+        );
+        
+        // STEP 2: VALIDATE (after reads completed)
         if (lockDoc.exists) {
           const lockData = lockDoc.data();
           if (lockData.locked) {
@@ -610,20 +639,6 @@ exports.confirmBookingAndWrite = functions.https.onCall(async (data, context) =>
             }
           }
         }
-        
-        tx.set(lockRef, {
-          locked: true,
-          userId,
-          timestamp: admin.firestore.FieldValue.serverTimestamp(),
-          expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 30000))
-        });
-        
-        const bookingsCol = db.collection('turfs').doc(turfId).collection('bookings');
-        const q = await tx.get(
-          bookingsCol
-            .where('selectedGround', '==', selectedGround)
-            .where('bookingDate', '==', bookingDate)
-        );
         
         let allBooked = [];
         q.forEach(doc => {
@@ -635,6 +650,14 @@ exports.confirmBookingAndWrite = functions.https.onCall(async (data, context) =>
         if (hasConflict) {
           throw new functions.https.HttpsError('aborted', 'Selected slots already booked');
         }
+        
+        // STEP 3: Do ALL WRITES
+        tx.set(lockRef, {
+          locked: true,
+          userId,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 30000))
+        });
         
         const now = admin.firestore.FieldValue.serverTimestamp();
         const bookingData = {
@@ -665,6 +688,17 @@ exports.confirmBookingAndWrite = functions.https.onCall(async (data, context) =>
         return { turfBookingId: turfBookingRef.id, bookingId: turfBookingRef.id };
       });
       
+      // Update razorpay_orders to mark booking as completed
+      try {
+        await db.collection('razorpay_orders').doc(orderId).update({
+          booking_completed: true,
+          completed_at: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (updateErr) {
+        console.error('Failed to update razorpay_orders booking_completed flag:', updateErr);
+        // Don't throw - booking was created successfully
+      }
+      
       return { ok: true, status: 'confirmed', ...result };
       
     } catch (txError) {
@@ -676,9 +710,347 @@ exports.confirmBookingAndWrite = functions.https.onCall(async (data, context) =>
       }
       throw txError;
     }
+}
+
+// Public function for direct booking confirmation
+exports.confirmBookingAndWrite = functions.https.onCall(async (data, context) => {
+  try {
+    // Validate and sanitize input
+    const validatedData = validateBookingInput(data);
+    
+    // Call internal shared function
+    return await createBookingInternal(validatedData);
     
   } catch (error) {
     console.error('confirmBookingAndWrite error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// =========================
+// ✅ BUG FIX #2: PAYMENT RECOVERY FOR LOW-RAM DEVICES
+// =========================
+
+exports.verifyAndCompleteBooking = functions.https.onCall(async (data, context) => {
+  try {
+    const { orderId, bookingData } = data;
+    
+    if (!orderId || !bookingData) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing orderId or bookingData');
+    }
+    
+    const db = admin.firestore();
+    
+    // Check if booking already exists (idempotency)
+    const existingBooking = await db
+      .collection('bookings')
+      .where('razorpayOrderId', '==', orderId)
+      .limit(1)
+      .get();
+    
+    if (!existingBooking.empty) {
+      const existing = existingBooking.docs[0].data();
+      console.log('Booking already exists for order:', orderId);
+      return {
+        ok: true,
+        status: 'confirmed',
+        bookingId: existingBooking.docs[0].id,
+        message: 'Booking already confirmed for this payment'
+      };
+    }
+    
+    // Fetch order details from razorpay_orders collection
+    const orderDoc = await db.collection('razorpay_orders').doc(orderId).get();
+    
+    if (!orderDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Order not found in database');
+    }
+    
+    const orderData = orderDoc.data();
+    const client = getRazorpayClient();
+    
+    // Fetch order from Razorpay to get payment info
+    const order = await client.orders.fetch(orderId);
+    
+    if (!order) {
+      throw new functions.https.HttpsError('not-found', 'Order not found in Razorpay');
+    }
+    
+    // Get payments for this order
+    const payments = await client.orders.fetchPayments(orderId);
+    
+    if (!payments || !payments.items || payments.items.length === 0) {
+      throw new functions.https.HttpsError('failed-precondition', 'No payment found for this order');
+    }
+    
+    // Find captured payment
+    const capturedPayment = payments.items.find((p) => p.status === 'captured');
+    
+    if (!capturedPayment) {
+      throw new functions.https.HttpsError('failed-precondition', 'Payment not captured yet');
+    }
+    
+    // Validate and call internal booking function
+    const validatedData = validateBookingInput({
+      orderId: orderId,
+      paymentId: capturedPayment.id,
+      ...bookingData
+    });
+    
+    return await createBookingInternal(validatedData);
+  } catch (error) {
+    console.error('verifyAndCompleteBooking error:', error);
+    
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// =========================
+// ✅ RECOVERY: Check razorpay_orders for incomplete bookings
+// =========================
+exports.recoverIncompleteBookings = functions.https.onCall(async (data, context) => {
+  try {
+    const userId = data.userId || context.auth?.uid;
+    if (!userId) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const db = admin.firestore();
+    const client = getRazorpayClient();
+    const recoveredBookings = [];
+    const errors = [];
+    
+    // Query razorpay_orders for this user with booking_id
+    // Note: We'll filter for incomplete bookings in the loop since Firestore doesn't support != null
+    const userOrders = await db.collection('razorpay_orders')
+      .where('user_id', '==', userId)
+      .get();
+    
+    // Filter for orders with booking_id that are not completed
+    const incompleteOrders = userOrders.docs.filter(doc => {
+      const data = doc.data();
+      return data.booking_id != null && data.booking_completed !== true;
+    });
+    
+    console.log(`[Recovery] Found ${incompleteOrders.length} incomplete razorpay orders for user ${userId}`);
+    
+    for (const orderDoc of incompleteOrders) {
+      const orderData = orderDoc.data();
+      const orderId = orderDoc.id;
+      const bookingId = orderData.booking_id;
+      const turfId = orderData.turf_id;
+      
+      try {
+        // Check if booking exists in bookings collection
+        const bookingsQuery = await db.collection('bookings')
+          .where('razorpayOrderId', '==', orderId)
+          .limit(1)
+          .get();
+        
+        // Check if booking exists in turfs/{turfId}/bookings
+        let turfBookingExists = false;
+        if (turfId) {
+          const turfBookingsQuery = await db.collection('turfs').doc(turfId)
+            .collection('bookings')
+            .where('razorpayOrderId', '==', orderId)
+            .limit(1)
+            .get();
+          turfBookingExists = !turfBookingsQuery.empty;
+        }
+        
+        // If booking exists, mark as completed
+        if (!bookingsQuery.empty || turfBookingExists) {
+          await db.collection('razorpay_orders').doc(orderId).update({
+            booking_completed: true,
+            completed_at: admin.firestore.FieldValue.serverTimestamp()
+          });
+          console.log(`[Recovery] Booking already exists for order ${orderId}, marked as completed`);
+          continue;
+        }
+        
+        // Check payment status in Razorpay
+        const order = await client.orders.fetch(orderId);
+        if (!order) {
+          console.log(`[Recovery] Order ${orderId} not found in Razorpay`);
+          continue;
+        }
+        
+        const payments = await client.orders.fetchPayments(orderId);
+        const capturedPayment = payments?.items?.find((p) => p.status === 'captured');
+        
+        if (!capturedPayment) {
+          console.log(`[Recovery] Payment not captured for order ${orderId}`);
+          continue;
+        }
+        
+        // Payment is captured but booking doesn't exist - create it
+        console.log(`[Recovery] Payment captured but booking missing for order ${orderId}, creating booking...`);
+        
+        if (!orderData.booking_data) {
+          console.log(`[Recovery] No booking_data stored for order ${orderId}, cannot recover`);
+          errors.push({ orderId, error: 'No booking data stored' });
+          continue;
+        }
+        
+        const bookingData = orderData.booking_data;
+        const validatedData = validateBookingInput({
+          orderId: orderId,
+          paymentId: capturedPayment.id,
+          userId: userId,
+          turfId: turfId,
+          turfName: bookingData.turfName || '',
+          ownerId: bookingData.ownerId || '',
+          bookingDate: bookingData.bookingDate,
+          selectedGround: bookingData.selectedGround,
+          slots: bookingData.slots,
+          totalHours: bookingData.totalHours,
+          baseAmount: bookingData.baseAmount || orderData.base_turf_amount,
+          payableAmount: orderData.total_paid,
+          userName: bookingData.userName || 'User'
+        });
+        
+        const result = await createBookingInternal(validatedData);
+        recoveredBookings.push({ orderId, bookingId: result.bookingId });
+        console.log(`[Recovery] Successfully created booking for order ${orderId}`);
+        
+      } catch (orderError) {
+        console.error(`[Recovery] Error processing order ${orderId}:`, orderError);
+        errors.push({ orderId, error: orderError.message });
+      }
+    }
+    
+    return {
+      ok: true,
+      recoveredCount: recoveredBookings.length,
+      recoveredBookings,
+      errors: errors.length > 0 ? errors : null
+    };
+    
+  } catch (error) {
+    console.error('recoverIncompleteBookings error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// =========================
+// ✅ RECOVERY: Check razorpay_orders for incomplete event registrations
+// =========================
+exports.recoverIncompleteEventRegistrations = functions.https.onCall(async (data, context) => {
+  try {
+    const userId = data.userId || context.auth?.uid;
+    if (!userId) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const db = admin.firestore();
+    const client = getRazorpayClient();
+    const recoveredRegistrations = [];
+    const errors = [];
+    
+    // Query razorpay_orders for this user with registration_id
+    const userOrders = await db.collection('razorpay_orders')
+      .where('user_id', '==', userId)
+      .get();
+    
+    // Filter for orders with registration_id that are not completed
+    const incompleteOrders = userOrders.docs.filter(doc => {
+      const data = doc.data();
+      return data.registration_id != null && data.registration_completed !== true;
+    });
+    
+    console.log(`[Recovery] Found ${incompleteOrders.length} incomplete event registrations for user ${userId}`);
+    
+    for (const orderDoc of incompleteOrders) {
+      const orderData = orderDoc.data();
+      const orderId = orderDoc.id;
+      const registrationId = orderData.registration_id;
+      const eventId = orderData.event_id;
+      
+      try {
+        // Check if registration exists in event_registrations collection
+        const registrationsQuery = await db.collection('event_registrations')
+          .where('razorpayOrderId', '==', orderId)
+          .limit(1)
+          .get();
+        
+        // If registration exists, mark as completed
+        if (!registrationsQuery.empty) {
+          await db.collection('razorpay_orders').doc(orderId).update({
+            registration_completed: true,
+            completed_at: admin.firestore.FieldValue.serverTimestamp()
+          });
+          console.log(`[Recovery] Registration already exists for order ${orderId}, marked as completed`);
+          continue;
+        }
+        
+        // Check payment status in Razorpay
+        const order = await client.orders.fetch(orderId);
+        if (!order) {
+          console.log(`[Recovery] Order ${orderId} not found in Razorpay`);
+          continue;
+        }
+        
+        const payments = await client.orders.fetchPayments(orderId);
+        const capturedPayment = payments?.items?.find((p) => p.status === 'captured');
+        
+        if (!capturedPayment) {
+          console.log(`[Recovery] Payment not captured for order ${orderId}`);
+          continue;
+        }
+        
+        // Payment is captured but registration doesn't exist - create it
+        console.log(`[Recovery] Payment captured but registration missing for order ${orderId}, creating registration...`);
+        
+        if (!orderData.registration_data) {
+          console.log(`[Recovery] No registration_data stored for order ${orderId}, cannot recover`);
+          errors.push({ orderId, error: 'No registration data stored' });
+          continue;
+        }
+        
+        const registrationData = orderData.registration_data;
+        const result = await createEventRegistrationInternal({
+          orderId: orderId,
+          paymentId: capturedPayment.id,
+          userId: userId,
+          eventId: eventId,
+          eventName: registrationData.eventName || '',
+          ownerId: registrationData.ownerId || '',
+          eventDate: registrationData.eventDate,
+          eventTime: registrationData.eventTime,
+          eventLocation: registrationData.eventLocation || orderData.event_location || '',
+          eventType: registrationData.eventType || orderData.event_type || '',
+          baseAmount: registrationData.baseAmount || orderData.base_event_amount,
+          payableAmount: orderData.total_paid,
+          userName: registrationData.userName || 'User',
+          userEmail: registrationData.userEmail || orderData.user_email || '',
+          userPhone: registrationData.userPhone || orderData.user_phone || '',
+          userImageUrl: registrationData.userImageUrl || ''
+        });
+        
+        recoveredRegistrations.push({ orderId, registrationId: result.registrationId });
+        console.log(`[Recovery] Successfully created registration for order ${orderId}`);
+        
+      } catch (orderError) {
+        console.error(`[Recovery] Error processing order ${orderId}:`, orderError);
+        errors.push({ orderId, error: orderError.message });
+      }
+    }
+    
+    return {
+      ok: true,
+      recoveredCount: recoveredRegistrations.length,
+      recoveredRegistrations,
+      errors: errors.length > 0 ? errors : null
+    };
+    
+  } catch (error) {
+    console.error('recoverIncompleteEventRegistrations error:', error);
     if (error instanceof functions.https.HttpsError) throw error;
     throw new functions.https.HttpsError('internal', error.message);
   }
@@ -801,6 +1173,8 @@ exports.processRefund = functions.https.onCall(async (data, context) => {
         processedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       
+      const isEventRefund = req.type === 'event' || !!req.registrationId || !!req.eventId;
+      
       await sendNotificationToUser(
         req.userId,
         'Refund Request Rejected',
@@ -808,7 +1182,9 @@ exports.processRefund = functions.https.onCall(async (data, context) => {
         {
           type: 'refund_rejected',
           refundRequestId,
-          bookingId: req.bookingId
+          bookingId: req.bookingId || null,
+          registrationId: req.registrationId || null,
+          eventId: req.eventId || null
         }
       );
       
@@ -824,9 +1200,24 @@ exports.processRefund = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('invalid-argument', 'Invalid paymentId or amount');
     }
     
-    const payment = await client.payments.fetch(paymentId);
-    if (!payment || payment.status !== 'captured') {
-      throw new functions.https.HttpsError('failed-precondition', 'Payment not captured or not found');
+    // Fetch payment details with better error handling
+    let payment;
+    try {
+      payment = await client.payments.fetch(paymentId);
+    } catch (fetchError) {
+      const errorMsg = fetchError?.error?.description || fetchError?.description || fetchError?.message || 'Failed to fetch payment details';
+      console.error('Error fetching payment:', fetchError);
+      throw new functions.https.HttpsError('failed-precondition', `Payment fetch failed: ${errorMsg}`);
+    }
+    
+    if (!payment) {
+      throw new functions.https.HttpsError('not-found', 'Payment not found');
+    }
+    
+    console.log(`Payment status: ${payment.status}, Amount: ${payment.amount}, Refunded: ${payment.amount_refunded}`);
+    
+    if (payment.status !== 'captured') {
+      throw new functions.https.HttpsError('failed-precondition', `Payment status is '${payment.status}', not 'captured'. Cannot process refund.`);
     }
     
     const paidPaise = Number(payment.amount) || 0;
@@ -834,66 +1225,125 @@ exports.processRefund = functions.https.onCall(async (data, context) => {
     const remainingPaise = paidPaise - refundedPaise;
     const requestedPaise = Math.round(totalAmountInr * 100);
     
-    if (requestedPaise > remainingPaise) {
-      throw new functions.https.HttpsError('failed-precondition', `Requested refund exceeds remaining refundable amount. Remaining: ₹${(remainingPaise/100).toFixed(2)}`);
+    console.log(`Refund calculation: Paid=${paidPaise}, Refunded=${refundedPaise}, Remaining=${remainingPaise}, Requested=${requestedPaise}`);
+    
+    if (remainingPaise <= 0) {
+      throw new functions.https.HttpsError('failed-precondition', 'Payment has already been fully refunded. No remaining amount to refund.');
     }
     
-    // Get turf owner ID
-    const bookingDoc = await db.collection('bookings').doc(req.bookingId).get();
-    const bookingData = bookingDoc.exists ? bookingDoc.data() : {};
+    if (requestedPaise > remainingPaise) {
+      throw new functions.https.HttpsError('failed-precondition', `Requested refund (₹${(requestedPaise/100).toFixed(2)}) exceeds remaining refundable amount (₹${(remainingPaise/100).toFixed(2)}).`);
+    }
     
-    let turfOwnerId = bookingData.ownerId;
-    if (!turfOwnerId && req.turfId) {
+    // Determine if this is an event or turf refund
+    const isEventRefund = req.type === 'event' || !!req.registrationId || !!req.eventId;
+    
+    // Get owner ID based on refund type
+    let ownerId = null;
+    let ownerAccountId = null;
+    
+    if (isEventRefund) {
+      // For event refunds, get owner from event document
       try {
-        const turfDoc = await db.collection('turfs').doc(req.turfId).get();
-        if (turfDoc.exists) {
-          turfOwnerId = turfDoc.data().ownerId;
+        const eventId = req.eventId;
+        if (eventId) {
+          const eventDoc = await db.collection('spot_events').doc(eventId).get();
+          if (eventDoc.exists) {
+            ownerId = eventDoc.data().ownerId;
+            if (ownerId) {
+              const ownerDoc = await db.collection('users').doc(ownerId).get();
+              if (ownerDoc.exists) {
+                ownerAccountId = ownerDoc.data().razorpayAccountId;
+              }
+            }
+          }
         }
       } catch (error) {
-        console.error('Error fetching turf owner:', error);
+        console.error('Error fetching event owner:', error);
+      }
+    } else {
+      // For turf refunds, get owner from booking document
+      const bookingId = req.bookingId;
+      if (bookingId) {
+        const bookingDoc = await db.collection('bookings').doc(bookingId).get();
+        const bookingData = bookingDoc.exists ? bookingDoc.data() : {};
+        
+        ownerId = bookingData.ownerId;
+        if (!ownerId && req.turfId) {
+          try {
+            const turfDoc = await db.collection('turfs').doc(req.turfId).get();
+            if (turfDoc.exists) {
+              ownerId = turfDoc.data().ownerId;
+            }
+          } catch (error) {
+            console.error('Error fetching turf owner:', error);
+          }
+        }
       }
     }
     
-    const baseTurfAmount = Number(req.baseAmount) || (totalAmountInr * 0.85);
-    const platformAmount = totalAmountInr - baseTurfAmount;
+    const baseAmount = Number(req.baseAmount) || (totalAmountInr * 0.85);
+    const platformAmount = totalAmountInr - baseAmount;
     
     let refund;
     try {
+      console.log(`Attempting Razorpay refund: PaymentId=${paymentId}, Amount=${requestedPaise} paise (₹${(requestedPaise/100).toFixed(2)})`);
+      
       // Refund FULL amount to customer
       refund = await client.payments.refund(paymentId, {
         amount: requestedPaise,
         notes: {
-          reason: req.reason,
-          booking_id: req.bookingId,
-          refund_request_id: refundRequestId,
-          admin_notes: adminNotes || '',
-          full_refund: 'true'
+          reason: String(req.reason || ''),
+          booking_id: String(req.bookingId || req.registrationId || ''),
+          registration_id: String(req.registrationId || ''),
+          event_id: String(req.eventId || ''),
+          refund_request_id: String(refundRequestId || ''),
+          full_refund: 'true',
+          type: isEventRefund ? 'event' : 'turf'
         }
       });
+      
+      console.log(`Razorpay refund successful: RefundId=${refund.id}, Status=${refund.status}`);
     } catch (refundError) {
-      console.error('Razorpay refund API error:', refundError);
+      console.error('Razorpay refund API error:', JSON.stringify(refundError, null, 2));
+      
+      // Extract error message from Razorpay error structure
+      let errorMessage = 'Unknown error';
+      if (refundError?.error?.description) {
+        errorMessage = refundError.error.description;
+      } else if (refundError?.error?.field) {
+        errorMessage = `${refundError.error.field}: ${refundError.error.description || refundError.error.message || 'Invalid field'}`;
+      } else if (refundError?.description) {
+        errorMessage = refundError.description;
+      } else if (refundError?.message) {
+        errorMessage = refundError.message;
+      } else if (typeof refundError === 'string') {
+        errorMessage = refundError;
+      } else {
+        errorMessage = JSON.stringify(refundError);
+      }
+      
+      console.error('Extracted error message:', errorMessage);
       
       await reqSnap.ref.update({
         status: 'failed',
-        adminNotes: `Razorpay refund failed: ${refundError.message}`,
+        adminNotes: `Razorpay refund failed: ${errorMessage}`,
         processedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       
-      throw new functions.https.HttpsError('failed-precondition', `Razorpay refund failed: ${refundError.message}`);
+      throw new functions.https.HttpsError('failed-precondition', `Razorpay refund failed: ${errorMessage}`);
     }
     
     // Use transaction to ensure all database updates succeed together
     await db.runTransaction(async (tx) => {
       // Create clawback for owner's share ONLY
-      if (baseTurfAmount > 0 && turfOwnerId) {
+      if (baseAmount > 0 && ownerId) {
         const deductionRef = db.collection('turfownerdeductions').doc();
-        tx.set(deductionRef, {
-          ownerId: turfOwnerId,
-          turfId: req.turfId,
-          bookingId: req.bookingId,
+        const deductionData = {
+          ownerId: ownerId,
           refundRequestId: refundRequestId,
           refundId: refund.id,
-          amount: baseTurfAmount,
+          amount: baseAmount,
           reason: 'Automated clawback for approved refund - owner share only',
           status: 'pending',
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -901,10 +1351,22 @@ exports.processRefund = functions.https.onCall(async (data, context) => {
           notes: {
             customerRefund: totalAmountInr,
             platformAbsorbed: platformAmount,
-            clawbackAmount: baseTurfAmount
+            clawbackAmount: baseAmount,
+            type: isEventRefund ? 'event' : 'turf'
           }
-        });
-        console.log(`Clawback created: ₹${baseTurfAmount} (Platform absorbs: ₹${platformAmount})`);
+        };
+        
+        // Add type-specific fields
+        if (isEventRefund) {
+          deductionData.eventId = req.eventId || null;
+          deductionData.registrationId = req.registrationId || null;
+        } else {
+          deductionData.turfId = req.turfId || null;
+          deductionData.bookingId = req.bookingId || null;
+        }
+        
+        tx.set(deductionRef, deductionData);
+        console.log(`Clawback created: ₹${baseAmount} (Platform absorbs: ₹${platformAmount})`);
       }
       
       // Update refund request
@@ -917,25 +1379,40 @@ exports.processRefund = functions.https.onCall(async (data, context) => {
         processedAt: admin.firestore.FieldValue.serverTimestamp(),
         refundBreakdown: {
           totalAmount: totalAmountInr,
-          baseTurfAmount: baseTurfAmount,
+          baseAmount: baseAmount,
           platformAmount: platformAmount,
-          clawbackCreated: (baseTurfAmount > 0 && turfOwnerId) ? true : false
+          clawbackCreated: (baseAmount > 0 && ownerId) ? true : false
         }
       });
       
-      // Update booking
-      const bookingRef = db.collection('bookings').doc(req.bookingId);
-      tx.update(bookingRef, {
-        refundStatus: 'processed',
-        refundId: refund.id,
-        refundedAt: admin.firestore.FieldValue.serverTimestamp(),
-        refundBreakdown: {
-          totalAmount: totalAmountInr,
-          baseTurfAmount: baseTurfAmount,
-          platformAmount: platformAmount,
-          clawbackCreated: (baseTurfAmount > 0 && turfOwnerId) ? true : false
-        }
-      });
+      // Update booking or registration based on type
+      if (isEventRefund && req.registrationId) {
+        const registrationRef = db.collection('event_registrations').doc(req.registrationId);
+        tx.update(registrationRef, {
+          refundStatus: 'processed',
+          refundId: refund.id,
+          refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+          refundBreakdown: {
+            totalAmount: totalAmountInr,
+            baseAmount: baseAmount,
+            platformAmount: platformAmount,
+            clawbackCreated: (baseAmount > 0 && ownerId) ? true : false
+          }
+        });
+      } else if (!isEventRefund && req.bookingId) {
+        const bookingRef = db.collection('bookings').doc(req.bookingId);
+        tx.update(bookingRef, {
+          refundStatus: 'processed',
+          refundId: refund.id,
+          refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+          refundBreakdown: {
+            totalAmount: totalAmountInr,
+            baseAmount: baseAmount,
+            platformAmount: platformAmount,
+            clawbackCreated: (baseAmount > 0 && ownerId) ? true : false
+          }
+        });
+      }
     });
     
     await sendNotificationToUser(
@@ -945,7 +1422,9 @@ exports.processRefund = functions.https.onCall(async (data, context) => {
       {
         type: 'refund_processed',
         refundRequestId,
-        bookingId: req.bookingId,
+        bookingId: req.bookingId || null,
+        registrationId: req.registrationId || null,
+        eventId: req.eventId || null,
         amount: totalAmountInr,
         refundId: refund.id
       }
@@ -953,20 +1432,39 @@ exports.processRefund = functions.https.onCall(async (data, context) => {
     
     return { success: true, refundId: refund.id, message: 'Refund processed successfully' };
   } catch (err) {
-    const raw = err?.error || err?.response || err;
-    const rpMsg = raw?.description || raw?.error?.description || raw?.data?.error?.description || raw?.message;
-    const finalMsg = rpMsg || (typeof raw === 'string' ? raw : JSON.stringify(raw));
-    console.error('processRefund error:', finalMsg);
+    console.error('processRefund outer catch error:', JSON.stringify(err, null, 2));
     
+    // Extract error message with better handling
+    let finalMsg = 'Unknown error occurred';
+    
+    if (err instanceof functions.https.HttpsError) {
+      finalMsg = err.message || err.code || 'HttpsError occurred';
+    } else {
+      const raw = err?.error || err?.response || err;
+      const rpMsg = raw?.description || raw?.error?.description || raw?.data?.error?.description || raw?.message;
+      finalMsg = rpMsg || (typeof raw === 'string' ? raw : JSON.stringify(raw)) || 'Unknown error';
+    }
+    
+    console.error('processRefund final error message:', finalMsg);
+    
+    // Update refund request with error (only if not already updated)
     try {
       if (data?.refundRequestId) {
-        await admin.firestore().collection('refund_requests').doc(data.refundRequestId).update({
-          status: 'failed',
-          adminNotes: `Razorpay refund failed: ${finalMsg}`,
-          processedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        const reqSnap = await admin.firestore().collection('refund_requests').doc(data.refundRequestId).get();
+        if (reqSnap.exists) {
+          const currentStatus = reqSnap.data()?.status;
+          if (currentStatus === 'pending' || currentStatus === 'failed') {
+            await reqSnap.ref.update({
+              status: 'failed',
+              adminNotes: `Razorpay refund failed: ${finalMsg}`,
+              processedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        }
       }
-    } catch {}
+    } catch (updateError) {
+      console.error('Error updating refund request status:', updateError);
+    }
     
     if (err instanceof functions.https.HttpsError) throw err;
     throw new functions.https.HttpsError('failed-precondition', `Razorpay refund failed: ${finalMsg}`);
@@ -1012,12 +1510,18 @@ exports.checkOverdueClawbacks = functions.pubsub.schedule('every 24 hours').onRu
         console.error('Error fetching owner details:', error);
       }
       
+      // Determine if this is an event or turf booking clawback
+      const isEventClawback = data.eventId || data.registrationId || (data.notes && data.notes.type === 'event');
+      const bookingType = isEventClawback ? 'Event Registration' : 'Booking';
+      const bookingId = isEventClawback ? (data.registrationId || data.eventId) : data.bookingId;
+      const referenceId = isEventClawback ? data.registrationId : data.bookingId;
+      
       let paymentLink = null;
       try {
         paymentLink = await razorpay.paymentLink.create({
           amount: Math.round(data.amount * 100),
           currency: 'INR',
-          description: `Refund Clawback Payment - Booking ${data.bookingId}`,
+          description: `Refund Clawback Payment - ${bookingType} ${referenceId || bookingId || 'N/A'}`,
           customer: {
             name: ownerName,
             email: ownerEmail,
@@ -1032,21 +1536,21 @@ exports.checkOverdueClawbacks = functions.pubsub.schedule('every 24 hours').onRu
             purpose: 'clawback_payment',
             deduction_id: doc.id,
             owner_id: data.ownerId,
-            booking_id: data.bookingId,
-            turf_id: data.turfId
-          },
-          callback_url: `https://yourapp.com/payment-success`,
-          callback_method: 'get'
+            booking_id: data.bookingId || null,
+            registration_id: data.registrationId || null,
+            turf_id: data.turfId || null,
+            event_id: data.eventId || null,
+            type: isEventClawback ? 'event' : 'turf'
+          }
+          // callback_url removed - not needed for clawback payment links
         });
       } catch (error) {
         console.error('Error creating payment link:', error);
       }
       
-      await db.collection('manual_clawback_payments').doc(doc.id).set({
+      const manualPaymentData = {
         deductionId: doc.id,
         ownerId: data.ownerId,
-        turfId: data.turfId,
-        bookingId: data.bookingId,
         amount: data.amount,
         reason: data.reason,
         status: 'pending_payment',
@@ -1056,31 +1560,45 @@ exports.checkOverdueClawbacks = functions.pubsub.schedule('every 24 hours').onRu
         dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         notes: 'Automated: Pending clawback exceeded 7 days. Manual payment required.',
         remindersSent: 0,
-        lastReminderAt: null
-      });
+        lastReminderAt: null,
+        type: isEventClawback ? 'event' : 'turf'
+      };
+      
+      // Add appropriate fields based on type
+      if (isEventClawback) {
+        manualPaymentData.eventId = data.eventId || null;
+        manualPaymentData.registrationId = data.registrationId || null;
+      } else {
+        manualPaymentData.turfId = data.turfId || null;
+        manualPaymentData.bookingId = data.bookingId || null;
+      }
+      
+      await db.collection('manual_clawback_payments').doc(doc.id).set(manualPaymentData);
       
       await sendNotificationToTurfOwner(
         data.ownerId,
         '⚠️ Urgent: Payment Required',
-        `You must pay ₹${data.amount} for a refunded booking. ${paymentLink ? `Pay here: ${paymentLink.short_url}` : 'Contact admin for payment details.'}`,
+        `You must pay ₹${data.amount} for a refunded ${isEventClawback ? 'event registration' : 'booking'}. ${paymentLink ? `Pay here: ${paymentLink.short_url}` : 'Contact admin for payment details.'}`,
         {
           type: 'clawback_overdue',
           deductionId: doc.id,
           amount: data.amount.toString(),
           paymentLink: paymentLink?.short_url || '',
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          clawbackType: isEventClawback ? 'event' : 'turf'
         }
       );
       
       await sendNotificationToAdmin(
         'Overdue Clawback Created',
-        `Owner ${data.ownerId} has overdue clawback of ₹${data.amount}. Payment link ${paymentLink ? 'sent' : 'creation failed'}.`,
+        `Owner ${data.ownerId} has overdue clawback of ₹${data.amount} for ${isEventClawback ? 'event registration' : 'booking'}. Payment link ${paymentLink ? 'sent' : 'creation failed'}.`,
         {
           type: 'clawback_overdue_admin',
           deductionId: doc.id,
           ownerId: data.ownerId,
           amount: data.amount.toString(),
-          paymentLink: paymentLink?.short_url || ''
+          paymentLink: paymentLink?.short_url || '',
+          clawbackType: isEventClawback ? 'event' : 'turf'
         }
       );
     }
@@ -1258,7 +1776,7 @@ exports.checkTurfSlotAvailability = functions.https.onCall(async (data, context)
 
 exports.createRazorpayOrderWithTransfer = functions.https.onCall(async (data, context) => {
   try {
-    const { totalAmount, payableAmount, ownerAccountId, bookingId, turfId, currency = 'INR' } = data;
+    const { totalAmount, payableAmount, ownerAccountId, bookingId, turfId, userId, bookingData, currency = 'INR' } = data;
     
     if (!totalAmount || !payableAmount || !ownerAccountId || !bookingId) {
       throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
@@ -1266,6 +1784,12 @@ exports.createRazorpayOrderWithTransfer = functions.https.onCall(async (data, co
     
     if (!ownerAccountId.startsWith('acc_')) {
       throw new functions.https.HttpsError('failed-precondition', 'Owner Razorpay Account ID is invalid');
+    }
+    
+    // Get userId from context if not provided
+    const actualUserId = userId || context.auth?.uid;
+    if (!actualUserId) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
     
     const client = getRazorpayClient();
@@ -1292,12 +1816,15 @@ exports.createRazorpayOrderWithTransfer = functions.https.onCall(async (data, co
     await db.collection('razorpay_orders').doc(order.id).set({
       booking_id: bookingId,
       turf_id: turfId || null,
+      user_id: actualUserId,
       total_paid: payableAmount,
       base_turf_amount: totalAmount,
       owner_share: ownerShare,
       platform_profit: platformProfit,
       razorpay_order_id: order.id,
       owner_account_id: ownerAccountId,
+      booking_data: bookingData || null, // Store booking data for recovery
+      booking_completed: false, // Flag to track if booking was created
       created_at: admin.firestore.FieldValue.serverTimestamp()
     });
     
@@ -1443,19 +1970,20 @@ exports.onUserVerificationSubmitted = functions.firestore
   });
 
 // Email sending - Module-level transporters to prevent memory leaks
+// Email transports - use environment variables for credentials
 const TRANSPORTS = {
   User: nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: 'customersbtb@gmail.com',
-      pass: 'fofb axss moce zspb'
+      user: functions.config().customer.email_user,
+      pass: functions.config().customer.email_pass
     }
   }),
   Other: nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: 'ownersbtb@gmail.com',
-      pass: 'uqec eqiq ipti zbhp'
+      user: functions.config().owner.email_user,
+      pass: functions.config().owner.email_pass
     }
   })
 };
@@ -1632,6 +2160,1057 @@ exports.sendBookingConfirmationEmail = functions.https.onCall(async (data, conte
     return { ok: true, id: info.messageId };
   } catch (error) {
     console.error('sendBookingConfirmationEmail error:', error);
+    throw new functions.https.HttpsError('internal', `${error.message} - Failed to send email`);
+  }
+});
+
+// =========================
+// EVENT REGISTRATION FUNCTIONS
+// =========================
+
+// Function to resolve event owner account ID
+async function resolveEventOwnerAccountId(eventId, registrationData) {
+  if (!eventId) return null;
+  
+  try {
+    const db = admin.firestore();
+    const eventDoc = await db.collection('spot_events').doc(eventId).get();
+    
+    if (!eventDoc.exists) {
+      console.error(`Event ${eventId} not found`);
+      return null;
+    }
+    
+    const event = eventDoc.data();
+    const ownerId = event.ownerId || registrationData.ownerId;
+    
+    if (!ownerId) {
+      console.error(`No ownerId found for event ${eventId}`);
+      return null;
+    }
+    
+    const userDoc = await db.collection('users').doc(ownerId).get();
+    
+    if (!userDoc.exists) {
+      console.error(`Owner user ${ownerId} not found`);
+      return null;
+    }
+    
+    const user = userDoc.data();
+    
+    // Try common field names for Razorpay connected account id
+    const candidateKeys = ['razorpayAccountId', 'ownerAccountId', 'accountId', 'razorpay_account_id', 'razorpay_accountId'];
+    for (const key of candidateKeys) {
+      const acc = user[key];
+      if (typeof acc === 'string' && acc.startsWith('acc_')) {
+        return acc;
+      }
+    }
+    
+    console.error(`No valid Razorpay account ID found for owner ${ownerId}`);
+    return null;
+  } catch (error) {
+    console.error('Error resolving event owner account ID:', error);
+    return null;
+  }
+}
+
+// Create Razorpay order with transfer for events
+exports.createRazorpayOrderWithTransferForEvent = functions.https.onCall(async (data, context) => {
+  try {
+    const { totalAmount, payableAmount, ownerAccountId, registrationId, eventId, userId, registrationData, currency = 'INR' } = data;
+    
+    if (!totalAmount || !payableAmount || !ownerAccountId || !registrationId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    if (!ownerAccountId.startsWith('acc_')) {
+      throw new functions.https.HttpsError('failed-precondition', 'Owner Razorpay Account ID is invalid');
+    }
+    
+    // Get userId from context if not provided
+    const actualUserId = userId || context.auth?.uid;
+    if (!actualUserId) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const client = getRazorpayClient();
+    const ownerShare = calculateOwnerShare(totalAmount);
+    const platformProfit = payableAmount - totalAmount;
+    
+    const order = await client.orders.create({
+      amount: Math.round(payableAmount * 100),
+      currency,
+      transfers: [{
+        account: ownerAccountId,
+        amount: Math.round(ownerShare * 100),
+        currency
+      }],
+      notes: {
+        registration_id: registrationId,
+        event_id: eventId,
+        owner_share: ownerShare.toString(),
+        platform_profit: platformProfit.toString(),
+        base_event_amount: totalAmount.toString()
+      }
+    });
+    
+    const db = admin.firestore();
+    await db.collection('razorpay_orders').doc(order.id).set({
+      registration_id: registrationId,
+      event_id: eventId || null,
+      user_id: actualUserId,
+      total_paid: payableAmount,
+      base_event_amount: totalAmount,
+      owner_share: ownerShare,
+      platform_profit: platformProfit,
+      razorpay_order_id: order.id,
+      owner_account_id: ownerAccountId,
+      registration_data: registrationData || null, // Store registration data for recovery
+      registration_completed: false, // Flag to track if registration was created
+      user_name: registrationData?.userName || null,
+      user_email: registrationData?.userEmail || null,
+      user_phone: registrationData?.userPhone || null,
+      event_location: registrationData?.eventLocation || null,
+      event_type: registrationData?.eventType || null,
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    return {
+      orderId: order.id,
+      ownerShare,
+      platformProfit,
+      baseEventAmount: totalAmount,
+      amount: payableAmount
+    };
+  } catch (error) {
+    console.error('Error creating Razorpay order with transfer for event:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Internal function to create event registration (shared logic)
+async function createEventRegistrationInternal(data) {
+  const {
+    orderId,
+    paymentId,
+    userId,
+    eventId,
+    eventName = '',
+    ownerId = '',
+    eventDate,
+    eventTime,
+    eventLocation = '',
+    eventType = '',
+    baseAmount,
+    payableAmount,
+    userName = 'User',
+    userEmail = '',
+    userPhone = '',
+    userImageUrl = ''
+  } = data;
+    
+    if (!orderId || !paymentId || !userId || !eventId || !eventDate) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    const client = getRazorpayClient();
+    const payment = await client.payments.fetch(paymentId);
+    
+    if (!payment || payment.status !== 'captured') {
+      throw new functions.https.HttpsError('failed-precondition', 'Payment not captured');
+    }
+    
+    if (payment.order_id !== orderId) {
+      throw new functions.https.HttpsError('failed-precondition', 'Payment does not match order');
+    }
+    
+    const paidAmountInr = Number(payment.amount) / 100.0;
+    if (Math.abs(paidAmountInr - payableAmount) > 0.01) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `Payment verification failed. Expected: ₹${payableAmount.toFixed(2)}, Received: ₹${paidAmountInr.toFixed(2)}`
+      );
+    }
+    
+    const db = admin.firestore();
+    
+    // Check for duplicate booking with same payment ID (idempotency)
+    const existingRegistration = await db.collection('event_registrations')
+      .where('razorpayPaymentId', '==', paymentId)
+      .limit(1)
+      .get();
+    
+    if (!existingRegistration.empty) {
+      const existing = existingRegistration.docs[0].data();
+      console.log('Duplicate event registration attempt detected for payment:', paymentId);
+      return {
+        ok: true,
+        status: 'confirmed',
+        registrationId: existingRegistration.docs[0].id,
+        message: 'Registration already exists for this payment'
+      };
+    }
+    
+    const lockId = `event_${eventId}_${eventDate}`;
+    const lockRef = db.collection('event_locks').doc(lockId);
+    
+    try {
+      const result = await db.runTransaction(async (tx) => {
+        // ✅ BUG FIX #1: ALL READS FIRST, THEN ALL WRITES
+        // STEP 1: Do ALL READS FIRST
+        const lockDoc = await tx.get(lockRef);
+        
+        // Check if event is full
+        const eventDoc = await tx.get(db.collection('spot_events').doc(eventId));
+        if (!eventDoc.exists) {
+          throw new functions.https.HttpsError('not-found', 'Event not found');
+        }
+        
+        const eventData = eventDoc.data();
+        const maxParticipants = eventData.maxParticipants || 0;
+        
+        let registrationsQuery = null;
+        if (maxParticipants > 0) {
+          registrationsQuery = await tx.get(
+            db.collection('event_registrations')
+              .where('eventId', '==', eventId)
+              .where('status', '!=', 'cancelled')
+          );
+        }
+        
+        // Check if user already registered
+        const existingReg = await tx.get(
+          db.collection('event_registrations')
+            .where('userId', '==', userId)
+            .where('eventId', '==', eventId)
+            .where('status', '!=', 'cancelled')
+            .limit(1)
+        );
+        
+        // STEP 2: VALIDATE (after all reads)
+        if (lockDoc.exists) {
+          const lockData = lockDoc.data();
+          if (lockData.locked) {
+            const expiresAt = lockData.expiresAt?.toDate();
+            if (expiresAt && expiresAt > new Date()) {
+              throw new functions.https.HttpsError('aborted', 'Event registration is currently being processed. Please try again.');
+            }
+          }
+        }
+        
+        if (maxParticipants > 0 && registrationsQuery) {
+          const currentCount = registrationsQuery.size;
+          if (currentCount >= maxParticipants) {
+            throw new functions.https.HttpsError('failed-precondition', 'Event is full');
+          }
+        }
+        
+        if (!existingReg.empty) {
+          throw new functions.https.HttpsError('already-exists', 'You are already registered for this event');
+        }
+        
+        // STEP 3: Do ALL WRITES
+        tx.set(lockRef, {
+          locked: true,
+          userId,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 30000))
+        });
+        
+        const now = admin.firestore.FieldValue.serverTimestamp();
+        const registrationData = {
+          eventId,
+          eventName,
+          eventDate,
+          eventTime: eventTime || null,
+          eventLocation: eventLocation || null,
+          eventType: eventType || null,
+          userId,
+          userName,
+          userEmail,
+          userPhone: userPhone || null,
+          userImageUrl: userImageUrl || null,
+          paymentMethod: 'Online',
+          status: 'confirmed',
+          payoutStatus: 'pending',
+          price: payableAmount,
+          baseAmount: baseAmount,
+          razorpayPaymentId: paymentId,
+          razorpayOrderId: orderId,
+          ownerId: ownerId || null,
+          createdAt: now,
+          updatedAt: now
+        };
+        
+        const registrationRef = db.collection('event_registrations').doc();
+        tx.set(registrationRef, registrationData);
+        tx.delete(lockRef);
+        
+        return { registrationId: registrationRef.id };
+      });
+      
+      // Update razorpay_orders to mark registration as completed
+      try {
+        await db.collection('razorpay_orders').doc(orderId).update({
+          registration_completed: true,
+          completed_at: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (updateErr) {
+        console.error('Failed to update razorpay_orders registration_completed flag:', updateErr);
+        // Don't throw - registration was created successfully
+      }
+      
+      return { ok: true, status: 'confirmed', ...result };
+      
+    } catch (txError) {
+      try {
+        await lockRef.delete();
+      } catch (deleteErr) {
+        console.error('Failed to release lock after error:', deleteErr);
+      }
+      throw txError;
+    }
+}
+
+// Public function for event registration confirmation
+exports.confirmEventRegistrationAndWrite = functions.https.onCall(async (data, context) => {
+  try {
+    // Call internal shared function
+    return await createEventRegistrationInternal(data);
+    
+  } catch (error) {
+    console.error('confirmEventRegistrationAndWrite error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Event registration creation trigger for payout processing
+exports.onEventRegistrationCreated = functions.firestore
+  .document('event_registrations/{registrationId}')
+  .onCreate(async (snap, context) => {
+    try {
+      const data = snap.data();
+      const db = admin.firestore();
+      
+      // Only process online confirmed payments
+      if (data.paymentMethod !== 'Online') {
+        console.log('Skipping payout: Not an online payment');
+        return;
+      }
+      if (data.status !== 'confirmed') {
+        console.log('Skipping: Payment not confirmed');
+        return;
+      }
+      if (data.payoutStatus === 'settled') {
+        console.log('Skipping: Payout already settled');
+        return;
+      }
+      
+      const totalAmount = parseFloat(data.price) || 0;
+      let ownerAccountId = data.eventOwnerAccountId;
+      const paymentId = data.razorpayPaymentId;
+      const eventId = data.eventId;
+      
+      console.log('Processing event registration:', context.params.registrationId, 'Amount:', totalAmount, 'Event:', eventId);
+      
+      // Guard clauses
+      if (totalAmount <= 0) {
+        await snap.ref.update({ payoutStatus: 'failed', payoutError: 'Invalid amount' });
+        return;
+      }
+      
+      if (!ownerAccountId) {
+        try {
+          ownerAccountId = await resolveEventOwnerAccountId(eventId, data);
+        } catch (error) {
+          await snap.ref.update({ payoutStatus: 'failed', payoutError: `Owner account resolution error: ${error.message}` });
+          return;
+        }
+      }
+      
+      if (!ownerAccountId) {
+        await snap.ref.update({ payoutStatus: 'failed', payoutError: 'Missing Razorpay connected account ID. Owner must add their Razorpay account ID to receive payments.' });
+        return;
+      }
+      
+      if (!paymentId) {
+        await snap.ref.update({ payoutStatus: 'failed', payoutError: 'Missing Razorpay payment ID for transfer' });
+        return;
+      }
+      
+      if (!ownerAccountId.startsWith('acc_')) {
+        await snap.ref.update({ payoutStatus: 'failed', payoutError: 'Owner does not have a valid Razorpay connected account ID.' });
+        return;
+      }
+      
+      // Calculate owner's share
+      const ownerShare = calculateOwnerShare(data.baseAmount || totalAmount);
+      const companyProfit = totalAmount - ownerShare;
+      
+      // Check for pending clawback deductions
+      let totalDeductions = 0;
+      let ownerId = data.ownerId;
+      
+      if (ownerId) {
+        try {
+          const deductionsQuery = await db.collection('turfownerdeductions')
+            .where('ownerId', '==', ownerId)
+            .where('status', '==', 'pending')
+            .get();
+          
+          deductionsQuery.forEach(doc => {
+            totalDeductions += (doc.data().amount || 0);
+          });
+          
+          if (totalDeductions > 0) {
+            console.log(`Found pending deductions: ₹${totalDeductions} for owner ${ownerId}`);
+          }
+        } catch (error) {
+          console.error('Error checking deductions:', error);
+        }
+      }
+      
+      // Calculate final payout after deductions
+      const finalPayout = Math.max(0, ownerShare - totalDeductions);
+      const actualDeduction = ownerShare - finalPayout;
+      
+      console.log('Total amount paid by user:', totalAmount);
+      console.log('Owner share (base amount):', ownerShare);
+      console.log('Pending deductions:', totalDeductions);
+      console.log('Final payout to owner:', finalPayout);
+      console.log('Company keeps (profit + fees):', companyProfit);
+      
+      // Process payment
+      const ownerPaymentMethod = await getOwnerPaymentMethod(ownerAccountId, eventId, data);
+      const client = getRazorpayClient();
+      
+      if (ownerPaymentMethod.type === 'razorpay') {
+        await processRazorpayTransfer(client, paymentId, finalPayout, ownerPaymentMethod.accountId);
+        
+        // Mark deductions as applied
+        if (totalDeductions > 0 && ownerId) {
+          try {
+            const deductionsQuery = await db.collection('turfownerdeductions')
+              .where('ownerId', '==', ownerId)
+              .where('status', '==', 'pending')
+              .get();
+            
+            const batch = db.batch();
+            deductionsQuery.forEach(doc => {
+              batch.update(doc.ref, {
+                status: 'applied',
+                appliedAt: admin.firestore.FieldValue.serverTimestamp(),
+                appliedToRegistration: context.params.registrationId
+              });
+            });
+            await batch.commit();
+            console.log(`Marked ${deductionsQuery.size} deductions as applied for owner ${ownerId}`);
+          } catch (error) {
+            console.error('Error updating deduction status:', error);
+          }
+        }
+      }
+      
+      // Update registration
+      await snap.ref.update({
+        payoutStatus: 'settled',
+        transferResponse: null,
+        eventOwnerAccountId: ownerAccountId,
+        payoutMethod: 'Razorpay Route'
+      });
+      
+      // Save settlement info
+      await db.collection('event_settlements').doc(context.params.registrationId).set({
+        registration_id: context.params.registrationId,
+        event_id: eventId || null,
+        total_paid: totalAmount,
+        owner_share: ownerShare,
+        platform_profit: companyProfit,
+        pending_deductions: totalDeductions,
+        final_payout: finalPayout,
+        actual_deduction: actualDeduction,
+        razorpay_payment_id: paymentId,
+        owner_account_id: ownerAccountId,
+        settled_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      console.log('Successfully processed payout for event registration:', context.params.registrationId);
+    } catch (error) {
+      console.error('Function execution error:', error);
+      try {
+        await snap.ref.update({ payoutStatus: 'failed', payoutError: `Function error: ${error.message}` });
+      } catch (updateError) {
+        console.error('Failed to update payout status:', updateError);
+      }
+  }
+});
+
+// =========================
+// ✅ BUG FIX #2: EVENT REGISTRATION RECOVERY FOR LOW-RAM DEVICES
+// =========================
+
+exports.verifyAndCompleteEventRegistration = functions.https.onCall(async (data, context) => {
+  try {
+    const { orderId, registrationData } = data;
+    
+    if (!orderId || !registrationData) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing orderId or registrationData');
+    }
+    
+    const db = admin.firestore();
+    
+    // Check if registration already exists (idempotency)
+    const existingRegistration = await db
+      .collection('event_registrations')
+      .where('razorpayOrderId', '==', orderId)
+      .limit(1)
+      .get();
+    
+    if (!existingRegistration.empty) {
+      console.log('Registration already exists for order:', orderId);
+      return {
+        ok: true,
+        status: 'confirmed',
+        registrationId: existingRegistration.docs[0].id,
+        message: 'Registration already confirmed for this payment'
+      };
+    }
+    
+    // Fetch order from database
+    const orderDoc = await db.collection('razorpay_orders').doc(orderId).get();
+    
+    if (!orderDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Order not found');
+    }
+    
+    const client = getRazorpayClient();
+    const order = await client.orders.fetch(orderId);
+    
+    if (!order) {
+      throw new functions.https.HttpsError('not-found', 'Order not found in Razorpay');
+    }
+    
+    // Get payments
+    const payments = await client.orders.fetchPayments(orderId);
+    
+    if (!payments || !payments.items || payments.items.length === 0) {
+      throw new functions.https.HttpsError('failed-precondition', 'No payment found');
+    }
+    
+    // Find captured payment
+    const capturedPayment = payments.items.find((p) => p.status === 'captured');
+    
+    if (!capturedPayment) {
+      throw new functions.https.HttpsError('failed-precondition', 'Payment not captured');
+    }
+    
+    // Call internal event registration function
+    return await createEventRegistrationInternal({
+      orderId,
+      paymentId: capturedPayment.id,
+      ...registrationData
+    });
+  } catch (error) {
+    console.error('verifyAndCompleteEventRegistration error:', error);
+    
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Cleanup expired event locks
+exports.cleanupExpiredEventLocks = functions.pubsub.schedule('every 5 minutes').onRun(async (context) => {
+  const db = admin.firestore();
+  const now = admin.firestore.Timestamp.now();
+  const expiredLocks = await db.collection('event_locks')
+    .where('expiresAt', '<=', now)
+    .get();
+  
+  const batch = db.batch();
+  expiredLocks.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
+  console.log(`Cleaned up ${expiredLocks.size} expired event locks`);
+});
+
+// Create refund request for event
+exports.createEventRefundRequest = functions.https.onCall(async (data, context) => {
+  try {
+    const { registrationId, userId, eventId, amount, paymentId, reason = 'User requested cancellation', eventDate, eventName } = data;
+    
+    if (!registrationId || !userId || !amount || !paymentId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    const db = admin.firestore();
+    
+    const registrationDoc = await db.collection('event_registrations').doc(registrationId).get();
+    const registrationData = registrationDoc.exists ? registrationDoc.data() : {};
+    const baseAmount = registrationData.baseAmount || (parseFloat(amount) * 0.85);
+    
+    const refundRequest = {
+      registrationId,
+      userId,
+      eventId,
+      amount: parseFloat(amount),
+      baseAmount: baseAmount,
+      paymentId,
+      reason,
+      status: 'pending',
+      eventDate,
+      eventName,
+      requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+      processedAt: null,
+      refundId: null,
+      adminNotes: '',
+      createdBy: 'user',
+      type: 'event'
+    };
+    
+    const refundDoc = await db.collection('refund_requests').add(refundRequest);
+    
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+    const userName = userData.name || 'User';
+    
+    await sendNotificationToAdmin(
+      'New Event Refund Request',
+      `${userName} has requested a refund of ₹${amount} for event registration cancellation`,
+      {
+        type: 'refund_request',
+        refundRequestId: refundDoc.id,
+        registrationId,
+        userId,
+        amount: parseFloat(amount),
+        userName,
+        timestamp: new Date().toISOString()
+      }
+    );
+    
+    await db.collection('event_registrations').doc(registrationId).update({
+      status: 'cancelled',
+      refundRequestId: refundDoc.id,
+      cancelledAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    return {
+      success: true,
+      refundRequestId: refundDoc.id,
+      message: 'Refund request submitted successfully. Admin will review and process your refund.'
+    };
+  } catch (error) {
+    console.error('Error creating event refund request:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Process event refund (reuse turf refund logic with event-specific handling)
+exports.processEventRefund = functions.https.onCall(async (data, context) => {
+  try {
+    const { refundRequestId, action, adminNotes = '' } = data;
+    
+    if (!refundRequestId || !action) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    const db = admin.firestore();
+    const reqSnap = await db.collection('refund_requests').doc(refundRequestId).get();
+    
+    if (!reqSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Refund request not found');
+    }
+    
+    const req = reqSnap.data();
+    
+    if (req.status !== 'pending') {
+      throw new functions.https.HttpsError('failed-precondition', 'Refund request already processed');
+    }
+    
+    if (action === 'reject') {
+      await reqSnap.ref.update({
+        status: 'rejected',
+        adminNotes,
+        processedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      await sendNotificationToUser(
+        req.userId,
+        'Refund Request Rejected',
+        `Your refund request has been rejected. ${adminNotes}. Please contact support for more details.`,
+        {
+          type: 'refund_rejected',
+          refundRequestId,
+          registrationId: req.registrationId
+        }
+      );
+      
+      return { success: true, message: 'Refund request rejected' };
+    }
+    
+    // APPROVE
+    const client = getRazorpayClient();
+    const paymentId = String(req.paymentId).trim();
+    const totalAmountInr = Number(req.amount);
+    
+    if (!paymentId || !isFinite(totalAmountInr) || totalAmountInr <= 0) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid paymentId or amount');
+    }
+    
+    const payment = await client.payments.fetch(paymentId);
+    if (!payment || payment.status !== 'captured') {
+      throw new functions.https.HttpsError('failed-precondition', 'Payment not captured or not found');
+    }
+    
+    const paidPaise = Number(payment.amount) || 0;
+    const refundedPaise = Number(payment.amount_refunded) || 0;
+    const remainingPaise = paidPaise - refundedPaise;
+    const requestedPaise = Math.round(totalAmountInr * 100);
+    
+    if (requestedPaise > remainingPaise) {
+      throw new functions.https.HttpsError('failed-precondition', `Requested refund exceeds remaining refundable amount. Remaining: ₹${(remainingPaise/100).toFixed(2)}`);
+    }
+    
+    // Get event owner ID
+    const registrationDoc = await db.collection('event_registrations').doc(req.registrationId).get();
+    const registrationData = registrationDoc.exists ? registrationDoc.data() : {};
+    
+    let eventOwnerId = registrationData.ownerId;
+    if (!eventOwnerId && req.eventId) {
+      try {
+        const eventDoc = await db.collection('spot_events').doc(req.eventId).get();
+        if (eventDoc.exists) {
+          eventOwnerId = eventDoc.data().ownerId;
+        }
+      } catch (error) {
+        console.error('Error fetching event owner:', error);
+      }
+    }
+    
+    const baseEventAmount = Number(req.baseAmount) || (totalAmountInr * 0.85);
+    const platformAmount = totalAmountInr - baseEventAmount;
+    
+    let refund;
+    try {
+      // Refund FULL amount to customer
+      refund = await client.payments.refund(paymentId, {
+        amount: requestedPaise,
+        notes: {
+          reason: String(req.reason || ''),
+          registration_id: String(req.registrationId || ''),
+          refund_request_id: String(refundRequestId || ''),
+          full_refund: 'true',
+          type: 'event'
+        }
+      });
+    } catch (refundError) {
+      console.error('Razorpay refund API error:', refundError);
+      
+      await reqSnap.ref.update({
+        status: 'failed',
+        adminNotes: `Razorpay refund failed: ${refundError.message}`,
+        processedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      throw new functions.https.HttpsError('failed-precondition', `Razorpay refund failed: ${refundError.message}`);
+    }
+    
+    // Use transaction to ensure all database updates succeed together
+    await db.runTransaction(async (tx) => {
+      // Create clawback for owner's share ONLY
+      if (baseEventAmount > 0 && eventOwnerId) {
+        const deductionRef = db.collection('turfownerdeductions').doc();
+        tx.set(deductionRef, {
+          ownerId: eventOwnerId,
+          eventId: req.eventId,
+          registrationId: req.registrationId,
+          refundRequestId: refundRequestId,
+          refundId: refund.id,
+          amount: baseEventAmount,
+          reason: 'Automated clawback for approved event refund - owner share only',
+          status: 'pending',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          appliedAt: null,
+          notes: {
+            customerRefund: totalAmountInr,
+            platformAbsorbed: platformAmount,
+            clawbackAmount: baseEventAmount,
+            type: 'event'
+          }
+        });
+        console.log(`Clawback created: ₹${baseEventAmount} (Platform absorbs: ₹${platformAmount})`);
+      }
+      
+      // Update refund request
+      tx.update(reqSnap.ref, {
+        status: 'processed',
+        refundId: refund.id,
+        razorpayRefundId: refund.id,
+        refundStatus: refund.status,
+        adminNotes,
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        refundBreakdown: {
+          totalAmount: totalAmountInr,
+          baseEventAmount: baseEventAmount,
+          platformAmount: platformAmount,
+          clawbackCreated: (baseEventAmount > 0 && eventOwnerId) ? true : false
+        }
+      });
+      
+      // Update registration
+      const registrationRef = db.collection('event_registrations').doc(req.registrationId);
+      tx.update(registrationRef, {
+        refundStatus: 'processed',
+        refundId: refund.id,
+        refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+        refundBreakdown: {
+          totalAmount: totalAmountInr,
+          baseEventAmount: baseEventAmount,
+          platformAmount: platformAmount,
+          clawbackCreated: (baseEventAmount > 0 && eventOwnerId) ? true : false
+        }
+      });
+    });
+    
+    await sendNotificationToUser(
+      req.userId,
+      'Refund Processed Successfully',
+      `Your refund of ₹${totalAmountInr.toFixed(2)} has been processed and will reflect in your account within 5-7 business days.`,
+      {
+        type: 'refund_processed',
+        refundRequestId,
+        registrationId: req.registrationId,
+        amount: totalAmountInr,
+        refundId: refund.id
+      }
+    );
+    
+    return { success: true, refundId: refund.id, message: 'Refund processed successfully' };
+  } catch (err) {
+    const raw = err?.error || err?.response || err;
+    const rpMsg = raw?.description || raw?.error?.description || raw?.data?.error?.description || raw?.message;
+    const finalMsg = rpMsg || (typeof raw === 'string' ? raw : JSON.stringify(raw));
+    console.error('processEventRefund error:', finalMsg);
+    
+    try {
+      if (data?.refundRequestId) {
+        await admin.firestore().collection('refund_requests').doc(data.refundRequestId).update({
+          status: 'failed',
+          adminNotes: `Razorpay refund failed: ${finalMsg}`,
+          processedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    } catch {}
+    
+    if (err instanceof functions.https.HttpsError) throw err;
+    throw new functions.https.HttpsError('failed-precondition', `Razorpay refund failed: ${finalMsg}`);
+  }
+});
+
+// Send event registration confirmation email
+exports.sendEventRegistrationConfirmationEmail = functions.https.onCall(async (data, context) => {
+  try {
+    const {
+      to,
+      userName = 'Customer',
+      registrationId = '',
+      eventName = '',
+      eventDate = '',
+      eventTime = '',
+      eventLocation = '',
+      eventType = '',
+      amount = 0,
+      paymentMethod = 'Online',
+      paymentReference = '',
+      userEmail = '',
+      userPhone = ''
+    } = data;
+
+    if (!to || typeof to !== 'string' || !to.includes('@')) {
+      throw new functions.https.HttpsError('invalid-argument', 'Valid recipient email (to) is required');
+    }
+
+    const transporter = TRANSPORTS.User;
+
+    const formatDate = (value) => {
+      if (!value) return 'To be announced';
+      try {
+        if (value.toDate) {
+          return new Date(value.toDate()).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+        }
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+        }
+      } catch (err) {
+        console.error('Error formatting event date:', err);
+      }
+      return value.toString();
+    };
+
+    const formatTime = (value) => {
+      if (!value) return 'To be announced';
+      if (typeof value === 'string') {
+        const parts = value.split(':');
+        if (parts.length >= 2) {
+          let hour = parseInt(parts[0], 10);
+          const minute = parseInt(parts[1], 10);
+          if (!isNaN(hour) && !isNaN(minute)) {
+            const period = hour >= 12 ? 'PM' : 'AM';
+            hour = hour % 12;
+            if (hour === 0) hour = 12;
+            return `${hour}:${minute.toString().padStart(2, '0')} ${period}`;
+          }
+        }
+      }
+      return value.toString();
+    };
+
+    const prettyDate = formatDate(eventDate);
+    const prettyTime = formatTime(eventTime);
+    const attendeeEmail = userEmail && userEmail.trim().length > 0 ? userEmail : to;
+    const attendeePhone = userPhone && userPhone.trim().length > 0 ? userPhone : 'Not provided';
+    const locationLabel = eventLocation && eventLocation.toString().trim().length > 0 ? eventLocation : 'To be announced';
+    const eventTypeLabel = eventType && eventType.toString().trim().length > 0 ? eventType : 'General';
+    const paymentRows = amount > 0
+      ? `
+        <tr>
+          <td style="padding:12px; border-bottom:1px solid #e2e8f0;">Amount Paid</td>
+          <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-weight:600; color:#047857;">₹${Number(amount || 0).toFixed(2)}</td>
+        </tr>
+        <tr>
+          <td style="padding:12px; border-bottom:1px solid #e2e8f0;">Payment Method</td>
+          <td style="padding:12px; border-bottom:1px solid #e2e8f0;">${paymentMethod}</td>
+        </tr>
+        ${paymentReference ? `
+          <tr>
+            <td style="padding:12px;">Payment Reference</td>
+            <td style="padding:12px;">${paymentReference}</td>
+          </tr>
+        ` : ''}
+      `
+      : `
+        <tr>
+          <td style="padding:12px; border-bottom:1px solid #e2e8f0;">Entry Type</td>
+          <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-weight:600; color:#047857;">Free Entry</td>
+        </tr>
+      `;
+
+    const subject = `Event Registration Confirmed - ${eventName || 'Upcoming Event'} (${prettyDate})`;
+
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Event Registration Confirmation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; background-color:#f5f7fb; font-family: 'Segoe UI', Arial, sans-serif; color:#1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f5f7fb;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:660px; background-color:#ffffff; border-radius:18px; overflow:hidden; box-shadow:0 15px 45px rgba(15,118,110,0.12);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#0f766e,#14b8a6); padding:32px 28px;">
+              <h1 style="margin:0; color:#f8fafc; font-size:26px; font-weight:700;">Registration Confirmed ✅</h1>
+              <p style="margin:12px 0 0; color:#f0fdfa; font-size:16px;">Hi ${userName}, we're excited to see you at <strong>${eventName}</strong>.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;">
+                <tr style="background-color:#e0f2f1;">
+                  <td colspan="2" style="padding:14px 18px; font-weight:700; font-size:15px; color:#0f766e;">Attendee Details</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">Name</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0; font-weight:600;">${userName}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">Email</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">${attendeeEmail}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px;">Phone</td>
+                  <td style="padding:12px 18px;">${attendeePhone}</td>
+                </tr>
+              </table>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px; border-collapse:collapse; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;">
+                <tr style="background-color:#e0f2f1;">
+                  <td colspan="2" style="padding:14px 18px; font-weight:700; font-size:15px; color:#0f766e;">Event Details</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">Registration ID</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0; font-weight:600;">${registrationId || 'Will be shared onsite'}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">Date</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">${prettyDate}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">Time</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">${prettyTime}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">Location</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">${locationLabel}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px;">Category</td>
+                  <td style="padding:12px 18px;">${eventTypeLabel}</td>
+                </tr>
+              </table>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px; border-collapse:collapse; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;">
+                <tr style="background-color:#e0f2f1;">
+                  <td colspan="2" style="padding:14px 18px; font-weight:700; font-size:15px; color:#0f766e;">Payment Summary</td>
+                </tr>
+                ${paymentRows}
+              </table>
+
+              <div style="margin-top:28px; padding:18px 20px; background-color:#ecfeff; border:1px solid #99f6e4; border-radius:14px; color:#0f766e;">
+                <strong>Next steps:</strong>
+                <ul style="margin:12px 0 0 18px; padding:0;">
+                  <li>Save this email for smooth entry at the venue.</li>
+                  <li>Arrive at least 15 minutes before the scheduled start time.</li>
+                  <li>Contact us if you need to update attendee information.</li>
+                </ul>
+              </div>
+
+              <p style="margin:28px 0 8px; font-size:14px; color:#475569;">We look forward to hosting you. Have questions? Reply to this email or reach us at <a href="mailto:support@bookthebiz.in" style="color:#0f766e; font-weight:600;">support@bookthebiz.in</a>.</p>
+              <p style="margin:0; font-size:13px; color:#94a3b8;">Warm regards,<br><strong>Team BookTheBiz</strong></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#0f172a; color:#cbd5f5; text-align:center; padding:18px; font-size:12px;">
+              © ${new Date().getFullYear()} BookTheBiz. All rights reserved. Need help? <a href="mailto:support@bookthebiz.in" style="color:#38bdf8;">Contact Support</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    const mailOptions = {
+      from: 'BookTheBiz <customersbtb@gmail.com>',
+      to,
+      subject,
+      html
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    return { ok: true, id: info.messageId };
+  } catch (error) {
+    console.error('sendEventRegistrationConfirmationEmail error:', error);
     throw new functions.https.HttpsError('internal', `${error.message} - Failed to send email`);
   }
 });

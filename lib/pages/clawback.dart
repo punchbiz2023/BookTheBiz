@@ -25,9 +25,10 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
   DateTime? clawbackFilterDate;
   bool isLoading = false;
   
-  // Cache for owner and turf names to avoid repeated fetches
+  // Cache for owner, turf, and event names to avoid repeated fetches
   Map<String, String> ownerNamesCache = {};
   Map<String, String> turfNamesCache = {};
+  Map<String, String> eventNamesCache = {};
 
   @override
   Widget build(BuildContext context) {
@@ -306,28 +307,65 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
       String ownerName = ownerNamesCache[ownerId] ?? 'Unknown';
       clawbackData['ownerName'] = ownerName;
 
-      // Fetch turf name if not cached
-      String turfId = clawbackData['turfId'] ?? '';
-      if (turfId.isNotEmpty && !turfNamesCache.containsKey(turfId)) {
-        try {
-          DocumentSnapshot turfDoc = await firestore.collection('turfs').doc(turfId).get();
-          if (turfDoc.exists) {
-            turfNamesCache[turfId] = (turfDoc.data() as Map<String, dynamic>)['name'] ?? 'Unknown';
-          } else {
+      // Determine if this is an event or turf clawback
+      final isEventClawback = clawbackData['eventId'] != null || 
+                              clawbackData['registrationId'] != null || 
+                              (clawbackData['type'] == 'event') ||
+                              (clawbackData['notes'] != null && 
+                               (clawbackData['notes'] as Map<String, dynamic>?)?['type'] == 'event');
+      
+      String turfName = 'N/A';
+      String eventName = 'N/A';
+      
+      // Fetch turf name if not cached (for turf clawbacks)
+      if (!isEventClawback) {
+        String turfId = clawbackData['turfId'] ?? '';
+        if (turfId.isNotEmpty && !turfNamesCache.containsKey(turfId)) {
+          try {
+            DocumentSnapshot turfDoc = await firestore.collection('turfs').doc(turfId).get();
+            if (turfDoc.exists) {
+              turfNamesCache[turfId] = (turfDoc.data() as Map<String, dynamic>)['name'] ?? 'Unknown';
+            } else {
+              turfNamesCache[turfId] = 'Unknown';
+            }
+          } catch (e) {
             turfNamesCache[turfId] = 'Unknown';
           }
-        } catch (e) {
-          turfNamesCache[turfId] = 'Unknown';
         }
+        turfName = turfNamesCache[turfId] ?? 'Unknown';
+        clawbackData['turfName'] = turfName;
       }
-      String turfName = turfNamesCache[turfId] ?? 'Unknown';
-      clawbackData['turfName'] = turfName;
+      
+      // Fetch event name if not cached (for event clawbacks)
+      if (isEventClawback) {
+        String eventId = clawbackData['eventId'] ?? '';
+        if (eventId.isNotEmpty && !eventNamesCache.containsKey(eventId)) {
+          try {
+            DocumentSnapshot eventDoc = await firestore.collection('spot_events').doc(eventId).get();
+            if (eventDoc.exists) {
+              eventNamesCache[eventId] = (eventDoc.data() as Map<String, dynamic>)['name'] ?? 'Unknown Event';
+            } else {
+              eventNamesCache[eventId] = 'Unknown Event';
+            }
+          } catch (e) {
+            eventNamesCache[eventId] = 'Unknown Event';
+          }
+        }
+        eventName = eventNamesCache[eventId] ?? 'Unknown Event';
+        clawbackData['eventName'] = eventName;
+        clawbackData['turfName'] = 'N/A'; // Not applicable for events
+      }
 
-      // Filter based on search query (owner name, turf name, or booking ID)
+      // Filter based on search query (owner name, turf/event name, or booking/registration ID)
+      final referenceId = isEventClawback 
+          ? (clawbackData['registrationId'] ?? clawbackData['eventId'] ?? '').toString()
+          : (clawbackData['bookingId'] ?? '').toString();
+      
       bool searchMatch = clawbackSearchQuery.isEmpty ||
           ownerName.toLowerCase().contains(clawbackSearchQuery.toLowerCase()) ||
           turfName.toLowerCase().contains(clawbackSearchQuery.toLowerCase()) ||
-          (clawbackData['bookingId']?.toString().toLowerCase().contains(clawbackSearchQuery.toLowerCase()) ?? false);
+          eventName.toLowerCase().contains(clawbackSearchQuery.toLowerCase()) ||
+          referenceId.toLowerCase().contains(clawbackSearchQuery.toLowerCase());
 
       // Filter based on date if specified
       bool dateMatch = true;
@@ -358,8 +396,19 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
     String status = clawback['status'] ?? 'pending_payment';
     double amount = (clawback['amount'] ?? 0).toDouble();
     String ownerName = clawback['ownerName'] ?? 'Unknown Owner';
-    String turfName = clawback['turfName'] ?? 'Unknown Turf';
-    String bookingId = clawback['bookingId'] ?? 'Unknown';
+    
+    // Determine if this is an event or turf clawback
+    final isEventClawback = clawback['eventId'] != null || 
+                            clawback['registrationId'] != null || 
+                            (clawback['type'] == 'event') ||
+                            (clawback['notes'] != null && 
+                             (clawback['notes'] as Map<String, dynamic>?)?['type'] == 'event');
+    
+    String turfName = clawback['turfName'] ?? 'N/A';
+    String eventName = clawback['eventName'] ?? 'N/A';
+    String bookingId = clawback['bookingId'] ?? 'N/A';
+    String registrationId = clawback['registrationId'] ?? 'N/A';
+    String referenceId = isEventClawback ? registrationId : bookingId;
     String paymentLink = clawback['paymentLink'] ?? '';
     
     DateTime? createdDate;
@@ -448,10 +497,18 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
               
               Divider(height: 24, color: Colors.grey[300]),
               
-              // Owner & Turf Info (now with names!)
+              // Owner & Reference Info (turf or event)
               _buildInfoRow(Icons.person, 'Owner', ownerName),
-              _buildInfoRow(Icons.stadium, 'Turf', turfName),
-              _buildInfoRow(Icons.confirmation_number, 'Booking ID', bookingId),
+              // Show turf info for turf clawbacks, event info for event clawbacks
+              if (isEventClawback) ...[
+                _buildInfoRow(Icons.event, 'Event', eventName),
+                if (registrationId != 'N/A')
+                  _buildInfoRow(Icons.confirmation_number, 'Registration ID', registrationId),
+              ] else ...[
+                _buildInfoRow(Icons.stadium, 'Turf', turfName),
+                if (bookingId != 'N/A')
+                  _buildInfoRow(Icons.confirmation_number, 'Booking ID', bookingId),
+              ],
               _buildInfoRow(Icons.calendar_today, 'Created', 
                   createdDate != null ? DateFormat('dd MMM yyyy').format(createdDate) : 'N/A'),
               
@@ -558,7 +615,18 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
 
   void showClawbackDetailsDialog(Map<String, dynamic> clawback) {
     String ownerName = clawback['ownerName'] ?? 'Unknown Owner';
-    String turfName = clawback['turfName'] ?? 'Unknown Turf';
+    
+    // Determine if this is an event or turf clawback
+    final isEventClawback = clawback['eventId'] != null || 
+                            clawback['registrationId'] != null || 
+                            (clawback['type'] == 'event') ||
+                            (clawback['notes'] != null && 
+                             (clawback['notes'] as Map<String, dynamic>?)?['type'] == 'event');
+    
+    String turfName = clawback['turfName'] ?? 'N/A';
+    String eventName = clawback['eventName'] ?? 'N/A';
+    String bookingId = clawback['bookingId'] ?? 'N/A';
+    String registrationId = clawback['registrationId'] ?? 'N/A';
     
     showDialog(
       context: context,
@@ -641,7 +709,7 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
                 
                 SizedBox(height: 16),
                 
-                // Booking & Turf Information
+                // Booking/Turf or Event Information
                 GlassmorphismCard(
                   child: Padding(
                     padding: EdgeInsets.all(16),
@@ -649,17 +717,27 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Booking & Turf Information',
+                          isEventClawback ? 'Event Registration Information' : 'Booking & Turf Information',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
                         ),
                         SizedBox(height: 12),
-                        _buildDetailRow('Turf Name', turfName),
-                        _buildDetailRow('Turf ID', clawback['turfId'] ?? 'Unknown'),
-                        _buildDetailRow('Booking ID', clawback['bookingId'] ?? 'Unknown'),
-                        _buildDetailRow('Deduction ID', clawback['deductionId'] ?? 'Unknown'),
+                        if (isEventClawback) ...[
+                          _buildDetailRow('Event Name', eventName),
+                          if (clawback['eventId'] != null)
+                            _buildDetailRow('Event ID', clawback['eventId'] ?? 'Unknown'),
+                          if (registrationId != 'N/A')
+                            _buildDetailRow('Registration ID', registrationId),
+                        ] else ...[
+                          _buildDetailRow('Turf Name', turfName),
+                          if (clawback['turfId'] != null)
+                            _buildDetailRow('Turf ID', clawback['turfId'] ?? 'Unknown'),
+                          if (bookingId != 'N/A')
+                            _buildDetailRow('Booking ID', bookingId),
+                        ],
+                        _buildDetailRow('Deduction ID', clawback['deductionId'] ?? clawback['id'] ?? 'Unknown'),
                       ],
                     ),
                   ),

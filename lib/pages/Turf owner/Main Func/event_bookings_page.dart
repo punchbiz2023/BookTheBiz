@@ -1501,45 +1501,172 @@ class _EventBookingsDetailPageState extends State<EventBookingsDetailPage>
                         ],
                       ),
                     ),
-                    AnimatedContainer(
-                      duration: Duration(milliseconds: 300),
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.green.shade100.withOpacity(0.8),
-                            Colors.teal.shade100.withOpacity(0.6),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
+                    // Status badge (considering cancellation and payment status)
+                    _buildStatusBadge(bookingData),
+                  ],
+                ),
+                SizedBox(height: 16),
+                // Payment and Payout Information
+                if (bookingData['paymentType'] == 'Paid' && bookingData['price'] != null && bookingData['price'] > 0) ...[
+                  Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.green.shade300.withOpacity(0.4),
+                        color: Colors.blue.shade200.withOpacity(0.3),
                           width: 1,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.green.withOpacity(0.15),
-                            blurRadius: 10,
-                            spreadRadius: 0,
-                            offset: Offset(0, 3),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.payment, size: 16, color: Colors.blue.shade700),
+                            SizedBox(width: 8),
+                            Text(
+                              'Payment Information',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.blue.shade800,
+                              ),
                           ),
                         ],
                       ),
-                      child: Text(
-                        'REGISTERED',
+                        SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Amount:',
                         style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            Text(
+                              '₹${(bookingData['price'] ?? 0).toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
                           color: Colors.green.shade700,
-                          fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Payment Method:',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            Text(
+                              bookingData['paymentMethod'] ?? 'Online',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (bookingData['payoutStatus'] != null) ...[
+                          SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Payout Status:',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _getPayoutStatusColor(bookingData['payoutStatus']).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: _getPayoutStatusColor(bookingData['payoutStatus']).withOpacity(0.3),
+                                  ),
+                                ),
+                                child: Text(
+                                  bookingData['payoutStatus'] ?? 'Pending',
+                                  style: TextStyle(
+                                    fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
+                                    color: _getPayoutStatusColor(bookingData['payoutStatus']),
                         ),
                       ),
                     ),
                   ],
                 ),
-                SizedBox(height: 20),
+                          if (bookingData['payoutStatus'] == 'settled' && bookingData['baseAmount'] != null) ...[
+                            SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Your Share:',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                                Text(
+                                  '₹${(bookingData['baseAmount'] ?? 0).toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.teal.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                ],
+                // Refund status for cancelled bookings
+                if (bookingData['status']?.toLowerCase() == 'cancelled' && bookingData['payoutStatus'] != null) ...[
+                  Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.orange.shade200.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.replay, size: 16, color: Colors.orange.shade700),
+                        SizedBox(width: 8),
+                        Text(
+                          'Refund Status: ${bookingData['payoutStatus']}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                ],
                 Row(
                   children: [
                     Expanded(
@@ -1700,6 +1827,72 @@ class _EventBookingsDetailPageState extends State<EventBookingsDetailPage>
         backgroundColor: Colors.orange,
         textColor: Colors.white,
       );
+    }
+  }
+
+  Widget _buildStatusBadge(Map<String, dynamic> bookingData) {
+    String status = bookingData['status']?.toLowerCase() ?? 'registered';
+    MaterialColor statusColor;
+    String statusText;
+
+    if (status == 'cancelled') {
+      statusColor = Colors.red;
+      statusText = 'CANCELLED';
+    } else {
+      statusColor = Colors.green;
+      statusText = 'REGISTERED';
+    }
+
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            statusColor[100]!.withOpacity(0.8),
+            statusColor[50]!.withOpacity(0.6),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: statusColor[300]!.withOpacity(0.4),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.15),
+            blurRadius: 10,
+            spreadRadius: 0,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Text(
+        statusText,
+        style: TextStyle(
+          color: statusColor[700],
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Color _getPayoutStatusColor(String? payoutStatus) {
+    if (payoutStatus == null) return Colors.grey;
+    
+    switch (payoutStatus.toLowerCase()) {
+      case 'settled':
+        return Colors.green;
+      case 'pending':
+        return Colors.orange;
+      case 'refunded':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -2100,9 +2293,43 @@ class _ParticipantDetailsDialogState extends State<ParticipantDetailsDialog>
                                       if (widget.eventData['eventTime'] != null)
                                         _buildDetailRow('Event Time', _formatEventTime(widget.eventData['eventTime']), Icons.access_time),
                                       _buildDetailRow('Event Type', widget.eventData['eventType'] ?? 'N/A', Icons.category),
-                                      _buildDetailRow('Payment Type', widget.eventData['paymentType'] ?? 'N/A', Icons.payment),
-                                      if (widget.eventData['paymentType'] != 'Free' && widget.eventData['price'] != null)
+                                      _buildDetailRow('Payment Type', widget.bookingData['paymentType'] ?? widget.eventData['paymentType'] ?? 'N/A', Icons.payment),
+                                      if (widget.bookingData['paymentType'] == 'Paid' && widget.bookingData['price'] != null && widget.bookingData['price'] > 0) ...[
+                                        _buildDetailRow('Price', '₹${(widget.bookingData['price'] ?? 0).toStringAsFixed(2)}', Icons.attach_money),
+                                        _buildDetailRow('Payment Method', widget.bookingData['paymentMethod'] ?? 'Online', Icons.payment),
+                                        if (widget.bookingData['payoutStatus'] != null)
+                                          _buildDetailRow('Payout Status', widget.bookingData['payoutStatus'], Icons.account_balance_wallet),
+                                        if (widget.bookingData['payoutStatus'] == 'settled' && widget.bookingData['baseAmount'] != null)
+                                          _buildDetailRow('Your Share', '₹${(widget.bookingData['baseAmount'] ?? 0).toStringAsFixed(2)}', Icons.monetization_on),
+                                      ] else if (widget.eventData['paymentType'] != 'Free' && widget.eventData['price'] != null)
                                         _buildDetailRow('Price', '₹${widget.eventData['price']}', Icons.attach_money),
+                                      if (widget.bookingData['status']?.toLowerCase() == 'cancelled' && widget.bookingData['payoutStatus'] != null) ...[
+                                        SizedBox(height: 8),
+                                        Container(
+                                          padding: EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.orange.shade50.withOpacity(0.5),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: Colors.orange.shade200.withOpacity(0.3),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.replay, size: 18, color: Colors.orange.shade700),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Refund Status: ${widget.bookingData['payoutStatus']}',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.orange.shade800,
+                                                ),
+                                              ),
+                                    ],
+                                  ),
+                                ),
+                                      ],
                                     ],
                                   ),
                                 ),

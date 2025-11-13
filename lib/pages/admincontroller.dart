@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -553,9 +554,10 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
           var refundData = refundDoc.data() as Map<String, dynamic>;
           refundData['id'] = refundDoc.id;
           
-          // Filter based on search query
+          // Filter based on search query (for both turf and event refunds)
           bool searchMatch = refundSearchQuery.isEmpty || 
-            (refundData['turfName']?.toString().toLowerCase().contains(refundSearchQuery.toLowerCase()) ?? false);
+            (refundData['turfName']?.toString().toLowerCase().contains(refundSearchQuery.toLowerCase()) ?? false) ||
+            (refundData['eventName']?.toString().toLowerCase().contains(refundSearchQuery.toLowerCase()) ?? false);
           
           // Filter based on date if specified
           bool dateMatch = true;
@@ -698,19 +700,32 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
                 },
               ),
               SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                  SizedBox(width: 8),
-                  Expanded(child: Text('Turf: ${refund['turfName'] ?? 'Unknown'}')),
-                ],
-              ),
-              SizedBox(height: 8),
+              // Show turf name for turf bookings or event name for event bookings
+              if (refund['turfName'] != null) ...[
+                Row(
+                  children: [
+                    Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Turf: ${refund['turfName'] ?? 'Unknown'}')),
+                  ],
+                ),
+                SizedBox(height: 8),
+              ],
+              if (refund['eventName'] != null) ...[
+                Row(
+                  children: [
+                    Icon(Icons.event, size: 16, color: Colors.grey[600]),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Event: ${refund['eventName'] ?? 'Unknown'}')),
+                  ],
+                ),
+                SizedBox(height: 8),
+              ],
               Row(
                 children: [
                   Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
                   SizedBox(width: 8),
-                  Text('Date: ${refund['bookingDate'] ?? 'Unknown'}'),
+                  Text('Date: ${refund['bookingDate'] ?? refund['eventDate'] ?? 'Unknown'}'),
                 ],
               ),
               SizedBox(height: 8),
@@ -873,11 +888,23 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
                             ],
                           ),
                           SizedBox(height: 12),
-                          _buildInfoRow('Booking ID', refund['bookingId'] ?? 'Unknown'),
-                          _buildInfoRow('Turf Name', refund['turfName'] ?? 'Unknown'),
-                          _buildInfoRow('Ground', refund['ground'] ?? 'Unknown'),
-                          _buildInfoRow('Booking Date', refund['bookingDate'] ?? 'Unknown'),
-                          _buildInfoRow('Time Slots', (refund['slots'] as List?)?.join(', ') ?? 'Unknown'),
+                          _buildInfoRow('Booking ID', refund['bookingId'] ?? refund['registrationId'] ?? 'Unknown'),
+                          // Show turf information for turf bookings
+                          if (refund['turfName'] != null) ...[
+                            _buildInfoRow('Turf Name', refund['turfName'] ?? 'Unknown'),
+                            if (refund['ground'] != null)
+                              _buildInfoRow('Ground', refund['ground'] ?? 'Unknown'),
+                            if (refund['slots'] != null)
+                              _buildInfoRow('Time Slots', (refund['slots'] as List?)?.join(', ') ?? 'Unknown'),
+                            _buildInfoRow('Booking Date', refund['bookingDate'] ?? 'Unknown'),
+                          ],
+                          // Show event information for event bookings
+                          if (refund['eventName'] != null) ...[
+                            _buildInfoRow('Event Name', refund['eventName'] ?? 'Unknown'),
+                            _buildInfoRow('Event Date', refund['eventDate'] ?? refund['bookingDate'] ?? 'Unknown'),
+                            if (refund['eventTime'] != null)
+                              _buildInfoRow('Event Time', refund['eventTime'] ?? 'Unknown'),
+                          ],
                         ],
                       ),
                     ),
@@ -1099,7 +1126,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
     }
   }
 
-  Future<void> _processRefund(String refundRequestId, String action) async {
+  Future<void> _processRefund(String refundRequestId, String action, {String? notes}) async {
     try {
       // Show loading dialog
       showDialog(
@@ -1124,7 +1151,8 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
       final result = await processRefund({
         'refundRequestId': refundRequestId,
         'action': action,
-        'adminNotes': action == 'approve' ? 'Refund approved by admin' : 'Refund rejected by admin'
+        // Send notes only if provided (reject case). Keep empty for approve.
+        'adminNotes': (notes != null && notes.trim().isNotEmpty) ? notes.trim() : ''
       });
 
       // Close loading dialog
@@ -1195,7 +1223,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
             ElevatedButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                await _processRefund(refundRequestId, 'reject');
+                await _processRefund(refundRequestId, 'reject', notes: notesController.text.trim());
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               child: Text('Reject', style: TextStyle(color: Colors.white)),
@@ -2584,9 +2612,55 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      appBar: AppBar(
+    return WillPopScope(
+      onWillPop: () async {
+        // Show exit confirmation dialog
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                Icon(Icons.exit_to_app, color: Colors.red, size: 28),
+                SizedBox(width: 10),
+                Text('Exit App?'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.sentiment_very_dissatisfied, color: Colors.orange, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  'Are you sure you want to leave this application?',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text('Stay Here', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.of(context).pop(true),
+                icon: Icon(Icons.exit_to_app, color: Colors.white),
+                label: Text('Yes, Exit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              ),
+            ],
+          ),
+        );
+        if (shouldExit == true) {
+          SystemNavigator.pop();
+          return false;
+        }
+        return false;
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        appBar: AppBar(
         backgroundColor: Colors.teal[600],
         title: Text('Admin Dashboard', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.white)),
         centerTitle: true,
@@ -2639,6 +2713,7 @@ class _AdminControllersPageState extends State<AdminControllersPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
