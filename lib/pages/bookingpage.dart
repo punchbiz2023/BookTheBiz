@@ -9,6 +9,7 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:async';
 
 class BookingPage extends StatefulWidget {
   final String documentId;
@@ -26,7 +27,7 @@ class BookingPage extends StatefulWidget {
   _BookingPageState createState() => _BookingPageState();
 }
 
-class _BookingPageState extends State<BookingPage> {
+class _BookingPageState extends State<BookingPage> with SingleTickerProviderStateMixin {
   late Razorpay _razorpay;
   DateTime? selectedDate;
   List<String> selectedSlots = [];
@@ -42,6 +43,7 @@ class _BookingPageState extends State<BookingPage> {
   double selectedGroundPrice = 0.0;
   double runningTotalAmount = 0.0;
   double runningTotalHours = 0.0;
+  late AnimationController _loadingAnimationController;
 
   // 1. Add these fields to your _BookingPageState:
   Map<String, dynamic>? _turfData;
@@ -49,6 +51,13 @@ class _BookingPageState extends State<BookingPage> {
   final Map<String, List<String>> _bookedSlotsMap = {};
   bool _isLoadingTurf = true;
   bool _isLoadingBookings = true;
+
+  // Queue-based booking system
+  String? _reservationId;
+  int? _queuePosition;
+  String? _queueStatus;
+  Timer? _queueCheckTimer;
+  StateSetter? _queueDialogSetter;
 
   // Add these helper functions to your _BookingPageState:
   double _platformProfit(double turfRate) {
@@ -111,6 +120,12 @@ class _BookingPageState extends State<BookingPage> {
     _razorpay = Razorpay();
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+    
+    // Initialize animation controller for loading dialog
+    _loadingAnimationController = AnimationController(
+      vsync: this,
+      duration: Duration(seconds: 2),
+    )..repeat();
     
     _fetchAllTurfData();
   }
@@ -360,17 +375,8 @@ class _BookingPageState extends State<BookingPage> {
                       child: ElevatedButton(
                         onPressed: () async {
                           if (!timeSlotBooked) {
-                            // Check slot availability just before booking (sync, first-come-first-served)
-                            bool slotsAvailable = await _checkSlotAvailability();
-                            if (!slotsAvailable) {
-                              await _showSlotUnavailableDialog(context);
-                              Navigator.of(context).pop(); // Go back to previous page
-                              return;
-                            }
-                            setState(() {
-                              isBookingConfirmed = true;
-                            });
-                            _showBookingDialog();
+                            // Use queue-based booking system
+                            await _freezeSlotAndQueue();
                           } else {
                             _showErrorDialog(context);
                           }
@@ -399,6 +405,399 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
+  // Queue-based booking functions
+  Future<void> _freezeSlotAndQueue() async {
+    if (selectedDate == null || selectedSlots.isEmpty || selectedGround == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please select date, ground, and slots')),
+      );
+      return;
+    }
+
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('User not logged in')),
+      );
+      return;
+    }
+
+    // Show elegant loading UI
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder: (context) => _buildReservationLoadingDialog(),
+    );
+
+    try {
+      setState(() {
+        isBookingConfirmed = true;
+      });
+
+      String userName = await _fetchUserName(currentUser.uid);
+      
+      final HttpsCallable freezeFn = FirebaseFunctions.instance.httpsCallable('freezeSlotAndQueue');
+      final result = await freezeFn({
+        'turfId': widget.documentId,
+        'selectedGround': selectedGround,
+        'bookingDate': DateFormat('yyyy-MM-dd').format(selectedDate!),
+        'slots': selectedSlots,
+        'userId': currentUser.uid,
+        'userName': userName,
+      });
+
+      // Close loading dialog
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      final data = result.data as Map;
+      setState(() {
+        _reservationId = data['reservationId'] as String?;
+        _queuePosition = data['queuePosition'] as int?;
+        _queueStatus = data['status'] as String?;
+      });
+
+      if (_queueStatus == 'ready' && _queuePosition == 1) {
+        // User is first in queue - show booking dialog
+        _showBookingDialog();
+      } else {
+        // User is queued - show queue status and start polling
+        _showQueueStatusDialog();
+        _startQueuePolling();
+      }
+    } catch (e) {
+      // Close loading dialog on error
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      
+      setState(() {
+        isBookingConfirmed = false;
+      });
+      String errorMsg = 'Failed to reserve slot';
+      if (e is FirebaseFunctionsException) {
+        errorMsg = e.message ?? errorMsg;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // Elegant loading dialog for slot reservation
+  Widget _buildReservationLoadingDialog() {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        padding: EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white,
+              Colors.teal.shade50,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 30,
+              offset: Offset(0, 15),
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Animated Icon Container with continuous rotation
+            AnimatedBuilder(
+              animation: _loadingAnimationController,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: 0.9 + (_loadingAnimationController.value * 0.1),
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.teal.shade400,
+                          Colors.teal.shade600,
+                        ],
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.teal.withOpacity(0.4),
+                          blurRadius: 25,
+                          spreadRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Rotating circular progress
+                        Transform.rotate(
+                          angle: _loadingAnimationController.value * 2 * 3.14159,
+                          child: SizedBox(
+                            width: 100,
+                            height: 100,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 4,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.4)),
+                              backgroundColor: Colors.transparent,
+                              value: 0.3,
+                            ),
+                          ),
+                        ),
+                        // Center icon
+                        Icon(
+                          Icons.access_time_rounded,
+                          color: Colors.white,
+                          size: 48,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            SizedBox(height: 32),
+            // Title
+            Text(
+              'Reserving Your Slot',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.teal.shade900,
+                letterSpacing: 0.5,
+              ),
+            ),
+            SizedBox(height: 12),
+            // Subtitle
+            Text(
+              'Please wait while we secure your booking...',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                color: Colors.grey.shade700,
+                height: 1.5,
+              ),
+            ),
+            SizedBox(height: 28),
+            // Animated loading indicator
+            SizedBox(
+              width: 220,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                  minHeight: 6,
+                ),
+              ),
+            ),
+            SizedBox(height: 24),
+            // Elegant info card
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.teal.shade50,
+                    Colors.teal.shade100.withOpacity(0.5),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.teal.shade200,
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.teal.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      color: Colors.teal.shade700,
+                      size: 18,
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      'This may take a few seconds',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.teal.shade800,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _startQueuePolling() {
+    _queueCheckTimer?.cancel();
+    _queueCheckTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
+      if (_reservationId == null) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        final HttpsCallable checkFn = FirebaseFunctions.instance.httpsCallable('checkQueuePosition');
+        final result = await checkFn({
+          'reservationId': _reservationId,
+          'userId': FirebaseAuth.instance.currentUser?.uid,
+        });
+
+        final data = result.data as Map;
+        
+        if (data['expired'] == true) {
+          timer.cancel();
+          setState(() {
+            isBookingConfirmed = false;
+            _reservationId = null;
+            _queuePosition = null;
+            _queueStatus = null;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Reservation expired. Please try again.'), backgroundColor: Colors.orange),
+          );
+          return;
+        }
+
+        final newPosition = data['queuePosition'] as int?;
+        final newStatus = data['status'] as String?;
+
+        if (newStatus == 'ready' && newPosition == 1 && _queueStatus != 'ready') {
+          // User promoted to position 1
+          timer.cancel();
+          setState(() {
+            _queuePosition = 1;
+            _queueStatus = 'ready';
+          });
+          _queueDialogSetter?.call(() {}); // Update dialog
+          Future.delayed(Duration(milliseconds: 500), () {
+            if (mounted) {
+              Navigator.of(context).pop(); // Close queue status dialog
+              _showBookingDialog(); // Show payment dialog
+            }
+          });
+        } else if (newPosition != _queuePosition) {
+          // Position changed
+          setState(() {
+            _queuePosition = newPosition;
+            _queueStatus = newStatus;
+          });
+          _queueDialogSetter?.call(() {}); // Update dialog
+        }
+      } catch (e) {
+        print('Error checking queue position: $e');
+      }
+    });
+  }
+
+  void _showQueueStatusDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Store setState reference for updates
+            _queueDialogSetter = setDialogState;
+
+            return AlertDialog(
+              title: Text('Slot Reserved'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.queue, size: 48, color: Colors.teal),
+                  SizedBox(height: 16),
+                  Text(
+                    _queuePosition == 1
+                        ? 'Ready to Pay'
+                        : 'Position #${_queuePosition ?? '...'} in Queue',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    _queuePosition == 1
+                        ? 'You can proceed to payment'
+                        : 'Please wait for your turn. You will be notified when ready.',
+                    textAlign: TextAlign.center,
+                  ),
+                  if (_queuePosition != null && _queuePosition! > 1)
+                    Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: CircularProgressIndicator(),
+                    ),
+                ],
+              ),
+              actions: [
+                if (_queuePosition == 1)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      _showBookingDialog();
+                    },
+                    child: Text('Proceed to Payment'),
+                  ),
+                TextButton(
+                  onPressed: () {
+                    _queueCheckTimer?.cancel();
+                    _queueDialogSetter = null;
+                    setState(() {
+                      isBookingConfirmed = false;
+                      _reservationId = null;
+                      _queuePosition = null;
+                      _queueStatus = null;
+                    });
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showBookingDialog() async {
     String userName = 'Anonymous';
     User? currentUser = FirebaseAuth.instance.currentUser;
@@ -409,6 +808,20 @@ class _BookingPageState extends State<BookingPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('User not logged in')),
       );
+      return;
+    }
+
+    // Verify reservation is still valid
+    if (_reservationId == null || _queuePosition != 1 || _queueStatus != 'ready') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reservation expired or not ready. Please try again.'), backgroundColor: Colors.red),
+      );
+      setState(() {
+        isBookingConfirmed = false;
+        _reservationId = null;
+        _queuePosition = null;
+        _queueStatus = null;
+      });
       return;
     }
 
@@ -791,7 +1204,7 @@ class _BookingPageState extends State<BookingPage> {
                                           return;
                                         }
 
-                                        // 2) Create order only if available
+                                        // 2) Create order using queue-based system
                                         final bookingId = widget.documentId + '_' + DateTime.now().millisecondsSinceEpoch.toString();
                                         final bookingData = {
                                           'userId': currentUser.uid,
@@ -807,15 +1220,16 @@ class _BookingPageState extends State<BookingPage> {
                                           'payableAmount': payableAmount,
                                         };
                                         
-                                        final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('createRazorpayOrderWithTransfer');
+                                        final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('createRazorpayOrderForQueuedSlot');
                                         final orderResult = await callable({
+                                          'reservationId': _reservationId,
                                           'totalAmount': totalAmount,
                                           'payableAmount': payableAmount,
                                           'ownerAccountId': ownerAccountId,
                                           'bookingId': bookingId,
                                           'turfId': widget.documentId,
                                           'userId': currentUser.uid,
-                                          'bookingData': bookingData, // Store booking data for recovery
+                                          'bookingData': bookingData,
                                         });
                                         final orderId = orderResult.data['orderId'];
                                         if (orderId == null) {
@@ -861,10 +1275,11 @@ class _BookingPageState extends State<BookingPage> {
                                             
                                             // ✅ CLEAR PENDING PAYMENT IMMEDIATELY ON SUCCESS
                                             await _clearPendingPayment();
-                                            final HttpsCallable confirmFn = FirebaseFunctions.instance.httpsCallable('confirmBookingAndWrite');
+                                            final HttpsCallable confirmFn = FirebaseFunctions.instance.httpsCallable('confirmBookingAfterPayment');
                                             final result = await confirmFn({
                                               'orderId': response.orderId,
                                               'paymentId': response.paymentId,
+                                              'reservationId': _reservationId,
                                               'userId': currentUser.uid,
                                               'userName': userName,
                                               'turfId': widget.documentId,
@@ -2019,6 +2434,12 @@ class _BookingPageState extends State<BookingPage> {
 
   @override
   void dispose() {
+    // Clean up animation controller
+    _loadingAnimationController.dispose();
+    
+    // Clean up queue polling timer
+    _queueCheckTimer?.cancel();
+    
     // Clean up Razorpay listeners to prevent memory leaks
     try {
       _razorpay.clear(); // This removes all event listeners

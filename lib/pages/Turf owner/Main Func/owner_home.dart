@@ -87,22 +87,67 @@ Widget buildPendingClawbackWarningCard() {
     stream: FirebaseFirestore.instance
         .collection('manual_clawback_payments')
         .where('ownerId', isEqualTo: userId)
-        .where('status', whereIn: ['pending_payment', 'overdue'])
         .snapshots(),
     builder: (context, snapshot) {
-      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-        return SizedBox(); // No pending clawbacks
+      // Debug logging
+      print('🔍 Clawback StreamBuilder - userId: $userId');
+      print('📊 Snapshot state: ${snapshot.connectionState}');
+      print('📦 Has data: ${snapshot.hasData}');
+      if (snapshot.hasData) {
+        print('📄 Total documents: ${snapshot.data!.docs.length}');
+      }
+      
+      if (snapshot.hasError) {
+        // Log error but don't show to user
+        print('❌ Error loading clawbacks: ${snapshot.error}');
+        return SizedBox();
       }
 
+      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        print('ℹ️ No clawback documents found for owner $userId');
+        return SizedBox(); // No clawbacks
+      }
+
+      // Filter in memory for pending/overdue status or documents without status
       List<Map<String, dynamic>> pendingClawbacks = [];
       double totalAmount = 0;
 
+      print('🔍 Processing ${snapshot.data!.docs.length} clawback documents...');
+      
       for (var doc in snapshot.data!.docs) {
         var data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
-        pendingClawbacks.add(data);
-        totalAmount += (data['amount'] ?? 0).toDouble();
+        
+        // Include documents with pending_payment/overdue status OR documents without status field
+        String? status = data['status'] as String?;
+        print('📄 Document ${doc.id}: status=$status, amount=${data['amount']}, ownerId=${data['ownerId']}');
+        
+        if (status == null || status == 'pending_payment' || status == 'overdue') {
+          // If document doesn't have status, set it to pending_payment (fix missing status)
+          if (status == null) {
+            print('⚠️ Document ${doc.id} missing status, updating to pending_payment');
+            doc.reference.update({'status': 'pending_payment'}).catchError((e) {
+              print('❌ Error updating status: $e');
+            });
+            data['status'] = 'pending_payment';
+          }
+          
+          pendingClawbacks.add(data);
+          totalAmount += (data['amount'] ?? 0).toDouble();
+          print('✅ Added document ${doc.id} to pending list');
+        } else {
+          print('⏭️ Skipped document ${doc.id} - status: $status (not pending/overdue)');
+        }
       }
+
+      print('📊 Filtered result: ${pendingClawbacks.length} pending clawbacks, total: ₹$totalAmount');
+
+      if (pendingClawbacks.isEmpty) {
+        print('ℹ️ No pending clawbacks after filtering');
+        return SizedBox(); // No pending clawbacks after filtering
+      }
+      
+      print('✅ Displaying clawback warning card with ${pendingClawbacks.length} items');
 
       // Calculate days overdue
       int maxDaysOverdue = 0;

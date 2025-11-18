@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:carousel_slider/carousel_slider.dart'; // Import for carousel
 import 'bookingpage.dart'; // Ensure this import is correct
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:odp/pages/subscriptions_page.dart';
 
 class DetailsPage extends StatefulWidget {
   final String documentId;
@@ -306,7 +308,7 @@ class _DetailsPageState extends State<DetailsPage> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        // Automatically open the date picker when the dialog is built
+        // Automatically open date picker when dialog is built
         Future<void> selectDate(BuildContext context) async {
           DateTime? pickedDate = await showDatePicker(
             context: context,
@@ -321,7 +323,7 @@ class _DetailsPageState extends State<DetailsPage> {
           }
         }
 
-        // Immediately call the date picker once the dialog is displayed
+        // Immediately call date picker once dialog is displayed
         WidgetsBinding.instance.addPostFrameCallback((_) {
           selectDate(context);
         });
@@ -459,7 +461,7 @@ class _DetailsPageState extends State<DetailsPage> {
                       return AlertDialog(
                         title: Text('Cannot Book'),
                         content: Text(
-                            'Bookings less than 1 hour are not allowed. Please visit the turf for manual bookings.'),
+                            'Bookings less than 1 hour are not allowed. Please visit turf for manual bookings.'),
                         actions: <Widget>[
                           TextButton(
                             child: Text('Okay'),
@@ -1101,6 +1103,581 @@ class _DetailsPageState extends State<DetailsPage> {
     }
   }
 
+  // Find the least price among all subscription prices
+  double _findLeastPrice(Map<String, dynamic> monthlyPrices) {
+    if (monthlyPrices.isEmpty) return 0.0;
+    
+    double leastPrice = double.infinity;
+    monthlyPrices.forEach((ground, price) {
+      if (price is num) {
+        double p = price.toDouble();
+        if (p < leastPrice) {
+          leastPrice = p;
+        }
+      }
+    });
+    
+    return leastPrice == double.infinity ? 0.0 : leastPrice;
+  }
+
+  // Find the ground with the least price
+  String _findLeastPriceGround(Map<String, dynamic> monthlyPrices) {
+    if (monthlyPrices.isEmpty) return '';
+    
+    double leastPrice = double.infinity;
+    String leastPriceGround = '';
+    
+    monthlyPrices.forEach((ground, price) {
+      if (price is num) {
+        double p = price.toDouble();
+        if (p < leastPrice) {
+          leastPrice = p;
+          leastPriceGround = ground;
+        }
+      }
+    });
+    
+    return leastPriceGround;
+  }
+
+  // Gold-themed Monthly Subscription Section with "Show More" button
+  Widget _buildGoldMonthlySubscriptionSection(Map<String, dynamic> turfData) {
+    if (turfData['supportsMonthlySubscription'] != true || turfData['monthlySubscription'] == null) {
+      return SizedBox.shrink();
+    }
+
+    final monthlySubData = turfData['monthlySubscription'] as Map<String, dynamic>;
+    
+    // Check if we have per-ground pricing or single pricing
+    bool hasPerGroundPricing = monthlySubData.containsKey('monthlyPrices');
+    double monthlyPrice = 0.0;
+    String leastPriceGround = '';
+    
+    if (hasPerGroundPricing) {
+      // Find the least price among all grounds
+      monthlyPrice = _findLeastPrice(monthlySubData['monthlyPrices'] as Map<String, dynamic>);
+      leastPriceGround = _findLeastPriceGround(monthlySubData['monthlyPrices'] as Map<String, dynamic>);
+    } else {
+      // Use single price
+      monthlyPrice = (monthlySubData['monthlyPrice'] as num?)?.toDouble() ?? 0.0;
+    }
+    
+    final workingDays = monthlySubData['workingDays'] as List<dynamic>? ?? [];
+    final refundPolicy = monthlySubData['refundPolicy'] as String? ?? '';
+    final customRefundPolicy = monthlySubData['customRefundPolicy'] as String? ?? '';
+    
+    // Calculate discounted price (15% more than actual)
+    final discountedPrice = monthlyPrice * 0.85;
+    
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Gold gradient background
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFD4AF37), // Gold
+                  Color(0xFFFCF4A3), // Light gold
+                  Color(0xFFF9E79F), // Pale gold
+                ],
+                stops: [0.0, 0.5, 1.0],
+              ),
+            ),
+            padding: EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with crown icon
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFAF4502),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.workspace_premium,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'MONTHLY SUBSCRIPTION',
+                            style: TextStyle(
+                              color: Color(0xFFAF4502),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Exclusive Access',
+                            style: TextStyle(
+                              color: Color(0xFFAF4502),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                
+                SizedBox(height: 24),
+                
+                // Price section with discount
+                Container(
+                  padding: EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Color(0xFFAF4502),
+                      width: 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          // Show the least price ground name if applicable
+                          if (hasPerGroundPricing && leastPriceGround.isNotEmpty) ...[
+                            Text(
+                              'Starting from ',
+                              style: TextStyle(
+                                color: Color(0xFFAF4502),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                          ],
+                          Text(
+                            '₹${monthlyPrice.toStringAsFixed(0)}/- Only 🎊',
+                            style: TextStyle(
+                              color: Color(0xFFAF4502),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+                
+                SizedBox(height: 24),
+                
+                // Show More button
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0xFFD4AF37),
+                        blurRadius: 12,
+                        offset: Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showSubscriptionDetailsBottomSheet(monthlySubData, monthlyPrice, hasPerGroundPricing),
+                    icon: Icon(Icons.keyboard_arrow_down, color: Color(0xFFD4AF37), size: 22),
+                    label: Text(
+                      'SHOW MORE DETAILS',
+                      style: TextStyle(
+                        color: Color(0xFFD4AF37),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Color(0xFFD4AF37),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Show subscription details in a premium bottom sheet
+  void _showSubscriptionDetailsBottomSheet(Map<String, dynamic> monthlySubData, double monthlyPrice, bool hasPerGroundPricing) {
+    final workingDays = monthlySubData['workingDays'] as List<dynamic>? ?? [];
+    final refundPolicy = monthlySubData['refundPolicy'] as String? ?? '';
+    final customRefundPolicy = monthlySubData['customRefundPolicy'] as String? ?? '';
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              // Header with close button
+              Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFFD4AF37),
+                      Color(0xFFFCF4A3),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.workspace_premium,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'SUBSCRIPTION DETAILS',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Per-ground pricing section if applicable
+              if (hasPerGroundPricing) ...[
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Per-Ground Pricing',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      
+                      // Display each ground with its monthly price
+                      ...(monthlySubData['monthlyPrices'] as Map<String, dynamic>)
+                          .entries.map<Widget>((entry) {
+                        return Container(
+                          margin: EdgeInsets.only(bottom: 12),
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Color(0xFFD4AF37).withOpacity(0.2)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0xFFD4AF37).withOpacity(0.05),
+                                blurRadius: 10,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              // Ground Icon
+                              Container(
+                                padding: EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Color(0xFFD4AF37).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  Icons.sports_soccer,
+                                  color: Color(0xFFD4AF37),
+                                  size: 24,
+                                ),
+                              ),
+                              SizedBox(width: 16),
+                              
+                              // Ground Name and Price
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      entry.key,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey[800],
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Monthly Subscription',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              // Price Display
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Color(0xFFD4AF37),
+                                      Color(0xFFD4AF37).withOpacity(0.8),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(30),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Color(0xFFD4AF37).withOpacity(0.3),
+                                      blurRadius: 8,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Text(
+                                  '₹${(entry.value as num).toDouble().toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 24),
+              ],
+              
+              // Working days section
+              if (workingDays.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Available Days',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: workingDays.map((day) {
+                          return Container(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Color(0xFFD4AF37).withOpacity(0.6),
+                                  Color(0xFFD4AF37),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Color(0xFFD4AF37).withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              day.toString(),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 24),
+              ],
+              
+              // Refund policy section
+              if (refundPolicy.isNotEmpty || customRefundPolicy.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Refund Policy',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          customRefundPolicy.isNotEmpty ? customRefundPolicy : refundPolicy,
+                          style: TextStyle(
+                            color: Colors.black87,
+                            fontSize: 16,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 24),
+              ],
+              
+              // Purchase button
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SubscriptionsPage(user: FirebaseAuth.instance.currentUser),
+                      ),
+                    );
+                  },
+                  icon: Icon(Icons.verified, color: Colors.white, size: 24),
+                  label: Text(
+                    'PURCHASE NOW',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFFD4AF37),
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1288,14 +1865,18 @@ class _DetailsPageState extends State<DetailsPage> {
                           // Enhanced On-Spot Payment Status
                           _buildOnSpotPaymentStatus(isosp),
                           SizedBox(height: 24),
+                          
+                          // Gold-themed Monthly Subscription Section
+                          _buildGoldMonthlySubscriptionSection(snapshot.data!),
+                          
                           // Enhanced Book Now Button
                           Container(
                             width: double.infinity,
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: status.toLowerCase() == 'closed'
-                                    ? [Colors.red.shade400, Colors.red.shade600]
-                                    : [Colors.blue.shade400, Colors.blue.shade600],
+                                      ? [Colors.red.shade400, Colors.red.shade600]
+                                      : [Colors.blue.shade400, Colors.blue.shade600],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),

@@ -271,16 +271,16 @@ async function sendNotificationToTurfOwner(ownerId, title, body, data) {
     const ownerDoc = await admin.firestore().collection('users').doc(ownerId).get();
     
     if (!ownerDoc.exists) {
-      console.log('Turf owner not found:', ownerId);
-      return;
+      console.log('⚠️ Turf owner not found:', ownerId);
+      throw new Error(`Owner user ${ownerId} not found in database`);
     }
     
     const ownerData = ownerDoc.data();
     const fcmToken = ownerData.fcmToken;
     
     if (!fcmToken) {
-      console.log('Turf owner FCM token not found:', ownerId);
-      return;
+      console.log('⚠️ Turf owner FCM token not found:', ownerId);
+      throw new Error(`FCM token not found for owner ${ownerId}`);
     }
     
     const message = {
@@ -306,11 +306,26 @@ async function sendNotificationToTurfOwner(ownerId, title, body, data) {
       }
     };
     
-    const response = await admin.messaging().send(message);
-    console.log('Successfully sent notification to turf owner:', response);
-    return response;
+    try {
+      const response = await admin.messaging().send(message);
+      console.log('✅ Successfully sent notification to turf owner:', response);
+      return response;
+    } catch (fcmError) {
+      // Handle specific FCM errors
+      if (fcmError.code === 'messaging/registration-token-not-registered' || 
+          fcmError.code === 'messaging/invalid-registration-token') {
+        console.log(`⚠️ Invalid FCM token for owner ${ownerId}, removing token`);
+        // Optionally remove invalid token from user document
+        await ownerDoc.ref.update({ fcmToken: admin.firestore.FieldValue.delete() });
+        throw new Error(`Invalid FCM token for owner ${ownerId}`);
+      } else if (fcmError.message && fcmError.message.includes('Requested entity was not found')) {
+        console.log(`⚠️ FCM entity not found for owner ${ownerId}`);
+        throw new Error(`FCM entity not found - token may be invalid or expired`);
+      }
+      throw fcmError;
+    }
   } catch (error) {
-    console.error('Error sending notification to turf owner:', error);
+    console.error('❌ Error sending notification to turf owner:', error);
     throw error;
   }
 }
@@ -479,17 +494,26 @@ exports.onBookingCreated = functions.firestore
         }
         
         if (ownerId) {
-          const deductionsQuery = await db.collection('turfownerdeductions')
+          // FIX #2: Query BOTH pending AND overdue deductions
+          const pendingDeductions = await db.collection('turfownerdeductions')
             .where('ownerId', '==', ownerId)
             .where('status', '==', 'pending')
             .get();
           
-          deductionsQuery.forEach(doc => {
+          const overdueDeductions = await db.collection('turfownerdeductions')
+            .where('ownerId', '==', ownerId)
+            .where('status', '==', 'overdue')
+            .get();
+          
+          // Merge both query results
+          const allDeductions = [...pendingDeductions.docs, ...overdueDeductions.docs];
+          
+          allDeductions.forEach(doc => {
             totalDeductions += (doc.data().amount || 0);
           });
           
           if (totalDeductions > 0) {
-            console.log(`Found pending deductions: ₹${totalDeductions} for owner ${ownerId} (account: ${ownerAccountId})`);
+            console.log(`Found ${pendingDeductions.size} pending + ${overdueDeductions.size} overdue deductions: ₹${totalDeductions} for owner ${ownerId} (account: ${ownerAccountId})`);
           }
         }
       } catch (error) {
@@ -506,56 +530,102 @@ exports.onBookingCreated = functions.firestore
       console.log('Final payout to owner:', finalPayout);
       console.log('Company keeps (profit + fees):', companyProfit);
       
+      // Mark deductions as applied BEFORE transfer attempt
+      // This ensures deductions are marked even if transfer fails
+      if (totalDeductions > 0 && ownerId) {
+        try {
+          // FIX #2: Query BOTH pending AND overdue deductions to mark as applied
+          const pendingDeductions = await db.collection('turfownerdeductions')
+            .where('ownerId', '==', ownerId)
+            .where('status', '==', 'pending')
+            .get();
+          
+          const overdueDeductions = await db.collection('turfownerdeductions')
+            .where('ownerId', '==', ownerId)
+            .where('status', '==', 'overdue')
+            .get();
+          
+          // Merge both query results
+          const allDeductions = [...pendingDeductions.docs, ...overdueDeductions.docs];
+          
+          if (allDeductions.length > 0) {
+            const batch = db.batch();
+            allDeductions.forEach(doc => {
+              batch.update(doc.ref, {
+                status: 'applied',
+                appliedAt: admin.firestore.FieldValue.serverTimestamp(),
+                appliedToBooking: context.params.bookingId,
+                appliedToBookingAmount: finalPayout,
+                actualDeductionAmount: actualDeduction
+              });
+            });
+            await batch.commit();
+            console.log(`✅ Marked ${allDeductions.length} deductions (${pendingDeductions.size} pending + ${overdueDeductions.size} overdue) as applied for owner ${ownerId} (booking: ${context.params.bookingId}, payout: ₹${finalPayout})`);
+          }
+        } catch (error) {
+          console.error('❌ Error updating deduction status:', error);
+          // Continue with transfer attempt even if deduction marking fails
+          // This prevents blocking the payout if there's a deduction update issue
+        }
+      }
+      
       // Process payment
       const ownerPaymentMethod = await getOwnerPaymentMethod(ownerAccountId, turfId, data);
       const client = getRazorpayClient();
       
       if (ownerPaymentMethod.type === 'razorpay') {
-        await processRazorpayTransfer(client, paymentId, finalPayout, ownerPaymentMethod.accountId);
-        
-        // Mark deductions as applied
-        if (totalDeductions > 0 && ownerId) {
+        try {
+          await processRazorpayTransfer(client, paymentId, finalPayout, ownerPaymentMethod.accountId);
+          // Update booking after successful transfer
+          await updateBookingAfterTransfer(snap, 'settled', null, ownerAccountId);
+          
+          // Save settlement info for successful transfer
+          await db.collection('booking_settlements').doc(context.params.bookingId).set({
+            booking_id: context.params.bookingId,
+            turf_id: turfId || null,
+            total_paid: totalAmount,
+            owner_share: ownerShare,
+            platform_profit: companyProfit,
+            pending_deductions: totalDeductions,
+            final_payout: finalPayout,
+            actual_deduction: actualDeduction,
+            razorpay_payment_id: paymentId,
+            owner_account_id: ownerAccountId,
+            transfer_status: 'success',
+            settled_at: admin.firestore.FieldValue.serverTimestamp()
+          });
+          
+          console.log('✅ Successfully processed payout for booking:', context.params.bookingId);
+        } catch (transferError) {
+          console.error('❌ Razorpay transfer failed:', transferError);
+          // Mark as failed but deductions are already marked as applied
+          await updatePayoutStatus(snap, 'failed', `Razorpay transfer failed: ${transferError.message}`);
+          
+          // Save settlement info even for failed transfer (deductions were applied)
           try {
-            const deductionsQuery = await db.collection('turfownerdeductions')
-              .where('ownerId', '==', ownerId)
-              .where('status', '==', 'pending')
-              .get();
-            
-            const batch = db.batch();
-            deductionsQuery.forEach(doc => {
-              batch.update(doc.ref, {
-                status: 'applied',
-                appliedAt: admin.firestore.FieldValue.serverTimestamp(),
-                appliedToBooking: context.params.bookingId
-              });
-            });
-            await batch.commit();
-            console.log(`Marked ${deductionsQuery.size} deductions as applied for owner ${ownerId}`);
-          } catch (error) {
-            console.error('Error updating deduction status:', error);
+            await db.collection('booking_settlements').doc(context.params.bookingId).set({
+              booking_id: context.params.bookingId,
+              turf_id: turfId || null,
+              total_paid: totalAmount,
+              owner_share: ownerShare,
+              platform_profit: companyProfit,
+              pending_deductions: totalDeductions,
+              final_payout: finalPayout,
+              actual_deduction: actualDeduction,
+              razorpay_payment_id: paymentId,
+              owner_account_id: ownerAccountId,
+              transfer_status: 'failed',
+              transfer_error: transferError.message,
+              deductions_applied: true, // Important: deductions were marked as applied
+              settled_at: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+          } catch (settlementError) {
+            console.error('Error saving failed settlement info:', settlementError);
           }
+          
+          throw transferError; // Re-throw to be caught by outer catch block
         }
       }
-      
-      // Update booking
-      await updateBookingAfterTransfer(snap, 'settled', null, ownerAccountId);
-      
-      // Save settlement info
-      await db.collection('booking_settlements').doc(context.params.bookingId).set({
-        booking_id: context.params.bookingId,
-        turf_id: turfId || null,
-        total_paid: totalAmount,
-        owner_share: ownerShare,
-        platform_profit: companyProfit,
-        pending_deductions: totalDeductions,
-        final_payout: finalPayout,
-        actual_deduction: actualDeduction,
-        razorpay_payment_id: paymentId,
-        owner_account_id: ownerAccountId,
-        settled_at: admin.firestore.FieldValue.serverTimestamp()
-      });
-      
-      console.log('Successfully processed payout for booking:', context.params.bookingId);
     } catch (error) {
       console.error('Function execution error:', error);
       try {
@@ -891,6 +961,52 @@ exports.recoverIncompleteBookings = functions.https.onCall(async (data, context)
         // Payment is captured but booking doesn't exist - create it
         console.log(`[Recovery] Payment captured but booking missing for order ${orderId}, creating booking...`);
         
+        // Check if this is a queue-based booking (has reservation_id)
+        const reservationId = orderData.reservation_id;
+        
+        if (reservationId) {
+          // This is a queue-based booking - use confirmBookingAfterPayment to handle queue updates
+          console.log(`[Recovery] Queue-based booking detected, reservationId: ${reservationId}`);
+          
+          if (!orderData.booking_data) {
+            console.log(`[Recovery] No booking_data stored for order ${orderId}, cannot recover`);
+            errors.push({ orderId, error: 'No booking data stored' });
+            continue;
+          }
+          
+          const bookingData = orderData.booking_data;
+          
+          // Use confirmBookingAfterPaymentInternal which handles queue updates
+          try {
+            const confirmResult = await confirmBookingAfterPaymentInternal({
+              orderId: orderId,
+              paymentId: capturedPayment.id,
+              reservationId: reservationId,
+              userId: userId,
+              userName: bookingData.userName || 'User',
+              turfId: turfId,
+              turfName: bookingData.turfName || '',
+              ownerId: bookingData.ownerId || '',
+              bookingDate: bookingData.bookingDate,
+              selectedGround: bookingData.selectedGround,
+              slots: bookingData.slots,
+              totalHours: bookingData.totalHours,
+              baseAmount: bookingData.baseAmount || orderData.base_turf_amount,
+              payableAmount: orderData.total_paid,
+            });
+            
+            if (confirmResult.ok) {
+              recoveredBookings.push({ orderId, bookingId: confirmResult.bookingId, reservationId: reservationId });
+              console.log(`[Recovery] Successfully recovered queue-based booking for order ${orderId}, reservation ${reservationId}`);
+            } else {
+              errors.push({ orderId, error: 'Failed to confirm booking after payment' });
+            }
+          } catch (confirmError) {
+            console.error(`[Recovery] Error confirming booking for reservation ${reservationId}:`, confirmError);
+            errors.push({ orderId, reservationId, error: confirmError.message });
+          }
+        } else {
+          // Old-style booking (non-queue) - use createBookingInternal
         if (!orderData.booking_data) {
           console.log(`[Recovery] No booking_data stored for order ${orderId}, cannot recover`);
           errors.push({ orderId, error: 'No booking data stored' });
@@ -917,6 +1033,7 @@ exports.recoverIncompleteBookings = functions.https.onCall(async (data, context)
         const result = await createBookingInternal(validatedData);
         recoveredBookings.push({ orderId, bookingId: result.bookingId });
         console.log(`[Recovery] Successfully created booking for order ${orderId}`);
+        }
         
       } catch (orderError) {
         console.error(`[Recovery] Error processing order ${orderId}:`, orderError);
@@ -1007,6 +1124,55 @@ exports.recoverIncompleteEventRegistrations = functions.https.onCall(async (data
         // Payment is captured but registration doesn't exist - create it
         console.log(`[Recovery] Payment captured but registration missing for order ${orderId}, creating registration...`);
         
+        // Check if this is a queue-based registration (has reservation_id)
+        const reservationId = orderData.reservation_id;
+        
+        if (reservationId) {
+          // This is a queue-based registration - use confirmEventRegistrationAfterPaymentInternal to handle queue updates
+          console.log(`[Recovery] Queue-based event registration detected, reservationId: ${reservationId}`);
+          
+          if (!orderData.registration_data) {
+            console.log(`[Recovery] No registration_data stored for order ${orderId}, cannot recover`);
+            errors.push({ orderId, error: 'No registration data stored' });
+            continue;
+          }
+          
+          const registrationData = orderData.registration_data;
+          
+          // Use confirmEventRegistrationAfterPaymentInternal which handles queue updates
+          try {
+            const confirmResult = await confirmEventRegistrationAfterPaymentInternal({
+              orderId: orderId,
+              paymentId: capturedPayment.id,
+              reservationId: reservationId,
+              userId: userId,
+              userName: registrationData.userName || 'User',
+              eventId: eventId,
+              eventName: registrationData.eventName || '',
+              ownerId: registrationData.ownerId || '',
+              eventDate: registrationData.eventDate,
+              eventTime: registrationData.eventTime,
+              eventLocation: registrationData.eventLocation || orderData.event_location || '',
+              eventType: registrationData.eventType || orderData.event_type || '',
+              baseAmount: registrationData.baseAmount || orderData.base_event_amount,
+              payableAmount: orderData.total_paid,
+              userEmail: registrationData.userEmail || orderData.user_email || '',
+              userPhone: registrationData.userPhone || orderData.user_phone || '',
+              userImageUrl: registrationData.userImageUrl || ''
+            });
+            
+            if (confirmResult.ok) {
+              recoveredRegistrations.push({ orderId, registrationId: confirmResult.registrationId, reservationId: reservationId });
+              console.log(`[Recovery] Successfully recovered queue-based event registration for order ${orderId}, reservation ${reservationId}`);
+            } else {
+              errors.push({ orderId, error: 'Failed to confirm registration after payment' });
+            }
+          } catch (confirmError) {
+            console.error(`[Recovery] Error confirming registration for reservation ${reservationId}:`, confirmError);
+            errors.push({ orderId, reservationId, error: confirmError.message });
+          }
+        } else {
+          // Old-style registration (non-queue) - use createEventRegistrationInternal
         if (!orderData.registration_data) {
           console.log(`[Recovery] No registration_data stored for order ${orderId}, cannot recover`);
           errors.push({ orderId, error: 'No registration data stored' });
@@ -1035,6 +1201,7 @@ exports.recoverIncompleteEventRegistrations = functions.https.onCall(async (data
         
         recoveredRegistrations.push({ orderId, registrationId: result.registrationId });
         console.log(`[Recovery] Successfully created registration for order ${orderId}`);
+        }
         
       } catch (orderError) {
         console.error(`[Recovery] Error processing order ${orderId}:`, orderError);
@@ -1491,7 +1658,10 @@ exports.checkOverdueClawbacks = functions.pubsub.schedule('every 24 hours').onRu
     if (createdAt < cutoffDate) {
       await doc.ref.update({
         status: 'overdue',
-        overdueMarkedAt: admin.firestore.FieldValue.serverTimestamp()
+        overdueMarkedAt: admin.firestore.FieldValue.serverTimestamp(),
+        appliedAt: admin.firestore.FieldValue.serverTimestamp(), // FIX #1: Set appliedAt when marking overdue
+        appliedReason: 'Auto-marked overdue after 7 days. Manual payment required.',
+        markedOverdueStatus: true
       });
       
       let ownerEmail = '';
@@ -1606,6 +1776,143 @@ exports.checkOverdueClawbacks = functions.pubsub.schedule('every 24 hours').onRu
 });
 
 // =========================
+// CLAWBACK RECOVERY & VALIDATION
+// =========================
+
+// FIX #3: Recovery function for failed transfer bookings
+exports.recoverFailedClawbacks = functions.https.onCall(async (data, context) => {
+  const db = admin.firestore();
+  const { ownerId, bookingId } = data;
+  
+  if (!ownerId || !bookingId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing ownerId or bookingId');
+  }
+  
+  try {
+    console.log(`Recovering clawbacks for owner ${ownerId}, booking ${bookingId}`);
+    
+    // Find all pending/overdue deductions for this owner
+    const pendingDocs = await db.collection('turfownerdeductions')
+      .where('ownerId', '==', ownerId)
+      .where('status', '==', 'pending')
+      .get();
+    
+    const overdueDocs = await db.collection('turfownerdeductions')
+      .where('ownerId', '==', ownerId)
+      .where('status', '==', 'overdue')
+      .get();
+    
+    const allDocs = [...pendingDocs.docs, ...overdueDocs.docs];
+    
+    if (allDocs.length === 0) {
+      return { 
+        success: true, 
+        count: 0, 
+        message: 'No pending clawbacks found for recovery' 
+      };
+    }
+    
+    // Mark all as applied
+    const batch = db.batch();
+    allDocs.forEach(doc => {
+      batch.update(doc.ref, {
+        status: 'applied',
+        appliedAt: admin.firestore.FieldValue.serverTimestamp(),
+        appliedToBooking: bookingId,
+        recoveredViaAdminFunction: true,
+        recoveredAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    
+    await batch.commit();
+    
+    console.log(`✅ Successfully recovered ${allDocs.length} clawbacks`);
+    return { 
+      success: true, 
+      count: allDocs.length,
+      message: `Marked ${allDocs.length} deductions as applied` 
+    };
+    
+  } catch (error) {
+    console.error('❌ Error in recoverFailedClawbacks:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// FIX #4: Validation function to check for inconsistencies
+exports.validateClawbackConsistency = functions.https.onCall(async (data, context) => {
+  const db = admin.firestore();
+  
+  try {
+    // Check 1: Overdue with null appliedAt (INCONSISTENT)
+    const overdueDeductions = await db.collection('turfownerdeductions')
+      .where('status', '==', 'overdue')
+      .get();
+    
+    const inconsistent = overdueDeductions.docs.filter(doc => 
+      !doc.data().appliedAt
+    );
+    
+    if (inconsistent.length > 0) {
+      console.warn(`Found ${inconsistent.length} overdue deductions with null appliedAt`);
+      return {
+        status: 'warning',
+        inconsistentCount: inconsistent.length,
+        details: inconsistent.map(doc => ({
+          id: doc.id,
+          ownerId: doc.data().ownerId,
+          amount: doc.data().amount,
+          createdAt: doc.data().createdAt,
+          overdueMarkedAt: doc.data().overdueMarkedAt,
+          appliedAt: doc.data().appliedAt
+        }))
+      };
+    }
+    
+    // Check 2: Stuck pending (older than 8 days)
+    const pendingDeductions = await db.collection('turfownerdeductions')
+      .where('status', '==', 'pending')
+      .get();
+    
+    const stuck = pendingDeductions.docs.filter(doc => {
+      const createdAt = doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt);
+      const age = Date.now() - createdAt.getTime();
+      return age > 8 * 24 * 60 * 60 * 1000; // 8 days
+    });
+    
+    if (stuck.length > 0) {
+      console.warn(`Found ${stuck.length} stuck pending deductions`);
+      return {
+        status: 'warning',
+        stuckCount: stuck.length,
+        details: stuck.map(doc => {
+          const createdAt = doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt);
+          const age = Math.floor((Date.now() - createdAt.getTime()) / (24*60*60*1000));
+          return {
+            id: doc.id,
+            ownerId: doc.data().ownerId,
+            amount: doc.data().amount,
+            createdAt: doc.data().createdAt,
+            ageInDays: age
+          };
+        })
+      };
+    }
+    
+    return {
+      status: 'healthy',
+      message: 'All clawback statuses are consistent',
+      inconsistentCount: 0,
+      stuckCount: 0
+    };
+    
+  } catch (error) {
+    console.error('❌ Error in validateClawbackConsistency:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// =========================
 // RAZORPAY WEBHOOK HANDLER
 // =========================
 
@@ -1650,35 +1957,129 @@ exports.handleRazorpayWebhook = functions.https.onRequest(async (req, res) => {
       const paymentLinkId = payload.payment_link.entity.id;
       const notes = payload.payment_link.entity.notes || {};
       
+      console.log('🔔 Payment link paid event received:', {
+        paymentLinkId,
+        notes,
+        event
+      });
+      
       if (notes.purpose === 'clawback_payment') {
         const db = admin.firestore();
         const deductionId = notes.deduction_id;
         
-        await db.collection('manual_clawback_payments').doc(deductionId).update({
-          status: 'paid',
-          paidAt: admin.firestore.FieldValue.serverTimestamp(),
-          paymentId: payload.payment.entity.id,
-          paymentMethod: payload.payment.entity.method
+        if (!deductionId) {
+          console.error('❌ Missing deduction_id in payment link notes');
+          return res.status(400).json({ error: 'Missing deduction_id' });
+        }
+        
+        console.log('💰 Processing clawback payment for deductionId:', deductionId);
+        
+        // Update manual_clawback_payments document
+        // Use transaction to ensure atomic update and prevent duplicate processing
+        const manualPaymentRef = db.collection('manual_clawback_payments').doc(deductionId);
+        
+        await db.runTransaction(async (transaction) => {
+          const manualPaymentDoc = await transaction.get(manualPaymentRef);
+          
+          if (!manualPaymentDoc.exists) {
+            console.error('❌ manual_clawback_payments document not found:', deductionId);
+            // Try to find by paymentLinkId instead
+            const querySnapshot = await db.collection('manual_clawback_payments')
+              .where('paymentLinkId', '==', paymentLinkId)
+              .limit(1)
+              .get();
+            
+            if (querySnapshot.empty) {
+              throw new Error(`Payment record not found for deductionId: ${deductionId} or paymentLinkId: ${paymentLinkId}`);
+            }
+            
+            const foundDoc = querySnapshot.docs[0];
+            const foundData = foundDoc.data();
+            
+            // Check if already processed (idempotency check)
+            if (foundData.status === 'paid') {
+              console.log('⚠️ Payment already processed for document:', foundDoc.id);
+              return; // Already processed, skip update
+            }
+            
+            transaction.update(foundDoc.ref, {
+              status: 'paid',
+              paidAt: admin.firestore.FieldValue.serverTimestamp(),
+              paymentId: payload.payment.entity.id,
+              paymentMethod: payload.payment.entity.method,
+              processedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            console.log('✅ Updated manual_clawback_payments by paymentLinkId:', foundDoc.id);
+          } else {
+            const existingData = manualPaymentDoc.data();
+            
+            // Check if already processed (idempotency check)
+            if (existingData.status === 'paid') {
+              console.log('⚠️ Payment already processed for document:', deductionId);
+              return; // Already processed, skip update
+            }
+            
+            transaction.update(manualPaymentRef, {
+              status: 'paid',
+              paidAt: admin.firestore.FieldValue.serverTimestamp(),
+              paymentId: payload.payment.entity.id,
+              paymentMethod: payload.payment.entity.method,
+              processedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            console.log('✅ Updated manual_clawback_payments document:', deductionId);
+          }
         });
         
-        await db.collection('turfownerdeductions').doc(deductionId).update({
-          status: 'settled_manual',
-          settledAt: admin.firestore.FieldValue.serverTimestamp(),
-          settlementMethod: 'manual_payment_link'
-        });
+        // Update turfownerdeductions document
+        const deductionRef = db.collection('turfownerdeductions').doc(deductionId);
+        const deductionDoc = await deductionRef.get();
         
-        await sendNotificationToTurfOwner(
-          notes.owner_id,
-          '✅ Payment Received',
-          `Your payment of ₹${payload.payment.entity.amount / 100} has been received. Thank you!`,
-          { type: 'clawback_paid' }
-        );
+        if (deductionDoc.exists) {
+          const existingDeduction = deductionDoc.data();
+          
+          // Check if already settled (idempotency check)
+          if (existingDeduction.status === 'settled_manual' || existingDeduction.status === 'applied') {
+            console.log('⚠️ Deduction already settled:', deductionId);
+          } else {
+            await deductionRef.update({
+              status: 'settled_manual',
+              settledAt: admin.firestore.FieldValue.serverTimestamp(),
+              settlementMethod: 'manual_payment_link',
+              paymentLinkId: paymentLinkId
+            });
+            console.log('✅ Updated turfownerdeductions document:', deductionId);
+          }
+        } else {
+          console.warn('⚠️ turfownerdeductions document not found:', deductionId);
+        }
         
-        await sendNotificationToAdmin(
-          'Clawback Paid',
-          `Owner ${notes.owner_id} paid clawback of ₹${payload.payment.entity.amount / 100}`,
-          { type: 'clawback_paid_admin', deductionId }
-        );
+        // Send notifications
+        if (notes.owner_id) {
+          try {
+            await sendNotificationToTurfOwner(
+              notes.owner_id,
+              '✅ Payment Received',
+              `Your payment of ₹${payload.payment.entity.amount / 100} has been received. Thank you!`,
+              { type: 'clawback_paid' }
+            );
+            console.log('✅ Sent notification to owner:', notes.owner_id);
+          } catch (notifError) {
+            console.error('❌ Error sending owner notification:', notifError);
+          }
+          
+          try {
+            await sendNotificationToAdmin(
+              'Clawback Paid',
+              `Owner ${notes.owner_id} paid clawback of ₹${payload.payment.entity.amount / 100}`,
+              { type: 'clawback_paid_admin', deductionId }
+            );
+            console.log('✅ Sent notification to admin');
+          } catch (notifError) {
+            console.error('❌ Error sending admin notification:', notifError);
+          }
+        }
+      } else {
+        console.log('ℹ️ Payment link paid but not a clawback payment (purpose:', notes.purpose, ')');
       }
     }
     
@@ -1705,32 +2106,54 @@ exports.sendClawbackReminder = functions.https.onCall(async (data, context) => {
     const paymentDoc = await db.collection('manual_clawback_payments').doc(deductionId).get();
     
     if (!paymentDoc.exists) {
-      throw new functions.https.HttpsError('not-found', 'Payment record not found');
+      throw new functions.https.HttpsError('not-found', `Payment record not found for deductionId: ${deductionId}`);
     }
     
     const paymentData = paymentDoc.data();
     
-    await sendNotificationToTurfOwner(
-      paymentData.ownerId,
-      '🔔 Payment Reminder',
-      `Reminder: You have a pending payment of ₹${paymentData.amount}. ${paymentData.paymentLink ? `Pay now: ${paymentData.paymentLink}` : 'Please contact admin.'}`,
-      {
-        type: 'clawback_reminder',
-        deductionId,
-        amount: paymentData.amount.toString(),
-        paymentLink: paymentData.paymentLink || ''
-      }
-    );
+    if (!paymentData.ownerId) {
+      throw new functions.https.HttpsError('failed-precondition', 'Owner ID not found in payment record');
+    }
     
+    // Try to send notification, but don't fail if it doesn't work
+    let notificationSent = false;
+    try {
+      await sendNotificationToTurfOwner(
+        paymentData.ownerId,
+        '🔔 Payment Reminder',
+        `Reminder: You have a pending payment of ₹${paymentData.amount}. ${paymentData.paymentLink ? `Pay now: ${paymentData.paymentLink}` : 'Please contact admin.'}`,
+        {
+          type: 'clawback_reminder',
+          deductionId,
+          amount: paymentData.amount.toString(),
+          paymentLink: paymentData.paymentLink || ''
+        }
+      );
+      notificationSent = true;
+    } catch (notifError) {
+      console.error('Error sending notification (continuing anyway):', notifError);
+      // Continue even if notification fails - still update reminder count
+    }
+    
+    // Update reminder count regardless of notification success
     await paymentDoc.ref.update({
       remindersSent: admin.firestore.FieldValue.increment(1),
       lastReminderAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    return { success: true, message: 'Reminder sent successfully' };
+    return { 
+      success: true, 
+      message: notificationSent 
+        ? 'Reminder sent successfully' 
+        : 'Reminder recorded (notification may not have been delivered)',
+      notificationSent
+    };
   } catch (error) {
     console.error('Error sending reminder:', error);
-    throw new functions.https.HttpsError('internal', error.message);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', `Failed to send reminder: ${error.message}`);
   }
 });
 
@@ -1772,6 +2195,1185 @@ exports.checkTurfSlotAvailability = functions.https.onCall(async (data, context)
     if (error instanceof functions.https.HttpsError) throw error;
     throw new functions.https.HttpsError('internal', `Failed to check availability: ${error.message}`);
   }
+});
+
+// =========================
+// QUEUE-BASED SLOT BOOKING SYSTEM
+// =========================
+
+// Freeze slot and add user to queue
+exports.freezeSlotAndQueue = functions.https.onCall(async (data, context) => {
+  try {
+    const { turfId, selectedGround, bookingDate, slots, userId, userName } = data;
+    
+    if (!turfId || !selectedGround || !bookingDate || !Array.isArray(slots) || slots.length === 0 || !userId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    const db = admin.firestore();
+    const slotKey = `${turfId}_${selectedGround}_${bookingDate}_${slots.sort().join('_')}`;
+    const reservationId = `${slotKey}_${userId}_${Date.now()}`;
+    const queueId = `queue_${slotKey}`;
+    
+    const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 1000)); // 2 minutes
+    
+    return await db.runTransaction(async (tx) => {
+      // Check existing bookings
+      const bookingsQuery = await tx.get(
+        db.collection('turfs').doc(turfId).collection('bookings')
+          .where('selectedGround', '==', selectedGround)
+          .where('bookingDate', '==', bookingDate)
+      );
+      
+      let booked = new Set();
+      bookingsQuery.forEach(doc => {
+        const arr = doc.data().bookingSlots || [];
+        for (const s of arr) {
+          booked.add(s);
+        }
+      });
+      
+      const conflicting = slots.filter(s => booked.has(s));
+      if (conflicting.length > 0) {
+        throw new functions.https.HttpsError('failed-precondition', `Slots already booked: ${conflicting.join(', ')}`);
+      }
+      
+      // Check active reservations (query by slotKey only, filter expiresAt in code to avoid composite index)
+      const activeReservationsQuery = await tx.get(
+        db.collection('slot_reservations')
+          .where('slotKey', '==', slotKey)
+      );
+      
+      const now = admin.firestore.Timestamp.now();
+      const conflictingReservations = [];
+      activeReservationsQuery.forEach(doc => {
+        const resData = doc.data();
+        const resExpiresAt = resData.expiresAt;
+        // Filter by expiresAt in code (avoids composite index requirement)
+        if (resExpiresAt && resExpiresAt > now) {
+          const resSlots = resData.slots || [];
+          if (slots.some(s => resSlots.includes(s))) {
+            conflictingReservations.push(doc.id);
+          }
+        }
+      });
+      
+      if (conflictingReservations.length > 0) {
+        // Get queue
+        const queueDoc = await tx.get(db.collection('slot_queues').doc(queueId));
+        let queueData = queueDoc.exists ? queueDoc.data() : { users: [] };
+        let users = queueData.users || [];
+        
+        // Check if user already in queue
+        const existingIndex = users.findIndex(u => u.userId === userId);
+        if (existingIndex >= 0) {
+          return {
+            reservationId: users[existingIndex].reservationId,
+            queuePosition: existingIndex + 1,
+            status: existingIndex === 0 ? 'ready' : 'queued',
+            message: existingIndex === 0 ? 'Ready to pay' : `Position ${existingIndex + 1} in queue`
+          };
+        }
+        
+        // Add to queue
+        const queuePosition = users.length + 1;
+        users.push({
+          userId,
+          userName: userName || 'User',
+          reservationId,
+          joinedAt: admin.firestore.Timestamp.now() // Use Timestamp.now() instead of serverTimestamp() for arrays
+        });
+        
+        // Create reservation
+        tx.set(db.collection('slot_reservations').doc(reservationId), {
+          slotKey,
+          turfId,
+          selectedGround,
+          bookingDate,
+          slots,
+          userId,
+          userName: userName || 'User',
+          queuePosition,
+          status: 'queued',
+          expiresAt,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        
+        // Update queue
+        tx.set(db.collection('slot_queues').doc(queueId), {
+          slotKey,
+          turfId,
+          selectedGround,
+          bookingDate,
+          slots,
+          users,
+          lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        
+        return {
+          reservationId,
+          queuePosition,
+          status: 'queued',
+          message: `Position ${queuePosition} in queue`
+        };
+      }
+      
+      // No conflicts - user is first
+      // Create reservation
+      tx.set(db.collection('slot_reservations').doc(reservationId), {
+        slotKey,
+        turfId,
+        selectedGround,
+        bookingDate,
+        slots,
+        userId,
+        userName: userName || 'User',
+        queuePosition: 1,
+        status: 'ready',
+        expiresAt,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Create queue with this user as first
+      tx.set(db.collection('slot_queues').doc(queueId), {
+        slotKey,
+        turfId,
+        selectedGround,
+        bookingDate,
+        slots,
+        users: [{
+          userId,
+          userName: userName || 'User',
+          reservationId,
+          joinedAt: admin.firestore.Timestamp.now() // Use Timestamp.now() instead of serverTimestamp() for arrays
+        }],
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      
+      return {
+        reservationId,
+        queuePosition: 1,
+        status: 'ready',
+        message: 'Ready to pay'
+      };
+    });
+  } catch (error) {
+    console.error('freezeSlotAndQueue error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Create Razorpay order only if user is first in queue
+exports.createRazorpayOrderForQueuedSlot = functions.https.onCall(async (data, context) => {
+  try {
+    const { reservationId, totalAmount, payableAmount, ownerAccountId, bookingId, turfId, userId, bookingData } = data;
+    
+    if (!reservationId || !totalAmount || !payableAmount || !ownerAccountId || !bookingId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    const db = admin.firestore();
+    const reservationDoc = await db.collection('slot_reservations').doc(reservationId).get();
+    
+    if (!reservationDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Reservation not found');
+    }
+    
+    const reservation = reservationDoc.data();
+    
+    // Verify user owns this reservation
+    if (reservation.userId !== userId) {
+      throw new functions.https.HttpsError('permission-denied', 'You do not own this reservation');
+    }
+    
+    // Verify queue position is 1
+    if (reservation.queuePosition !== 1 || reservation.status !== 'ready') {
+      throw new functions.https.HttpsError('failed-precondition', `Not your turn. Position: ${reservation.queuePosition}`);
+    }
+    
+    // Check if reservation expired
+    const expiresAt = reservation.expiresAt?.toDate();
+    if (expiresAt && expiresAt < new Date()) {
+      throw new functions.https.HttpsError('deadline-exceeded', 'Reservation expired. Please try again.');
+    }
+    
+    // Verify slots still available
+    const bookingsQuery = await db
+      .collection('turfs').doc(turfId).collection('bookings')
+      .where('selectedGround', '==', reservation.selectedGround)
+      .where('bookingDate', '==', reservation.bookingDate)
+      .get();
+    
+    let booked = new Set();
+    bookingsQuery.forEach(doc => {
+      const arr = doc.data().bookingSlots || [];
+      for (const s of arr) {
+        booked.add(s);
+      }
+    });
+    
+    const conflicting = reservation.slots.filter(s => booked.has(s));
+    if (conflicting.length > 0) {
+      throw new functions.https.HttpsError('failed-precondition', `Slots no longer available: ${conflicting.join(', ')}`);
+    }
+    
+    // Create Razorpay order
+    const client = getRazorpayClient();
+    const ownerShare = calculateOwnerShare(totalAmount);
+    const platformProfit = payableAmount - totalAmount;
+    
+    const order = await client.orders.create({
+      amount: Math.round(payableAmount * 100),
+      currency: 'INR',
+      transfers: [{
+        account: ownerAccountId,
+        amount: Math.round(ownerShare * 100),
+        currency: 'INR'
+      }],
+      notes: {
+        booking_id: bookingId,
+        reservation_id: reservationId,
+        owner_share: ownerShare.toString(),
+        platform_profit: platformProfit.toString(),
+        base_turf_amount: totalAmount.toString()
+      }
+    });
+    
+    // Update reservation with order ID
+    await reservationDoc.ref.update({
+      razorpayOrderId: order.id,
+      status: 'payment_pending',
+      orderCreatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Store in razorpay_orders
+    await db.collection('razorpay_orders').doc(order.id).set({
+      booking_id: bookingId,
+      reservation_id: reservationId,
+      turf_id: turfId || null,
+      user_id: userId,
+      total_paid: payableAmount,
+      base_turf_amount: totalAmount,
+      owner_share: ownerShare,
+      platform_profit: platformProfit,
+      razorpay_order_id: order.id,
+      owner_account_id: ownerAccountId,
+      booking_data: bookingData || null,
+      booking_completed: false,
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    return {
+      orderId: order.id,
+      ownerShare,
+      platformProfit,
+      baseTurfAmount: totalAmount,
+      amount: payableAmount
+    };
+  } catch (error) {
+    console.error('createRazorpayOrderForQueuedSlot error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Internal function to confirm booking after payment (can be called from recovery)
+async function confirmBookingAfterPaymentInternal(data) {
+  const { orderId, paymentId, reservationId, userId, userName, turfId, turfName, ownerId, bookingDate, selectedGround, slots, totalHours, baseAmount, payableAmount } = data;
+  
+  if (!orderId || !paymentId || !reservationId) {
+    throw new Error('Missing required parameters: orderId, paymentId, reservationId');
+  }
+  
+  const db = admin.firestore();
+  const reservationDoc = await db.collection('slot_reservations').doc(reservationId).get();
+  
+  if (!reservationDoc.exists) {
+    throw new Error('Reservation not found');
+  }
+  
+  const reservation = reservationDoc.data();
+  
+  // Verify user owns this reservation
+  if (reservation.userId !== userId) {
+    throw new Error('You do not own this reservation');
+  }
+  
+  const slotKey = reservation.slotKey;
+  const queueId = `queue_${slotKey}`;
+  
+  return await db.runTransaction(async (tx) => {
+      // Verify payment
+      const client = getRazorpayClient();
+      const payment = await client.payments.fetch(paymentId);
+      
+      if (!payment || payment.status !== 'captured') {
+        throw new functions.https.HttpsError('failed-precondition', 'Payment not captured');
+      }
+      
+      if (payment.order_id !== orderId) {
+        throw new functions.https.HttpsError('failed-precondition', 'Payment does not match order');
+      }
+      
+      // Final slot availability check
+      const bookingsQuery = await tx.get(
+        db.collection('turfs').doc(turfId).collection('bookings')
+          .where('selectedGround', '==', selectedGround)
+          .where('bookingDate', '==', bookingDate)
+      );
+      
+      let booked = new Set();
+      bookingsQuery.forEach(doc => {
+        const arr = doc.data().bookingSlots || [];
+        for (const s of arr) {
+          booked.add(s);
+        }
+      });
+      
+      const conflicting = slots.filter(s => booked.has(s));
+      if (conflicting.length > 0) {
+        throw new functions.https.HttpsError('aborted', `Slots already booked: ${conflicting.join(', ')}`);
+      }
+      
+      // Create booking
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      const bookingData = {
+        userId,
+        userName: userName || 'User',
+        bookingDate,
+        bookingSlots: slots,
+        totalHours: Number(totalHours) || slots.length,
+        amount: payableAmount,
+        baseAmount: baseAmount,
+        turfId,
+        turfName,
+        selectedGround,
+        paymentMethod: 'Online',
+        status: 'confirmed',
+        payoutStatus: 'pending',
+        razorpayPaymentId: paymentId,
+        razorpayOrderId: orderId,
+        ownerId: ownerId || null,
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      const turfBookingRef = db.collection('turfs').doc(turfId).collection('bookings').doc();
+      tx.set(turfBookingRef, bookingData);
+      
+      // Remove reservation
+      tx.delete(reservationDoc.ref);
+      
+      // Update queue - remove this user and promote next
+      const queueDoc = await tx.get(db.collection('slot_queues').doc(queueId));
+      if (queueDoc.exists) {
+        const queueData = queueDoc.data();
+        let users = queueData.users || [];
+        
+        // Remove current user
+        users = users.filter(u => u.userId !== userId);
+        
+        // Promote next user to position 1
+        if (users.length > 0) {
+          const nextUser = users[0];
+          const nextReservationId = nextUser.reservationId;
+          
+          // Update next user's reservation
+          const nextReservationRef = db.collection('slot_reservations').doc(nextReservationId);
+          const nextReservationDoc = await tx.get(nextReservationRef);
+          if (nextReservationDoc.exists) {
+            tx.update(nextReservationRef, {
+              queuePosition: 1,
+              status: 'ready',
+              expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 1000))
+            });
+          }
+          
+          // Update queue positions
+          users.forEach((user, index) => {
+            if (index > 0) {
+              const userReservationRef = db.collection('slot_reservations').doc(user.reservationId);
+              tx.update(userReservationRef, {
+                queuePosition: index + 1,
+                status: 'queued'
+              });
+            }
+          });
+        }
+        
+        // Update queue
+        if (users.length > 0) {
+          tx.update(db.collection('slot_queues').doc(queueId), {
+            users,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+          });
+        } else {
+          tx.delete(db.collection('slot_queues').doc(queueId));
+        }
+      }
+      
+      // Update razorpay_orders
+      const orderRef = db.collection('razorpay_orders').doc(orderId);
+      tx.update(orderRef, {
+        booking_completed: true,
+        completed_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      return {
+        ok: true,
+        status: 'confirmed',
+        bookingId: turfBookingRef.id,
+        message: 'Booking confirmed successfully'
+      };
+    });
+}
+
+// Public callable function for confirming booking after payment
+exports.confirmBookingAfterPayment = functions.https.onCall(async (data, context) => {
+  try {
+    return await confirmBookingAfterPaymentInternal(data);
+  } catch (error) {
+    console.error('confirmBookingAfterPayment error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Check queue position
+exports.checkQueuePosition = functions.https.onCall(async (data, context) => {
+  try {
+    const { reservationId, userId } = data;
+    
+    if (!reservationId || !userId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    const db = admin.firestore();
+    const reservationDoc = await db.collection('slot_reservations').doc(reservationId).get();
+    
+    if (!reservationDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Reservation not found');
+    }
+    
+    const reservation = reservationDoc.data();
+    
+    if (reservation.userId !== userId) {
+      throw new functions.https.HttpsError('permission-denied', 'You do not own this reservation');
+    }
+    
+    // Check if expired
+    const expiresAt = reservation.expiresAt?.toDate();
+    if (expiresAt && expiresAt < new Date()) {
+      return {
+        expired: true,
+        message: 'Reservation expired'
+      };
+    }
+    
+    return {
+      reservationId,
+      queuePosition: reservation.queuePosition || 1,
+      status: reservation.status || 'queued',
+      expiresAt: reservation.expiresAt,
+      message: reservation.queuePosition === 1 ? 'Ready to pay' : `Position ${reservation.queuePosition} in queue`
+    };
+  } catch (error) {
+    console.error('checkQueuePosition error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Cleanup expired reservations (runs every 1 minute)
+exports.cleanupExpiredReservations = functions.pubsub.schedule('every 1 minutes').onRun(async (context) => {
+  const db = admin.firestore();
+  const now = admin.firestore.Timestamp.now();
+  
+  // Get expired reservations (single field query - no composite index needed)
+  const expiredReservations = await db.collection('slot_reservations')
+    .where('expiresAt', '<=', now)
+    .limit(500) // Process in batches to avoid timeout
+    .get();
+  
+  console.log(`[Cleanup] Found ${expiredReservations.size} expired reservations`);
+  
+  const client = getRazorpayClient();
+  
+  for (const doc of expiredReservations.docs) {
+    const reservation = doc.data();
+    
+    try {
+      // If payment was made but booking not confirmed, process refund
+      if (reservation.razorpayOrderId) {
+        const orderDoc = await db.collection('razorpay_orders').doc(reservation.razorpayOrderId).get();
+        if (orderDoc.exists) {
+          const orderData = orderDoc.data();
+          if (!orderData.booking_completed) {
+            // Check if payment was captured
+            try {
+              const order = await client.orders.fetch(reservation.razorpayOrderId);
+              const payments = await client.orders.fetchPayments(reservation.razorpayOrderId);
+              const capturedPayment = payments?.items?.find(p => p.status === 'captured');
+              
+              if (capturedPayment) {
+                // Refund the payment
+                await client.payments.refund(capturedPayment.id, {
+                  amount: Math.round((orderData.total_paid || 0) * 100),
+                  notes: {
+                    reason: 'Reservation expired - automatic refund',
+                    reservation_id: doc.id
+                  }
+                });
+                console.log(`[Cleanup] Refunded payment for expired reservation ${doc.id}`);
+              }
+            } catch (refundError) {
+              console.error(`[Cleanup] Error refunding for ${doc.id}:`, refundError);
+            }
+          }
+        }
+      }
+      
+      // Remove from queue
+      const slotKey = reservation.slotKey;
+      const queueId = `queue_${slotKey}`;
+      const queueDoc = await db.collection('slot_queues').doc(queueId).get();
+      
+      if (queueDoc.exists) {
+        const queueData = queueDoc.data();
+        let users = queueData.users || [];
+        users = users.filter(u => u.reservationId !== doc.id);
+        
+        // Promote next user if this was position 1
+        if (reservation.queuePosition === 1 && users.length > 0) {
+          const nextUser = users[0];
+          const nextReservationRef = db.collection('slot_reservations').doc(nextUser.reservationId);
+          const nextReservationDoc = await nextReservationRef.get();
+          
+          if (nextReservationDoc.exists) {
+            await nextReservationRef.update({
+              queuePosition: 1,
+              status: 'ready',
+              expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 1000))
+            });
+            
+            // Update other positions
+            for (let i = 1; i < users.length; i++) {
+              const userReservationRef = db.collection('slot_reservations').doc(users[i].reservationId);
+              await userReservationRef.update({
+                queuePosition: i + 1,
+                status: 'queued'
+              });
+            }
+          }
+        }
+        
+        // Update or delete queue
+        if (users.length > 0) {
+          await queueDoc.ref.update({
+            users,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+          });
+        } else {
+          await queueDoc.ref.delete();
+        }
+      }
+      
+      // Delete reservation
+      await doc.ref.delete();
+      console.log(`[Cleanup] Removed expired reservation ${doc.id}`);
+      
+    } catch (error) {
+      console.error(`[Cleanup] Error processing reservation ${doc.id}:`, error);
+    }
+  }
+  
+  return null;
+});
+
+// =========================
+// EVENT REGISTRATION QUEUE SYSTEM
+// =========================
+
+// Freeze event slot and add user to queue
+exports.freezeEventSlotAndQueue = functions.https.onCall(async (data, context) => {
+  try {
+    const { eventId, userId, userName } = data;
+    
+    if (!eventId || !userId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    const db = admin.firestore();
+    const reservationId = `event_${eventId}_${userId}_${Date.now()}`;
+    const queueId = `event_queue_${eventId}`;
+    
+    const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 1000)); // 2 minutes
+    
+    return await db.runTransaction(async (tx) => {
+      // Check event exists and is open
+      const eventDoc = await tx.get(db.collection('spot_events').doc(eventId));
+      if (!eventDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Event not found');
+      }
+      
+      const eventData = eventDoc.data();
+      if (eventData.status !== 'approved' || !eventData.isBookingOpen) {
+        throw new functions.https.HttpsError('failed-precondition', 'Event registration is not open');
+      }
+      
+      // Check if user already registered
+      const existingReg = await tx.get(
+        db.collection('event_registrations')
+          .where('userId', '==', userId)
+          .where('eventId', '==', eventId)
+          .where('status', '!=', 'cancelled')
+          .limit(1)
+      );
+      
+      if (!existingReg.empty) {
+        throw new functions.https.HttpsError('already-exists', 'You are already registered for this event');
+      }
+      
+      // Check max participants
+      const maxParticipants = eventData.maxParticipants || 0;
+      if (maxParticipants > 0) {
+        const registrationsQuery = await tx.get(
+          db.collection('event_registrations')
+            .where('eventId', '==', eventId)
+            .where('status', '!=', 'cancelled')
+        );
+        
+        if (registrationsQuery.size >= maxParticipants) {
+          throw new functions.https.HttpsError('failed-precondition', 'Event is full');
+        }
+      }
+      
+      // Check active reservations (query by eventId only, filter expiresAt in code to avoid composite index)
+      const activeReservationsQuery = await tx.get(
+        db.collection('event_reservations')
+          .where('eventId', '==', eventId)
+      );
+      
+      const now = admin.firestore.Timestamp.now();
+      const activeReservations = activeReservationsQuery.docs.filter(doc => {
+        const resData = doc.data();
+        const resExpiresAt = resData.expiresAt;
+        return resExpiresAt && resExpiresAt > now;
+      });
+      
+      if (activeReservations.length > 0) {
+        // Get queue
+        const queueDoc = await tx.get(db.collection('event_queues').doc(queueId));
+        let queueData = queueDoc.exists ? queueDoc.data() : { users: [] };
+        let users = queueData.users || [];
+        
+        // Check if user already in queue
+        const existingIndex = users.findIndex(u => u.userId === userId);
+        if (existingIndex >= 0) {
+          return {
+            reservationId: users[existingIndex].reservationId,
+            queuePosition: existingIndex + 1,
+            status: existingIndex === 0 ? 'ready' : 'queued',
+            message: existingIndex === 0 ? 'Ready to pay' : `Position ${existingIndex + 1} in queue`
+          };
+        }
+        
+        // Add to queue
+        const queuePosition = users.length + 1;
+        users.push({
+          userId,
+          userName: userName || 'User',
+          reservationId,
+          joinedAt: admin.firestore.Timestamp.now() // Use Timestamp.now() instead of serverTimestamp() for arrays
+        });
+        
+        // Create reservation
+        tx.set(db.collection('event_reservations').doc(reservationId), {
+          eventId,
+          userId,
+          userName: userName || 'User',
+          queuePosition,
+          status: 'queued',
+          expiresAt,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        
+        // Update queue
+        tx.set(db.collection('event_queues').doc(queueId), {
+          eventId,
+          users,
+          lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        
+        return {
+          reservationId,
+          queuePosition,
+          status: 'queued',
+          message: `Position ${queuePosition} in queue`
+        };
+      }
+      
+      // No conflicts - user is first
+      // Create reservation
+      tx.set(db.collection('event_reservations').doc(reservationId), {
+        eventId,
+        userId,
+        userName: userName || 'User',
+        queuePosition: 1,
+        status: 'ready',
+        expiresAt,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Create queue with this user as first
+      tx.set(db.collection('event_queues').doc(queueId), {
+        eventId,
+        users: [{
+          userId,
+          userName: userName || 'User',
+          reservationId,
+          joinedAt: admin.firestore.Timestamp.now() // Use Timestamp.now() instead of serverTimestamp() for arrays
+        }],
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      
+      return {
+        reservationId,
+        queuePosition: 1,
+        status: 'ready',
+        message: 'Ready to pay'
+      };
+    });
+  } catch (error) {
+    console.error('freezeEventSlotAndQueue error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Create Razorpay order for queued event registration
+exports.createRazorpayOrderForQueuedEvent = functions.https.onCall(async (data, context) => {
+  try {
+    const { reservationId, totalAmount, payableAmount, ownerAccountId, registrationId, eventId, userId, registrationData } = data;
+    
+    if (!reservationId || !totalAmount || !payableAmount || !ownerAccountId || !registrationId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    const db = admin.firestore();
+    const reservationDoc = await db.collection('event_reservations').doc(reservationId).get();
+    
+    if (!reservationDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Reservation not found');
+    }
+    
+    const reservation = reservationDoc.data();
+    
+    // Verify user owns this reservation
+    if (reservation.userId !== userId) {
+      throw new functions.https.HttpsError('permission-denied', 'You do not own this reservation');
+    }
+    
+    // Verify queue position is 1
+    if (reservation.queuePosition !== 1 || reservation.status !== 'ready') {
+      throw new functions.https.HttpsError('failed-precondition', `Not your turn. Position: ${reservation.queuePosition}`);
+    }
+    
+    // Check if reservation expired
+    const expiresAt = reservation.expiresAt?.toDate();
+    if (expiresAt && expiresAt < new Date()) {
+      throw new functions.https.HttpsError('deadline-exceeded', 'Reservation expired. Please try again.');
+    }
+    
+    // Create Razorpay order
+    const client = getRazorpayClient();
+    const ownerShare = calculateOwnerShare(totalAmount);
+    const platformProfit = payableAmount - totalAmount;
+    
+    const order = await client.orders.create({
+      amount: Math.round(payableAmount * 100),
+      currency: 'INR',
+      transfers: [{
+        account: ownerAccountId,
+        amount: Math.round(ownerShare * 100),
+        currency: 'INR'
+      }],
+      notes: {
+        registration_id: registrationId,
+        reservation_id: reservationId,
+        event_id: eventId,
+        owner_share: ownerShare.toString(),
+        platform_profit: platformProfit.toString(),
+        base_event_amount: totalAmount.toString()
+      }
+    });
+    
+    // Update reservation with order ID
+    await reservationDoc.ref.update({
+      razorpayOrderId: order.id,
+      status: 'payment_pending',
+      orderCreatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Store in razorpay_orders
+    await db.collection('razorpay_orders').doc(order.id).set({
+      registration_id: registrationId,
+      reservation_id: reservationId,
+      event_id: eventId || null,
+      user_id: userId,
+      total_paid: payableAmount,
+      base_event_amount: totalAmount,
+      owner_share: ownerShare,
+      platform_profit: platformProfit,
+      razorpay_order_id: order.id,
+      owner_account_id: ownerAccountId,
+      registration_data: registrationData || null,
+      registration_completed: false,
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    return {
+      orderId: order.id,
+      ownerShare,
+      platformProfit,
+      baseEventAmount: totalAmount,
+      amount: payableAmount
+    };
+  } catch (error) {
+    console.error('createRazorpayOrderForQueuedEvent error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Internal function to confirm event registration after payment (can be called from recovery)
+async function confirmEventRegistrationAfterPaymentInternal(data) {
+  const { orderId, paymentId, reservationId, userId, eventId, eventName, ownerId, eventDate, eventTime, eventLocation, eventType, baseAmount, payableAmount, userName, userEmail, userPhone, userImageUrl } = data;
+  
+  if (!orderId || !paymentId || !reservationId) {
+    throw new Error('Missing required parameters: orderId, paymentId, reservationId');
+  }
+  
+  const db = admin.firestore();
+  const reservationDoc = await db.collection('event_reservations').doc(reservationId).get();
+  
+  if (!reservationDoc.exists) {
+    throw new Error('Reservation not found');
+  }
+  
+  const reservation = reservationDoc.data();
+  
+  // Verify user owns this reservation
+  if (reservation.userId !== userId) {
+    throw new Error('You do not own this reservation');
+  }
+  
+  const queueId = `queue_${eventId}`;
+  
+  return await db.runTransaction(async (tx) => {
+      // Verify payment
+      const client = getRazorpayClient();
+      const payment = await client.payments.fetch(paymentId);
+      
+      if (!payment || payment.status !== 'captured') {
+        throw new functions.https.HttpsError('failed-precondition', 'Payment not captured');
+      }
+      
+      if (payment.order_id !== orderId) {
+        throw new functions.https.HttpsError('failed-precondition', 'Payment does not match order');
+      }
+      
+      // Final check - event still open and not full
+      const eventDoc = await tx.get(db.collection('spot_events').doc(eventId));
+      if (!eventDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Event not found');
+      }
+      
+      const eventData = eventDoc.data();
+      const maxParticipants = eventData.maxParticipants || 0;
+      
+      if (maxParticipants > 0) {
+        const registrationsQuery = await tx.get(
+          db.collection('event_registrations')
+            .where('eventId', '==', eventId)
+            .where('status', '!=', 'cancelled')
+        );
+        
+        if (registrationsQuery.size >= maxParticipants) {
+          throw new functions.https.HttpsError('failed-precondition', 'Event is full');
+        }
+      }
+      
+      // Check if user already registered
+      const existingReg = await tx.get(
+        db.collection('event_registrations')
+          .where('userId', '==', userId)
+          .where('eventId', '==', eventId)
+          .where('status', '!=', 'cancelled')
+          .limit(1)
+      );
+      
+      if (!existingReg.empty) {
+        throw new functions.https.HttpsError('already-exists', 'You are already registered for this event');
+      }
+      
+      // Create registration
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      const registrationData = {
+        eventId,
+        eventName,
+        eventDate,
+        eventTime: eventTime || null,
+        eventLocation: eventLocation || null,
+        eventType: eventType || null,
+        userId,
+        userName,
+        userEmail,
+        userPhone: userPhone || null,
+        userImageUrl: userImageUrl || null,
+        paymentMethod: 'Online',
+        status: 'confirmed',
+        payoutStatus: 'pending',
+        price: payableAmount,
+        baseAmount: baseAmount,
+        razorpayPaymentId: paymentId,
+        razorpayOrderId: orderId,
+        ownerId: ownerId || null,
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      const registrationRef = db.collection('event_registrations').doc();
+      tx.set(registrationRef, registrationData);
+      
+      // Remove reservation
+      tx.delete(reservationDoc.ref);
+      
+      // Update queue - remove this user and promote next
+      const queueDoc = await tx.get(db.collection('event_queues').doc(queueId));
+      if (queueDoc.exists) {
+        const queueData = queueDoc.data();
+        let users = queueData.users || [];
+        
+        // Remove current user
+        users = users.filter(u => u.userId !== userId);
+        
+        // Promote next user to position 1
+        if (users.length > 0) {
+          const nextUser = users[0];
+          const nextReservationId = nextUser.reservationId;
+          
+          // Update next user's reservation
+          const nextReservationRef = db.collection('event_reservations').doc(nextReservationId);
+          const nextReservationDoc = await tx.get(nextReservationRef);
+          if (nextReservationDoc.exists) {
+            tx.update(nextReservationRef, {
+              queuePosition: 1,
+              status: 'ready',
+              expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 1000))
+            });
+          }
+          
+          // Update queue positions
+          users.forEach((user, index) => {
+            if (index > 0) {
+              const userReservationRef = db.collection('event_reservations').doc(user.reservationId);
+              tx.update(userReservationRef, {
+                queuePosition: index + 1,
+                status: 'queued'
+              });
+            }
+          });
+        }
+        
+        // Update queue
+        if (users.length > 0) {
+          tx.update(db.collection('event_queues').doc(queueId), {
+            users,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+          });
+        } else {
+          tx.delete(db.collection('event_queues').doc(queueId));
+        }
+      }
+      
+      // Update razorpay_orders
+      const orderRef = db.collection('razorpay_orders').doc(orderId);
+      tx.update(orderRef, {
+        registration_completed: true,
+        completed_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      return {
+        ok: true,
+        status: 'confirmed',
+        registrationId: registrationRef.id,
+        message: 'Registration confirmed successfully'
+      };
+    });
+}
+
+// Public callable function for confirming event registration after payment
+exports.confirmEventRegistrationAfterPayment = functions.https.onCall(async (data, context) => {
+  try {
+    return await confirmEventRegistrationAfterPaymentInternal(data);
+  } catch (error) {
+    console.error('confirmEventRegistrationAfterPayment error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Check event queue position
+exports.checkEventQueuePosition = functions.https.onCall(async (data, context) => {
+  try {
+    const { reservationId, userId } = data;
+    
+    if (!reservationId || !userId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+    }
+    
+    const db = admin.firestore();
+    const reservationDoc = await db.collection('event_reservations').doc(reservationId).get();
+    
+    if (!reservationDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Reservation not found');
+    }
+    
+    const reservation = reservationDoc.data();
+    
+    if (reservation.userId !== userId) {
+      throw new functions.https.HttpsError('permission-denied', 'You do not own this reservation');
+    }
+    
+    // Check if expired
+    const expiresAt = reservation.expiresAt?.toDate();
+    if (expiresAt && expiresAt < new Date()) {
+      return {
+        expired: true,
+        message: 'Reservation expired'
+      };
+    }
+    
+    return {
+      reservationId,
+      queuePosition: reservation.queuePosition || 1,
+      status: reservation.status || 'queued',
+      expiresAt: reservation.expiresAt,
+      message: reservation.queuePosition === 1 ? 'Ready to pay' : `Position ${reservation.queuePosition} in queue`
+    };
+  } catch (error) {
+    console.error('checkEventQueuePosition error:', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Cleanup expired event reservations (runs every 1 minute)
+exports.cleanupExpiredEventReservations = functions.pubsub.schedule('every 1 minutes').onRun(async (context) => {
+  const db = admin.firestore();
+  const now = admin.firestore.Timestamp.now();
+  
+  // Get expired reservations (single field query - no composite index needed)
+  const expiredReservations = await db.collection('event_reservations')
+    .where('expiresAt', '<=', now)
+    .limit(500) // Process in batches to avoid timeout
+    .get();
+  
+  console.log(`[Cleanup] Found ${expiredReservations.size} expired event reservations`);
+  
+  const client = getRazorpayClient();
+  
+  for (const doc of expiredReservations.docs) {
+    const reservation = doc.data();
+    
+    try {
+      // If payment was made but registration not confirmed, process refund
+      if (reservation.razorpayOrderId) {
+        const orderDoc = await db.collection('razorpay_orders').doc(reservation.razorpayOrderId).get();
+        if (orderDoc.exists) {
+          const orderData = orderDoc.data();
+          if (!orderData.registration_completed) {
+            // Check if payment was captured
+            try {
+              const order = await client.orders.fetch(reservation.razorpayOrderId);
+              const payments = await client.orders.fetchPayments(reservation.razorpayOrderId);
+              const capturedPayment = payments?.items?.find(p => p.status === 'captured');
+              
+              if (capturedPayment) {
+                // Refund the payment
+                await client.payments.refund(capturedPayment.id, {
+                  amount: Math.round((orderData.total_paid || 0) * 100),
+                  notes: {
+                    reason: 'Event reservation expired - automatic refund',
+                    reservation_id: doc.id
+                  }
+                });
+                console.log(`[Cleanup] Refunded payment for expired event reservation ${doc.id}`);
+              }
+            } catch (refundError) {
+              console.error(`[Cleanup] Error refunding for ${doc.id}:`, refundError);
+            }
+          }
+        }
+      }
+      
+      // Remove from queue
+      const eventId = reservation.eventId;
+      const queueId = `event_queue_${eventId}`;
+      const queueDoc = await db.collection('event_queues').doc(queueId).get();
+      
+      if (queueDoc.exists) {
+        const queueData = queueDoc.data();
+        let users = queueData.users || [];
+        users = users.filter(u => u.reservationId !== doc.id);
+        
+        // Promote next user if this was position 1
+        if (reservation.queuePosition === 1 && users.length > 0) {
+          const nextUser = users[0];
+          const nextReservationRef = db.collection('event_reservations').doc(nextUser.reservationId);
+          const nextReservationDoc = await nextReservationRef.get();
+          
+          if (nextReservationDoc.exists) {
+            await nextReservationRef.update({
+              queuePosition: 1,
+              status: 'ready',
+              expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 1000))
+            });
+            
+            // Update other positions
+            for (let i = 1; i < users.length; i++) {
+              const userReservationRef = db.collection('event_reservations').doc(users[i].reservationId);
+              await userReservationRef.update({
+                queuePosition: i + 1,
+                status: 'queued'
+              });
+            }
+          }
+        }
+        
+        // Update or delete queue
+        if (users.length > 0) {
+          await queueDoc.ref.update({
+            users,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+          });
+        } else {
+          await queueDoc.ref.delete();
+        }
+      }
+      
+      // Delete reservation
+      await doc.ref.delete();
+      console.log(`[Cleanup] Removed expired event reservation ${doc.id}`);
+      
+    } catch (error) {
+      console.error(`[Cleanup] Error processing event reservation ${doc.id}:`, error);
+    }
+  }
+  
+  return null;
 });
 
 exports.createRazorpayOrderWithTransfer = functions.https.onCall(async (data, context) => {
@@ -2069,76 +3671,110 @@ exports.sendBookingConfirmationEmail = functions.https.onCall(async (data, conte
     const appLogoPath = path.resolve(__dirname, 'assets', 'app.png');
     const companyLogoPath = path.resolve(__dirname, 'assets', 'logo.png');
     
-    const prettyDate = bookingDate || new Date().toISOString().slice(0, 10);
+    // Format date nicely
+    const formatDate = (value) => {
+      if (!value) return 'Not specified';
+      try {
+        if (value.toDate) {
+          return new Date(value.toDate()).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+        }
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+        }
+      } catch (err) {
+        console.error('Error formatting booking date:', err);
+      }
+      return value.toString();
+    };
+
+    const prettyDate = formatDate(bookingDate);
     const slotList = Array.isArray(slots) ? slots.join(', ') : slots;
     
-    const subject = `Booking Confirmed - ${turfName} - ${prettyDate}`;
+    const subject = `🏆 Booking Confirmed - ${turfName} - ${prettyDate}`;
     
     const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Booking Confirmation</title>
+  <title>Turf Booking Confirmation</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin:0; padding:0; background-color:#f5f5f5; font-family: Arial, sans-serif; color:#333333;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f5f5f5; width:100%;">
+<body style="margin:0; padding:0; background-color:#f5f7fb; font-family: 'Segoe UI', Arial, sans-serif; color:#1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f5f7fb;">
     <tr>
-      <td align="center" style="padding: 20px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background-color:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 0 10px rgba(0,0,0,0.1);">
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:660px; background-color:#ffffff; border-radius:18px; overflow:hidden; box-shadow:0 15px 45px rgba(15,118,110,0.12);">
           <tr>
-            <td style="background-color:#0f766e; padding:20px;">
-              <h1 style="color:#ffffff; font-size:22px; text-align:center; margin:0;">Your Booking is Confirmed</h1>
+            <td style="background:linear-gradient(135deg,#0f766e,#14b8a6); padding:32px 28px;">
+              <h1 style="margin:0; color:#f8fafc; font-size:26px; font-weight:700;">Booking Confirmed 🎾</h1>
+              <p style="margin:12px 0 0; color:#f0fdfa; font-size:16px;">Hi <strong>${userName}</strong>, your turf is ready! We're excited to host your game at <strong>${turfName}</strong>.</p>
             </td>
           </tr>
           <tr>
-            <td style="padding:20px;">
-              <p style="margin:0; font-size:16px;">Hi <strong>${userName}</strong>, thanks for booking with us. Here are your booking details:</p>
-            </td>
+            <td style="padding:28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;">
+                <tr style="background-color:#e0f2f1;">
+                  <td colspan="2" style="padding:14px 18px; font-weight:700; font-size:15px; color:#0f766e;">📍 Booking Details</td>
           </tr>
           <tr>
-            <td style="padding:0 20px 20px 20px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; border-collapse: collapse; font-size:14px;">
-                <tr>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;"><strong>Booking ID</strong></td>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;">${bookingId}</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">Booking ID</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0; font-weight:600;">${bookingId || 'Will be shared at venue'}</td>
                 </tr>
                 <tr>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;"><strong>Turf</strong></td>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;">${turfName}</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">🏟️ Turf</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0; font-weight:600;">${turfName || 'Not specified'}</td>
                 </tr>
                 <tr>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;"><strong>Ground</strong></td>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;">${ground}</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">⚽ Ground</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">${ground || 'Not specified'}</td>
                 </tr>
                 <tr>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;"><strong>Date</strong></td>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;">${prettyDate}</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">📅 Date</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">${prettyDate}</td>
                 </tr>
                 <tr>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;"><strong>Time Slots</strong></td>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;">${slotList}</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">🕐 Time Slots</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">${slotList || 'Not specified'}</td>
                 </tr>
                 <tr>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;"><strong>Total Hours</strong></td>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;">${Number(totalHours || 0).toFixed(0)}</td>
-                </tr>
-                <tr>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;"><strong>Amount Paid</strong></td>
-                  <td style="padding:10px 0; border-bottom:1px solid #e0e0e0;"><span style="color:#0f766e; font-weight:bold;">₹${Number(amount || 0).toFixed(2)}</span></td>
-                </tr>
-                <tr>
-                  <td style="padding:10px 0;"><strong>Payment Method</strong></td>
-                  <td style="padding:10px 0;">${paymentMethod}</td>
+                  <td style="padding:12px 18px;">⏱️ Total Hours</td>
+                  <td style="padding:12px 18px; font-weight:600;">${Number(totalHours || 0).toFixed(0)} hour${Number(totalHours || 0) !== 1 ? 's' : ''}</td>
                 </tr>
               </table>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px; border-collapse:collapse; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;">
+                <tr style="background-color:#e0f2f1;">
+                  <td colspan="2" style="padding:14px 18px; font-weight:700; font-size:15px; color:#0f766e;">💳 Payment Summary</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0;">Amount Paid</td>
+                  <td style="padding:12px 18px; border-bottom:1px solid #e2e8f0; font-weight:700; font-size:16px; color:#0f766e;">₹${Number(amount || 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 18px;">Payment Method</td>
+                  <td style="padding:12px 18px;">${paymentMethod === 'Online' ? '💳 Online Payment' : paymentMethod}</td>
+                </tr>
+              </table>
+
+              <div style="margin-top:28px; padding:18px 20px; background-color:#ecfeff; border:1px solid #99f6e4; border-radius:14px; color:#0f766e;">
+                <strong>📋 Important Reminders:</strong>
+                <ul style="margin:12px 0 0 18px; padding:0;">
+                  <li>Arrive at least 10 minutes before your booked time slot.</li>
+                  <li>Carry a valid ID proof for verification at the venue.</li>
+                  <li>Save this email for quick access to your booking details.</li>
+                  <li>Contact the turf owner if you need to reschedule or cancel.</li>
+                </ul>
+              </div>
+
+              <p style="margin:28px 0 8px; font-size:14px; color:#475569;">We hope you have an amazing game! 🎉 Have questions? Reply to this email or reach us at <a href="mailto:customersbtb@gmail.com" style="color:#0f766e; font-weight:600;">customersbtb@gmail.com</a>.</p>
+              <p style="margin:0; font-size:13px; color:#94a3b8;">Warm regards,<br><strong>Team BookTheBiz</strong> ⚽</p>
             </td>
           </tr>
           <tr>
-            <td style="background-color:#f9fafb; padding:15px 20px; text-align:center; font-size:12px; color:#6b7280;">
-              If you have questions, reply to this email or contact support.<br>
-              &copy; ${new Date().getFullYear()} BookTheBiz. All rights reserved.
+            <td style="background-color:#0f172a; color:#cbd5f5; text-align:center; padding:18px; font-size:12px;">
+              © ${new Date().getFullYear()} BookTheBiz. All rights reserved. Need help? <a href="mailto:customersbtb@gmail.com" style="color:#38bdf8;">Contact Support</a>
             </td>
           </tr>
         </table>
@@ -2556,17 +4192,26 @@ exports.onEventRegistrationCreated = functions.firestore
       
       if (ownerId) {
         try {
-          const deductionsQuery = await db.collection('turfownerdeductions')
+          // FIX #2: Query BOTH pending AND overdue deductions
+          const pendingDeductions = await db.collection('turfownerdeductions')
             .where('ownerId', '==', ownerId)
             .where('status', '==', 'pending')
             .get();
           
-          deductionsQuery.forEach(doc => {
+          const overdueDeductions = await db.collection('turfownerdeductions')
+            .where('ownerId', '==', ownerId)
+            .where('status', '==', 'overdue')
+            .get();
+          
+          // Merge both query results
+          const allDeductions = [...pendingDeductions.docs, ...overdueDeductions.docs];
+          
+          allDeductions.forEach(doc => {
             totalDeductions += (doc.data().amount || 0);
           });
           
           if (totalDeductions > 0) {
-            console.log(`Found pending deductions: ₹${totalDeductions} for owner ${ownerId}`);
+            console.log(`Found ${pendingDeductions.size} pending + ${overdueDeductions.size} overdue deductions: ₹${totalDeductions} for owner ${ownerId}`);
           }
         } catch (error) {
           console.error('Error checking deductions:', error);
@@ -2583,61 +4228,111 @@ exports.onEventRegistrationCreated = functions.firestore
       console.log('Final payout to owner:', finalPayout);
       console.log('Company keeps (profit + fees):', companyProfit);
       
+      // Mark deductions as applied BEFORE transfer attempt
+      // This ensures deductions are marked even if transfer fails
+      if (totalDeductions > 0 && ownerId) {
+        try {
+          // FIX #2: Query BOTH pending AND overdue deductions to mark as applied
+          const pendingDeductions = await db.collection('turfownerdeductions')
+            .where('ownerId', '==', ownerId)
+            .where('status', '==', 'pending')
+            .get();
+          
+          const overdueDeductions = await db.collection('turfownerdeductions')
+            .where('ownerId', '==', ownerId)
+            .where('status', '==', 'overdue')
+            .get();
+          
+          // Merge both query results
+          const allDeductions = [...pendingDeductions.docs, ...overdueDeductions.docs];
+          
+          if (allDeductions.length > 0) {
+            const batch = db.batch();
+            allDeductions.forEach(doc => {
+              batch.update(doc.ref, {
+                status: 'applied',
+                appliedAt: admin.firestore.FieldValue.serverTimestamp(),
+                appliedToRegistration: context.params.registrationId,
+                appliedToRegistrationAmount: finalPayout,
+                actualDeductionAmount: actualDeduction
+              });
+            });
+            await batch.commit();
+            console.log(`✅ Marked ${allDeductions.length} deductions (${pendingDeductions.size} pending + ${overdueDeductions.size} overdue) as applied for owner ${ownerId} (registration: ${context.params.registrationId}, payout: ₹${finalPayout})`);
+          }
+        } catch (error) {
+          console.error('❌ Error updating deduction status:', error);
+          // Continue with transfer attempt even if deduction marking fails
+          // This prevents blocking the payout if there's a deduction update issue
+        }
+      }
+      
       // Process payment
       const ownerPaymentMethod = await getOwnerPaymentMethod(ownerAccountId, eventId, data);
       const client = getRazorpayClient();
       
       if (ownerPaymentMethod.type === 'razorpay') {
-        await processRazorpayTransfer(client, paymentId, finalPayout, ownerPaymentMethod.accountId);
-        
-        // Mark deductions as applied
-        if (totalDeductions > 0 && ownerId) {
+        try {
+          await processRazorpayTransfer(client, paymentId, finalPayout, ownerPaymentMethod.accountId);
+          
+          // Update registration after successful transfer
+          await snap.ref.update({
+            payoutStatus: 'settled',
+            transferResponse: null,
+            eventOwnerAccountId: ownerAccountId,
+            payoutMethod: 'Razorpay Route'
+          });
+          
+          // Save settlement info for successful transfer
+          await db.collection('event_settlements').doc(context.params.registrationId).set({
+            registration_id: context.params.registrationId,
+            event_id: eventId || null,
+            total_paid: totalAmount,
+            owner_share: ownerShare,
+            platform_profit: companyProfit,
+            pending_deductions: totalDeductions,
+            final_payout: finalPayout,
+            actual_deduction: actualDeduction,
+            razorpay_payment_id: paymentId,
+            owner_account_id: ownerAccountId,
+            transfer_status: 'success',
+            settled_at: admin.firestore.FieldValue.serverTimestamp()
+          });
+          
+          console.log('✅ Successfully processed payout for event registration:', context.params.registrationId);
+        } catch (transferError) {
+          console.error('❌ Razorpay transfer failed:', transferError);
+          // Mark as failed but deductions are already marked as applied
+          await snap.ref.update({ 
+            payoutStatus: 'failed', 
+            payoutError: `Razorpay transfer failed: ${transferError.message}` 
+          });
+          
+          // Save settlement info even for failed transfer (deductions were applied)
           try {
-            const deductionsQuery = await db.collection('turfownerdeductions')
-              .where('ownerId', '==', ownerId)
-              .where('status', '==', 'pending')
-              .get();
-            
-            const batch = db.batch();
-            deductionsQuery.forEach(doc => {
-              batch.update(doc.ref, {
-                status: 'applied',
-                appliedAt: admin.firestore.FieldValue.serverTimestamp(),
-                appliedToRegistration: context.params.registrationId
-              });
-            });
-            await batch.commit();
-            console.log(`Marked ${deductionsQuery.size} deductions as applied for owner ${ownerId}`);
-          } catch (error) {
-            console.error('Error updating deduction status:', error);
+            await db.collection('event_settlements').doc(context.params.registrationId).set({
+              registration_id: context.params.registrationId,
+              event_id: eventId || null,
+              total_paid: totalAmount,
+              owner_share: ownerShare,
+              platform_profit: companyProfit,
+              pending_deductions: totalDeductions,
+              final_payout: finalPayout,
+              actual_deduction: actualDeduction,
+              razorpay_payment_id: paymentId,
+              owner_account_id: ownerAccountId,
+              transfer_status: 'failed',
+              transfer_error: transferError.message,
+              deductions_applied: true, // Important: deductions were marked as applied
+              settled_at: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+          } catch (settlementError) {
+            console.error('Error saving failed settlement info:', settlementError);
           }
+          
+          throw transferError; // Re-throw to be caught by outer catch block
         }
       }
-      
-      // Update registration
-      await snap.ref.update({
-        payoutStatus: 'settled',
-        transferResponse: null,
-        eventOwnerAccountId: ownerAccountId,
-        payoutMethod: 'Razorpay Route'
-      });
-      
-      // Save settlement info
-      await db.collection('event_settlements').doc(context.params.registrationId).set({
-        registration_id: context.params.registrationId,
-        event_id: eventId || null,
-        total_paid: totalAmount,
-        owner_share: ownerShare,
-        platform_profit: companyProfit,
-        pending_deductions: totalDeductions,
-        final_payout: finalPayout,
-        actual_deduction: actualDeduction,
-        razorpay_payment_id: paymentId,
-        owner_account_id: ownerAccountId,
-        settled_at: admin.firestore.FieldValue.serverTimestamp()
-      });
-      
-      console.log('Successfully processed payout for event registration:', context.params.registrationId);
     } catch (error) {
       console.error('Function execution error:', error);
       try {
@@ -3183,13 +4878,13 @@ exports.sendEventRegistrationConfirmationEmail = functions.https.onCall(async (d
                 </ul>
               </div>
 
-              <p style="margin:28px 0 8px; font-size:14px; color:#475569;">We look forward to hosting you. Have questions? Reply to this email or reach us at <a href="mailto:support@bookthebiz.in" style="color:#0f766e; font-weight:600;">support@bookthebiz.in</a>.</p>
+              <p style="margin:28px 0 8px; font-size:14px; color:#475569;">We look forward to hosting you. Have questions? Reply to this email or reach us at <a href="mailto:customersbtb@gmail.com" style="color:#0f766e; font-weight:600;">customersbtb@gmail.com</a>.</p>
               <p style="margin:0; font-size:13px; color:#94a3b8;">Warm regards,<br><strong>Team BookTheBiz</strong></p>
             </td>
           </tr>
           <tr>
             <td style="background-color:#0f172a; color:#cbd5f5; text-align:center; padding:18px; font-size:12px;">
-              © ${new Date().getFullYear()} BookTheBiz. All rights reserved. Need help? <a href="mailto:support@bookthebiz.in" style="color:#38bdf8;">Contact Support</a>
+              © ${new Date().getFullYear()} BookTheBiz. All rights reserved. Need help? <a href="mailto:customersbtb@gmail.com" style="color:#38bdf8;">Contact Support</a>
             </td>
           </tr>
         </table>

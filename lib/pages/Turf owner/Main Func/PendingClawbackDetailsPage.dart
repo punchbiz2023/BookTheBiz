@@ -391,11 +391,25 @@ class _PendingClawbackDetailsPageState extends State<PendingClawbackDetailsPage>
     double amount = (clawback['amount'] ?? 0).toDouble();
     
     // Determine if this is an event or turf clawback
+    // Handle notes as either String or Map - be defensive
+    bool notesIsEvent = false;
+    try {
+      dynamic notesValue = clawback['notes'];
+      if (notesValue != null) {
+        if (notesValue is Map<String, dynamic>) {
+          notesIsEvent = notesValue['type'] == 'event';
+        }
+        // If notesValue is String, it doesn't contain type info, so notesIsEvent stays false
+      }
+    } catch (e) {
+      // If any error occurs accessing notes, just ignore it
+      print('Error checking notes for event type: $e');
+    }
+    
     final isEventClawback = clawback['eventId'] != null || 
                             clawback['registrationId'] != null || 
                             (clawback['type'] == 'event') ||
-                            (clawback['notes'] != null && 
-                             (clawback['notes'] as Map<String, dynamic>?)?['type'] == 'event');
+                            notesIsEvent;
     
     String bookingId = clawback['bookingId'] ?? 'N/A';
     String registrationId = clawback['registrationId'] ?? 'N/A';

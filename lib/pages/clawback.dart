@@ -177,14 +177,20 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
 
   /// Build overdue clawbacks list with StreamBuilder for real-time updates
   Widget buildOverdueClawbacksList() {
-    Query query = firestore
-        .collection('manual_clawback_payments')
-        .where('status', whereIn: ['pending_payment', 'overdue'])
-        .orderBy('createdAt', descending: true);
+    // Query all documents and filter in memory to handle missing status fields
+    Query query = firestore.collection('manual_clawback_payments');
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
       builder: (context, snapshot) {
+        // Debug: Log snapshot state
+        print('📡 StreamBuilder state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, hasError: ${snapshot.hasError}');
+        if (snapshot.hasError) {
+          print('❌ StreamBuilder error: ${snapshot.error}');
+        }
+        if (snapshot.hasData) {
+          print('📦 Snapshot has ${snapshot.data!.docs.length} documents');
+        }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
             child: Column(
@@ -230,8 +236,53 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
           );
         }
 
+        // Filter for pending/overdue status and fix documents without status
+        List<QueryDocumentSnapshot> filteredDocs = [];
+        print('📊 Total documents in collection: ${snapshot.data!.docs.length}');
+        
+        for (var doc in snapshot.data!.docs) {
+          try {
+            var data = doc.data() as Map<String, dynamic>;
+            String? status = data['status'] as String?;
+            String docId = doc.id;
+            
+            print('🔍 Checking document: $docId, status: $status');
+            
+            // Include documents with pending_payment/overdue status OR documents without status field
+            if (status == null || status == 'pending_payment' || status == 'overdue') {
+              // If document doesn't have status, set it to pending_payment (fix missing status)
+              if (status == null) {
+                print('⚠️ Document $docId missing status, updating to pending_payment');
+                doc.reference.update({'status': 'pending_payment'}).catchError((e) {
+                  print('❌ Error updating status for $docId: $e');
+                });
+              }
+              filteredDocs.add(doc);
+              print('✅ Document $docId added to filtered list');
+            } else {
+              print('⏭️ Document $docId skipped (status: $status)');
+            }
+          } catch (e) {
+            print('❌ Error processing document ${doc.id}: $e');
+          }
+        }
+        
+        print('📋 Filtered documents count: ${filteredDocs.length}');
+
+        // Sort by createdAt descending in memory
+        filteredDocs.sort((a, b) {
+          Map<String, dynamic> aData = a.data() as Map<String, dynamic>;
+          Map<String, dynamic> bData = b.data() as Map<String, dynamic>;
+          Timestamp? aTime = aData['createdAt'] as Timestamp?;
+          Timestamp? bTime = bData['createdAt'] as Timestamp?;
+          if (aTime == null && bTime == null) return 0;
+          if (aTime == null) return 1;
+          if (bTime == null) return -1;
+          return bTime.compareTo(aTime); // Descending
+        });
+
         return FutureBuilder<List<Map<String, dynamic>>>(
-          future: _filterClawbacksWithNames(snapshot.data!.docs),
+          future: _filterClawbacksWithNames(filteredDocs),
           builder: (context, filteredSnapshot) {
             if (filteredSnapshot.connectionState == ConnectionState.waiting) {
               return Center(child: CircularProgressIndicator(color: Colors.teal));
@@ -285,10 +336,14 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
     List<QueryDocumentSnapshot> docs,
   ) async {
     List<Map<String, dynamic>> filteredClawbacks = [];
+    print('🔍 Starting _filterClawbacksWithNames with ${docs.length} documents');
 
     for (var clawbackDoc in docs) {
-      var clawbackData = clawbackDoc.data() as Map<String, dynamic>;
-      clawbackData['id'] = clawbackDoc.id;
+      try {
+        var clawbackData = clawbackDoc.data() as Map<String, dynamic>;
+        clawbackData['id'] = clawbackDoc.id;
+        String docId = clawbackDoc.id;
+        print('📄 Processing document: $docId');
 
       // Fetch owner name if not cached
       String ownerId = clawbackData['ownerId'] ?? '';
@@ -308,11 +363,22 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
       clawbackData['ownerName'] = ownerName;
 
       // Determine if this is an event or turf clawback
+      // Handle notes as either String or Map
+      dynamic notesValue = clawbackData['notes'];
+      bool notesIsEvent = false;
+      if (notesValue != null) {
+        if (notesValue is Map<String, dynamic>) {
+          notesIsEvent = notesValue['type'] == 'event';
+        } else if (notesValue is String) {
+          // Notes is a string, check type field separately if it exists
+          notesIsEvent = false; // String notes don't have type info
+        }
+      }
+      
       final isEventClawback = clawbackData['eventId'] != null || 
                               clawbackData['registrationId'] != null || 
                               (clawbackData['type'] == 'event') ||
-                              (clawbackData['notes'] != null && 
-                               (clawbackData['notes'] as Map<String, dynamic>?)?['type'] == 'event');
+                              notesIsEvent;
       
       String turfName = 'N/A';
       String eventName = 'N/A';
@@ -385,9 +451,23 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
 
       if (searchMatch && dateMatch) {
         filteredClawbacks.add(clawbackData);
+        print('✅ Document $docId passed all filters and added to final list');
+      } else {
+        print('⏭️ Document $docId filtered out - searchMatch: $searchMatch, dateMatch: $dateMatch');
+        if (!searchMatch) {
+          print('   Reason: Search query "${clawbackSearchQuery}" did not match');
+        }
+        if (!dateMatch) {
+          print('   Reason: Date filter did not match');
+        }
+      }
+      } catch (e) {
+        print('❌ Error processing document ${clawbackDoc.id} in _filterClawbacksWithNames: $e');
+        // Continue processing other documents even if one fails
       }
     }
 
+    print('📊 Final filtered clawbacks count: ${filteredClawbacks.length}');
     return filteredClawbacks;
   }
 
@@ -398,11 +478,17 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
     String ownerName = clawback['ownerName'] ?? 'Unknown Owner';
     
     // Determine if this is an event or turf clawback
+    // Handle notes as either String or Map
+    dynamic notesValue = clawback['notes'];
+    bool notesIsEvent = false;
+    if (notesValue != null && notesValue is Map<String, dynamic>) {
+      notesIsEvent = notesValue['type'] == 'event';
+    }
+    
     final isEventClawback = clawback['eventId'] != null || 
                             clawback['registrationId'] != null || 
                             (clawback['type'] == 'event') ||
-                            (clawback['notes'] != null && 
-                             (clawback['notes'] as Map<String, dynamic>?)?['type'] == 'event');
+                            notesIsEvent;
     
     String turfName = clawback['turfName'] ?? 'N/A';
     String eventName = clawback['eventName'] ?? 'N/A';
@@ -617,11 +703,17 @@ class OverdueClawbacksPageState extends State<OverdueClawbacksPage> {
     String ownerName = clawback['ownerName'] ?? 'Unknown Owner';
     
     // Determine if this is an event or turf clawback
+    // Handle notes as either String or Map
+    dynamic notesValue = clawback['notes'];
+    bool notesIsEvent = false;
+    if (notesValue != null && notesValue is Map<String, dynamic>) {
+      notesIsEvent = notesValue['type'] == 'event';
+    }
+    
     final isEventClawback = clawback['eventId'] != null || 
                             clawback['registrationId'] != null || 
                             (clawback['type'] == 'event') ||
-                            (clawback['notes'] != null && 
-                             (clawback['notes'] as Map<String, dynamic>?)?['type'] == 'event');
+                            notesIsEvent;
     
     String turfName = clawback['turfName'] ?? 'N/A';
     String eventName = clawback['eventName'] ?? 'N/A';

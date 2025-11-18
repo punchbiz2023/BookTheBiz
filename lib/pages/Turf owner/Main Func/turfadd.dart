@@ -35,6 +35,13 @@ class _AddTurfPageState extends State<AddTurfPage> {
   final TextEditingController _customGroundController = TextEditingController();
   final List<String> _customAvailableGrounds = [];
 
+  // Monthly Subscription Variables
+  bool _supportsMonthlySubscription = false;
+  String _selectedRefundPolicy = '';
+  final TextEditingController _refundPolicyController = TextEditingController();
+  final Map<String, double> _monthlySubscriptionPrices = {}; // Changed to Map for per-ground pricing
+  final List<String> _selectedWorkingDays = [];
+
   final List<String> _facilities = [
     'Parking',
     'Restroom',
@@ -46,6 +53,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
     'Wi-Fi'
   ];
   final List<String> _selectedFacilities = [];
+  
   // Slot definitions as in turfstats.dart
   static const List<String> earlyMorningSlots = [
     '12:00 AM - 1:00 AM',
@@ -78,7 +86,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
     '10:00 PM - 11:00 PM',
   ];
   final List<String> _selectedSlots = [];
-  final List<String> _selectedAvailableGrounds = []; // Add this missing variable
+  final List<String> _selectedAvailableGrounds = [];
   final List<String> _availableGrounds = [
     'Volleyball Court',
     'Swimming Pool',
@@ -89,6 +97,20 @@ class _AddTurfPageState extends State<AddTurfPage> {
     'Tennis Court',
     'Badminton Court'
   ];
+
+  // Refund Policy Options
+  final List<String> _refundPolicyOptions = [
+    'No Refunds at the Time of Cancellation',
+    '100% Refund at the Time of Cancellation',
+    'No Cancellation between the Month Days',
+    '50% - 75% Refund at the Time of Cancellations based on slots played'
+  ];
+
+  // Working Days Options
+  final List<String> _workingDaysOptions = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  ];
+
   final List<String> _morningSlots = [
     '6:00 AM - 7:00 AM',
     '7:00 AM - 8:00 AM',
@@ -96,7 +118,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     '9:00 AM - 10:00 AM',
     '10:00 AM - 11:00 AM',
     '11:00 AM - 12:00 PM',
-    
   ];
 
   final List<String> _eveningSlots = [
@@ -109,9 +130,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
   ];
 
   String _selectedSlotType = 'Morning Slots';
-
-  // 1. Add these fields to your _AddTurfPageState:
-  int? _anchorImageIndex; // For spotlight image
+  int? _anchorImageIndex;
 
   @override
   void initState() {
@@ -120,16 +139,14 @@ class _AddTurfPageState extends State<AddTurfPage> {
   }
 
   Future<void> _getCurrentLocation() async {
-      setState(() {
+    setState(() {
       _isGettingLocation = true;
     });
 
     try {
-      // Check location permission first
       LocationPermission permission = await Geolocator.checkPermission();
       
       if (permission == LocationPermission.denied) {
-        // Request permission
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -143,7 +160,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
       }
 
       if (permission == LocationPermission.deniedForever) {
-        // Show dialog to open settings
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -167,7 +183,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
         return;
       }
 
-      // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -207,7 +222,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
       setState(() {
         _imageFiles.addAll(pickedImages.map((x) => File(x.path)));
         if (_anchorImageIndex == null && _imageFiles.isNotEmpty) {
-          _anchorImageIndex = 0; // Default to first image
+          _anchorImageIndex = 0;
         }
       });
       if (_imageFiles.length > 1) {
@@ -216,7 +231,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     }
   }
 
-  // 3. Add this method to show anchor/spotlight image selection dialog:
   Future<void> _showAnchorImageDialog() async {
     int? selected = _anchorImageIndex ?? 0;
     await showDialog(
@@ -289,17 +303,17 @@ class _AddTurfPageState extends State<AddTurfPage> {
     List<String> urls = [];
     for (int i = 0; i < images.length; i++) {
       final image = images[i];
-    try {
-      Reference storageRef = _firebaseStorage
-          .ref()
+      try {
+        Reference storageRef = _firebaseStorage
+            .ref()
             .child('turf_images/${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
-      UploadTask uploadTask = storageRef.putFile(image);
-      TaskSnapshot snapshot = await uploadTask;
+        UploadTask uploadTask = storageRef.putFile(image);
+        TaskSnapshot snapshot = await uploadTask;
         String url = await snapshot.ref.getDownloadURL();
         urls.add(url);
-    } catch (e) {
-      throw Exception('Failed to upload image: $e');
-    }
+      } catch (e) {
+        throw Exception('Failed to upload image: $e');
+      }
     }
     return urls;
   }
@@ -317,6 +331,27 @@ class _AddTurfPageState extends State<AddTurfPage> {
       return;
     }
 
+    // Additional validation for monthly subscription
+    if (_supportsMonthlySubscription) {
+      if (_selectedRefundPolicy.isEmpty || _selectedWorkingDays.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please complete all monthly subscription fields')),
+        );
+        return;
+      }
+      
+      // Check if all selected grounds have monthly prices
+      bool allGroundsHavePrices = _selectedAvailableGrounds.every((ground) => 
+          _monthlySubscriptionPrices.containsKey(ground));
+      
+      if (!allGroundsHavePrices) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please set monthly subscription price for all selected grounds')),
+        );
+        return;
+      }
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -327,7 +362,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
       DocumentReference turfRef = _firestore.collection('turfs').doc();
       String turfId = turfRef.id;
 
-      // Spotlight image is always the first image
       String imageUrl = imageUrls.isNotEmpty ? imageUrls.first : '';
       List<String> turfImages = imageUrls.length > 1 ? imageUrls.sublist(1) : [];
 
@@ -336,8 +370,8 @@ class _AddTurfPageState extends State<AddTurfPage> {
         'name': _nameController.text,
         'description': _descriptionController.text,
         'price': _selectedGroundPrices,
-        'imageUrl': imageUrl, // Spotlight image as string
-        'turfimages': turfImages, // Remaining images as List<String>
+        'imageUrl': imageUrl,
+        'turfimages': turfImages,
         'facilities': _selectedFacilities,
         'availableGrounds': _selectedAvailableGrounds,
         'ownerId': userId,
@@ -346,8 +380,16 @@ class _AddTurfPageState extends State<AddTurfPage> {
         'hasLocation': true,
         'latitude': _currentPosition?.latitude,
         'longitude': _currentPosition?.longitude,
-        'turf_status': 'Not Verified', // <-- Changed from 'status' to 'turf_status'
-        'selectedSlots': _selectedSlots, // <-- Add selected slots
+        'turf_status': 'Not Verified',
+        'selectedSlots': _selectedSlots,
+        // Monthly Subscription Fields
+        'supportsMonthlySubscription': _supportsMonthlySubscription,
+        'monthlySubscription': _supportsMonthlySubscription ? {
+          'refundPolicy': _selectedRefundPolicy,
+          'customRefundPolicy': _refundPolicyController.text.trim(),
+          'monthlyPrices': _monthlySubscriptionPrices, // Store per-ground prices
+          'workingDays': _selectedWorkingDays,
+        } : null,
       };
 
       await turfRef.set(turfData);
@@ -430,8 +472,10 @@ class _AddTurfPageState extends State<AddTurfPage> {
                 SizedBox(height: 8),
                 TextField(
                   controller: manualLocationController,
+                  style: TextStyle(color: Colors.black87),
                   decoration: InputDecoration(
                     hintText: 'Enter your location',
+                    hintStyle: TextStyle(color: Colors.grey.shade600),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -526,7 +570,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
     return WillPopScope(
       onWillPop: () async => await _showExitWarning(),
       child: Scaffold(
-        backgroundColor: Colors.teal.shade50, // Light teal background for contrast
+        backgroundColor: Colors.teal.shade50,
         body: CustomScrollView(
           slivers: [
             SliverAppBar(
@@ -590,6 +634,10 @@ class _AddTurfPageState extends State<AddTurfPage> {
                         _buildGlassContainer(_buildGroupedSlotChips()),
                         SizedBox(height: 16),
 
+                        // Monthly Subscription Section
+                        _buildMonthlySubscriptionSection(),
+                        SizedBox(height: 16),
+
                         _buildIsospCheckbox(),
                         SizedBox(height: 24),
 
@@ -608,7 +656,359 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
-// 🟢 Glassmorphic Text Field
+  // Monthly Subscription Section
+  Widget _buildMonthlySubscriptionSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTopicTitle('Monthly Subscription'),
+        _buildGlassContainer(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Monthly Subscription Toggle
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Support Monthly Subscription',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal.shade700,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Allow customers to purchase monthly subscriptions',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _supportsMonthlySubscription,
+                      onChanged: (value) {
+                        setState(() {
+                          _supportsMonthlySubscription = value;
+                          if (!value) {
+                            _selectedRefundPolicy = '';
+                            _refundPolicyController.clear();
+                            _monthlySubscriptionPrices.clear();
+                            _selectedWorkingDays.clear();
+                          }
+                        });
+                      },
+                      activeColor: Colors.teal,
+                    ),
+                  ],
+                ),
+              ),
+
+              if (_supportsMonthlySubscription) ...[
+                SizedBox(height: 16),
+
+                // Refund Policy Section
+                Text(
+                  'Refund Policy',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                SizedBox(height: 8),
+
+                // Quick Access Refund Policy Chips
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _refundPolicyOptions.map((policy) {
+                    final isSelected = _selectedRefundPolicy == policy;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedRefundPolicy = policy;
+                          _refundPolicyController.clear();
+                        });
+                      },
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          gradient: isSelected
+                              ? LinearGradient(
+                            colors: [Colors.teal.shade600, Colors.teal.shade400],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                              : null,
+                          color: isSelected ? null : Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.teal.shade300),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.teal.withOpacity(0.2),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                              offset: Offset(2, 4),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          policy,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: isSelected ? Colors.white : Colors.teal.shade700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                SizedBox(height: 12),
+
+                // Custom Refund Policy Input
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.teal.withOpacity(0.5), width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.teal.shade200.withOpacity(0.2),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                        offset: Offset(4, 4),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _refundPolicyController,
+                    maxLines: 3,
+                    style: TextStyle(
+                      color: Colors.black87,
+                      fontSize: 14,
+                    ),
+                    decoration: InputDecoration(
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      hintText: 'Or write custom refund policy...',
+                      hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                      border: InputBorder.none,
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedRefundPolicy = '';
+                      });
+                    },
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
+                // Monthly Subscription Prices for Each Ground
+                Text(
+                  'Monthly Subscription Prices',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                SizedBox(height: 8),
+
+                // Display selected grounds with their monthly prices
+                if (_selectedAvailableGrounds.isNotEmpty) ...[
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: Colors.teal.withOpacity(0.5), width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.teal.shade200.withOpacity(0.2),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                          offset: Offset(4, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: _selectedAvailableGrounds.map((ground) {
+                        return Container(
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.teal.withOpacity(0.2),
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  ground,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.teal.shade700,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  _monthlySubscriptionPrices.containsKey(ground)
+                                      ? '₹${_monthlySubscriptionPrices[ground]?.toStringAsFixed(2)}'
+                                      : 'Not set',
+                                  style: TextStyle(
+                                    color: _monthlySubscriptionPrices.containsKey(ground)
+                                        ? Colors.green.shade700
+                                        : Colors.red.shade700,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.edit,
+                                  color: Colors.teal,
+                                  size: 20,
+                                ),
+                                onPressed: () async {
+                                  double? price = await showDialog<double>(
+                                    context: context,
+                                    builder: (context) => _MonthlyPriceInputDialog(
+                                      groundName: ground,
+                                      currentPrice: _monthlySubscriptionPrices[ground],
+                                    ),
+                                  );
+                                  if (price != null) {
+                                    setState(() {
+                                      _monthlySubscriptionPrices[ground] = price;
+                                    });
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                ] else ...[
+                  Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.amber.withOpacity(0.5)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.amber.shade700),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Please select grounds first to set monthly subscription prices',
+                            style: TextStyle(
+                              color: Colors.amber.shade700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                ],
+
+                SizedBox(height: 16),
+
+                // Working Days Selection
+                Text(
+                  'Working Days',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                SizedBox(height: 8),
+
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _workingDaysOptions.map((day) {
+                    final isSelected = _selectedWorkingDays.contains(day);
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedWorkingDays.remove(day);
+                          } else {
+                            _selectedWorkingDays.add(day);
+                          }
+                        });
+                      },
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          gradient: isSelected
+                              ? LinearGradient(
+                            colors: [Colors.teal.shade600, Colors.teal.shade400],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                              : null,
+                          color: isSelected ? null : Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.teal.shade300),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.teal.withOpacity(0.2),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                              offset: Offset(2, 4),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          day.substring(0, 3), // Show first 3 letters
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.white : Colors.teal.shade700,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildGlassTextField({
     required TextEditingController controller,
     required String label,
@@ -617,18 +1017,18 @@ class _AddTurfPageState extends State<AddTurfPage> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15), // Glass effect
+        color: Colors.white.withOpacity(0.8),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.teal.withOpacity(0.5), width: 2), // Stronger border
+        border: Border.all(color: Colors.teal.withOpacity(0.5), width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.teal.shade200.withOpacity(0.2), // Darker outer shadow
+            color: Colors.teal.shade200.withOpacity(0.2),
             blurRadius: 12,
             spreadRadius: 2,
             offset: Offset(4, 4),
           ),
           BoxShadow(
-            color: Colors.teal.withOpacity(0.2), // Soft inner glow
+            color: Colors.teal.withOpacity(0.2),
             blurRadius: 10,
             spreadRadius: 2,
             offset: Offset(-2, -2),
@@ -639,14 +1039,14 @@ class _AddTurfPageState extends State<AddTurfPage> {
         controller: controller,
         maxLines: maxLines,
         style: TextStyle(
-          color: Colors.white.withOpacity(0.9),
+          color: Colors.black87,
           fontSize: 16,
           fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           hintText: label,
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15),
+          hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 15),
           border: InputBorder.none,
         ),
         enabled: enabled,
@@ -654,7 +1054,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
-// 🟢 Glassmorphic Container (Reusable for sections)
   Widget _buildGlassContainer(Widget child) {
     return Container(
       padding: EdgeInsets.all(10),
@@ -674,7 +1073,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
-// 🟢 Topic Title Styling
   Widget _buildTopicTitle(String title) {
     return Text(
       title,
@@ -683,37 +1081,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
         fontWeight: FontWeight.bold,
         color: Colors.teal.shade700,
       ),
-    );
-  }
-
-  Widget _buildDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Select Slot Type",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _selectedSlotType,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          items: ['Morning Slots', 'Evening Slots']
-              .map((type) => DropdownMenuItem(
-            value: type,
-            child: Text(type),
-          ))
-              .toList(),
-          onChanged: (value) {
-            setState(() {
-              _selectedSlotType = value!;
-            });
-          },
-        ),
-      ],
     );
   }
 
@@ -803,35 +1170,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    int maxLines = 1,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      style: TextStyle(color: Colors.black),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.black54),
-        fillColor: Colors.grey[200],
-        filled: true,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.blueAccent, width: 2),
-        ),
-      ),
-    );
-  }
-
-// 🟢 Enhanced Image Picker with Glassmorphic Effect
   Widget _buildImagePicker() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -848,25 +1186,24 @@ class _AddTurfPageState extends State<AddTurfPage> {
         if (_imageFiles.isNotEmpty)
           Column(
             children: [
-              // Spotlight image (always the first image)
               Container(
                 width: double.infinity,
-        height: 180,
+                height: 180,
                 margin: EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
+                decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: Colors.amber, width: 3),
-          boxShadow: [
-            BoxShadow(
+                  boxShadow: [
+                    BoxShadow(
                       color: Colors.teal.shade900.withOpacity(0.15),
                       blurRadius: 16,
-              spreadRadius: 2,
-              offset: Offset(2, 4),
-            ),
-          ],
-        ),
+                      spreadRadius: 2,
+                      offset: Offset(2, 4),
+                    ),
+                  ],
+                ),
                 child: Stack(
-          children: [
+                  children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(15),
                       child: Image.file(
@@ -889,22 +1226,21 @@ class _AddTurfPageState extends State<AddTurfPage> {
                           children: const [
                             Icon(Icons.star, color: Colors.white, size: 20),
                             SizedBox(width: 6),
-            Text(
+                            Text(
                               'Spotlight Image',
-              style: TextStyle(
+                              style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 15,
-              ),
-            ),
-          ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              // All images as reorderable thumbnails (including the spotlight image)
               ReorderableWrap(
                 spacing: 10,
                 runSpacing: 10,
@@ -923,10 +1259,10 @@ class _AddTurfPageState extends State<AddTurfPage> {
                       key: ValueKey(img.path),
                       children: [
                         ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(
                             img,
-            fit: BoxFit.cover,
+                            fit: BoxFit.cover,
                             width: 80,
                             height: 80,
                           ),
@@ -949,7 +1285,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
                             ),
                           ),
                         ),
-                        // Drag handle
                         Positioned(
                           bottom: 4,
                           left: 4,
@@ -958,7 +1293,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
                       ],
                     );
                   }),
-                  // Add image button at the end
                   GestureDetector(
                     onTap: _pickImages,
                     child: Container(
@@ -987,7 +1321,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
             ],
           )
         else
-          // If no images, show only the add button
           GestureDetector(
             onTap: _pickImages,
             child: Container(
@@ -1020,8 +1353,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
-
-// 🟢 Enhanced Choice Chips with Gradient & Shadow
   Widget _buildFacilitiesChips() {
     return Wrap(
       spacing: 8,
@@ -1047,8 +1378,8 @@ class _AddTurfPageState extends State<AddTurfPage> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               )
-                  : null, // Apply gradient only when selected
-              color: isSelected ? null : Colors.white.withOpacity(0.3),
+                  : null,
+              color: isSelected ? null : Colors.white.withOpacity(0.7),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.teal.shade300),
               boxShadow: [
@@ -1073,8 +1404,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
-
-// 🟢 Enhanced Available Grounds Chips with Gradient & Hover Effect
   Widget _buildAvailableGroundsChips() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1093,7 +1422,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
                 ),
                 selected: _selectedAvailableGrounds.contains(ground),
                 selectedColor: Colors.teal.shade500,
-                backgroundColor: Colors.white.withOpacity(0.3),
+                backgroundColor: Colors.white.withOpacity(0.7),
                 elevation: 3,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1106,6 +1435,8 @@ class _AddTurfPageState extends State<AddTurfPage> {
                     setState(() {
                       _selectedAvailableGrounds.remove(ground);
                       _selectedGroundPrices.remove(ground);
+                      // Also remove monthly subscription price for this ground
+                      _monthlySubscriptionPrices.remove(ground);
                     });
                   }
                 },
@@ -1130,6 +1461,8 @@ class _AddTurfPageState extends State<AddTurfPage> {
                           _customAvailableGrounds.remove(ground);
                           _selectedAvailableGrounds.remove(ground);
                           _selectedGroundPrices.remove(ground);
+                          // Also remove monthly subscription price for this ground
+                          _monthlySubscriptionPrices.remove(ground);
                         });
                       },
                       child: Icon(Icons.close, size: 16, color: Colors.red),
@@ -1138,7 +1471,7 @@ class _AddTurfPageState extends State<AddTurfPage> {
                 ),
                 selected: _selectedAvailableGrounds.contains(ground),
                 selectedColor: Colors.teal.shade500,
-                backgroundColor: Colors.white.withOpacity(0.3),
+                backgroundColor: Colors.white.withOpacity(0.7),
                 elevation: 3,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1151,6 +1484,8 @@ class _AddTurfPageState extends State<AddTurfPage> {
                     setState(() {
                       _selectedAvailableGrounds.remove(ground);
                       _selectedGroundPrices.remove(ground);
+                      // Also remove monthly subscription price for this ground
+                      _monthlySubscriptionPrices.remove(ground);
                     });
                   }
                 },
@@ -1164,8 +1499,10 @@ class _AddTurfPageState extends State<AddTurfPage> {
             Expanded(
               child: TextField(
                 controller: _customGroundController,
+                style: TextStyle(color: Colors.black87),
                 decoration: InputDecoration(
                   hintText: 'Add custom ground',
+                  hintStyle: TextStyle(color: Colors.grey.shade600),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
@@ -1210,8 +1547,6 @@ class _AddTurfPageState extends State<AddTurfPage> {
     );
   }
 
-
-
   Future<void> _fetchPriceForGround(String ground) async {
     double? price = await showDialog<double>(
       context: context,
@@ -1227,6 +1562,28 @@ class _AddTurfPageState extends State<AddTurfPage> {
       setState(() {
         _selectedAvailableGrounds.add(ground);
         _selectedGroundPrices[ground] = price;
+        
+        // If monthly subscription is enabled, also ask for monthly price
+        if (_supportsMonthlySubscription) {
+          _fetchMonthlyPriceForGround(ground);
+        }
+      });
+    }
+  }
+
+  // New method to fetch monthly subscription price for a ground
+  Future<void> _fetchMonthlyPriceForGround(String ground) async {
+    double? monthlyPrice = await showDialog<double>(
+      context: context,
+      builder: (context) => _MonthlyPriceInputDialog(
+        groundName: ground,
+        currentPrice: _monthlySubscriptionPrices[ground],
+      ),
+    );
+
+    if (monthlyPrice != null) {
+      setState(() {
+        _monthlySubscriptionPrices[ground] = monthlyPrice;
       });
     }
   }
@@ -1259,34 +1616,33 @@ class _AddTurfPageState extends State<AddTurfPage> {
   Future<bool> _showIsospWarning() async {
     Completer<bool> completer = Completer();
     bool acknowledged = false;
-    int countdown = 5; // Initial countdown value
+    int countdown = 5;
 
     showDialog(
       context: context,
-      barrierDismissible: false, // Prevent dismissing the dialog by tapping outside
+      barrierDismissible: false,
       builder: (context) {
-        // Timer to update the countdown every second
         Timer.periodic(Duration(seconds: 1), (timer) {
           if (countdown > 0) {
             setState(() {
               countdown--;
             });
           } else {
-            timer.cancel(); // Stop the timer when countdown reaches 0
+            timer.cancel();
           }
         });
 
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              backgroundColor: Colors.red[50], // Light red background
+              backgroundColor: Colors.red[50],
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Colors.red, width: 2), // Red border
+                side: BorderSide(color: Colors.red, width: 2),
               ),
               title: Row(
                 children: const [
-                  Icon(Icons.warning, color: Colors.red), // Warning icon
+                  Icon(Icons.warning, color: Colors.red),
                   SizedBox(width: 8),
                   Text(
                     'Warning',
@@ -1314,8 +1670,8 @@ class _AddTurfPageState extends State<AddTurfPage> {
               actions: [
                 TextButton(
                   onPressed: () {
-                    Navigator.of(context).pop(); // Close the dialog
-                    completer.complete(false); // Return false for cancellation
+                    Navigator.of(context).pop();
+                    completer.complete(false);
                   },
                   child: Text(
                     'Cancel',
@@ -1326,14 +1682,14 @@ class _AddTurfPageState extends State<AddTurfPage> {
                   onPressed: countdown == 5
                       ? () {
                     acknowledged = true;
-                    Navigator.of(context).pop(); // Close the dialog
-                    completer.complete(true); // Return true for acknowledgment
+                    Navigator.of(context).pop();
+                    completer.complete(true);
                   }
-                      : null, // Disable the button if countdown > 0
+                      : null,
                   child: Text(
                     'Acknowledge',
                     style: TextStyle(
-                      color: Colors.green, // Green when enabled, grey when disabled
+                      color: Colors.green,
                     ),
                   ),
                 ),
@@ -1519,7 +1875,7 @@ class _PriceInputDialog extends StatelessWidget {
                 TextField(
                   controller: priceController,
                   keyboardType: TextInputType.number,
-                  style: TextStyle(fontSize: 16),
+                  style: TextStyle(color: Colors.black87, fontSize: 16),
                   decoration: InputDecoration(
                     labelText: 'Enter Price',
                     labelStyle: TextStyle(color: Colors.grey[600]),
@@ -1591,6 +1947,87 @@ class _PriceInputDialog extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+// New dialog for monthly subscription price input
+class _MonthlyPriceInputDialog extends StatelessWidget {
+  final String groundName;
+  final double? currentPrice;
+
+  const _MonthlyPriceInputDialog({required this.groundName, this.currentPrice});
+
+  @override
+  Widget build(BuildContext context) {
+    final TextEditingController priceController = TextEditingController(
+      text: currentPrice?.toStringAsFixed(2) ?? '',
+    );
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      title: Text(
+        'Monthly Subscription Price for $groundName',
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Colors.teal,
+        ),
+        textAlign: TextAlign.center,
+      ),
+      content: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: TextField(
+          controller: priceController,
+          keyboardType: TextInputType.number,
+          style: TextStyle(color: Colors.black87, fontSize: 16),
+          decoration: InputDecoration(
+            labelText: 'Enter Monthly Subscription Price',
+            labelStyle: TextStyle(color: Colors.grey[600]),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.teal),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.teal, width: 2),
+            ),
+            prefixText: '₹ ',
+            prefixStyle: TextStyle(color: Colors.black87, fontSize: 16),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context, null);
+          },
+          child: Text(
+            'Cancel',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            double? price = double.tryParse(priceController.text);
+            if (price != null) {
+              Navigator.pop(context, price);
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          child: Text(
+            'Set Price',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      ],
     );
   }
 }

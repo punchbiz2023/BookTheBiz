@@ -15,18 +15,31 @@ class BookingDetailsPage1 extends StatefulWidget {
 
 class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
   // Moved helper methods into the State class so they can access context and setState
+  bool _isCancelling = false;
 
-  Future<void> _cancelBooking(String bookID, DateTime startTime, DateTime endTime) async {
+  // Cancel all remaining slots at once
+  Future<void> _cancelAllSlots(String bookID) async {
     try {
       final bookingRef = FirebaseFirestore.instance.collection('bookings');
-
-      // Query to get all documents from the bookings collection
       final querySnapshot = await bookingRef.get();
 
       if (querySnapshot.docs.isNotEmpty) {
         for (var doc in querySnapshot.docs) {
           if (doc.id == bookID) {
             var bookingData = doc.data() as Map<String, dynamic>;
+            final List<String> bookingSlots = List<String>.from(bookingData['bookingSlots'] ?? []);
+
+            // Check if there are any slots to cancel
+            if (bookingSlots.isEmpty) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('No slots to cancel'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+              return;
+            }
 
             // Check if this is a paid booking that needs refund
             bool isPaidBooking = bookingData['paymentMethod'] == 'Online' &&
@@ -34,14 +47,14 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
                 bookingData['razorpayPaymentId'] != null;
 
             if (isPaidBooking) {
-              // Create refund request for paid booking and also move the slot in the same click
+              // Create refund request for paid booking
               final created = await _createRefundRequest(bookingData, bookID);
               if (created) {
-                await _removeBookingSlot(doc, startTime, endTime);
+                await _removeAllBookingSlots(doc, bookingSlots);
               }
             } else {
-              // For non-paid bookings, just remove the slot
-              await _removeBookingSlot(doc, startTime, endTime);
+              // For non-paid bookings, just remove all slots
+              await _removeAllBookingSlots(doc, bookingSlots);
             }
             break;
           }
@@ -135,41 +148,21 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
     }
   }
 
-  Future<void> _removeBookingSlot(QueryDocumentSnapshot doc, DateTime startTime, DateTime endTime) async {
+  // Remove all booking slots at once
+  Future<void> _removeAllBookingSlots(QueryDocumentSnapshot doc, List<String> slotsToRemove) async {
     try {
-      // Get the current bookingSlots
-      List<dynamic> bookingSlots = List.from(doc['bookingSlots']); // Ensure mutability
-      print('Current bookingSlots: $bookingSlots');
-
-      // Construct the slot to remove with non-zero-padded hours
-      String slotToRemove =
-          '${DateFormat('h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}';
-      print('Slot to remove: $slotToRemove');
-
-      // Helper to normalize slot strings for comparison
-      String normalizeSlot(String s) {
-        return s
-            .replaceAll(RegExp(r'[:\s]'), '') // remove colons and spaces
-            .replaceAll(RegExp(r'am', caseSensitive: false), 'AM')
-            .replaceAll(RegExp(r'pm', caseSensitive: false), 'PM')
-            .toUpperCase();
+      if (slotsToRemove.isEmpty) {
+        return;
       }
 
-      // Find the slot in bookingSlots that matches after normalization
-      int slotIndex = bookingSlots.indexWhere((slot) => normalizeSlot(slot.toString()) == normalizeSlot(slotToRemove));
-      if (slotIndex != -1) {
-        String matchedSlot = bookingSlots[slotIndex];
-        bookingSlots.removeAt(slotIndex);
+      print('Removing all slots: $slotsToRemove');
 
-        // Update the document in Firebase
-        await doc.reference.update({
-          'bookingSlots': bookingSlots,
-          'bookingStatus': FieldValue.arrayUnion([matchedSlot]) // Add the slot directly
-        });
-        print('Updated bookingSlots and bookingStatus.');
-      } else {
-        print('Slot not found in bookingSlots.');
-      }
+      // Move all slots from bookingSlots to bookingStatus
+      await doc.reference.update({
+        'bookingSlots': [], // Clear all slots
+        'bookingStatus': FieldValue.arrayUnion(slotsToRemove) // Move all to cancelled status
+      });
+      print('Updated bookingSlots and bookingStatus in main collection.');
 
       // Update the bookings sub-collection in the corresponding turf document
       String turfId = doc['turfId'];
@@ -177,39 +170,44 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
       final bookingsSubCollectionRef = turfRef.collection('bookings');
       final turfBookingDocs = await bookingsSubCollectionRef.get();
 
+      // Find matching booking in turf subcollection
       for (var subDoc in turfBookingDocs.docs) {
         var bookingData = subDoc.data();
         if (bookingData['selectedGround'] == doc['selectedGround'] &&
             bookingData['bookingDate'] == doc['bookingDate'] &&
-            listEquals(bookingData['bookingSlots'], doc['bookingSlots']) &&
             bookingData['userId'] == doc['userId']) {
-          List<dynamic> turfBookingSlots = List.from(bookingData['bookingSlots']);
-          if (turfBookingSlots.isNotEmpty) {
-            // Find the slot in turfBookingSlots that matches after normalization
-            int turfSlotIndex = turfBookingSlots.indexWhere((slot) => normalizeSlot(slot.toString()) == normalizeSlot(slotToRemove));
-            if (turfSlotIndex != -1) {
-              String matchedTurfSlot = turfBookingSlots[turfSlotIndex];
-              turfBookingSlots.removeAt(turfSlotIndex);
-
-              // Update the sub-collection document
-              await bookingsSubCollectionRef.doc(subDoc.id).update({
-                'bookingSlots': turfBookingSlots,
-                'bookingStatus': FieldValue.arrayUnion([matchedTurfSlot])
-              });
-              print('Updated turf bookingSlots and bookingStatus.');
-            } else {
-              print('Slot not found in turfBookingSlots.');
+          
+          // Get current slots from turf booking
+          List<dynamic> turfBookingSlots = List.from(bookingData['bookingSlots'] ?? []);
+          
+          // Remove all slots that match the ones being cancelled
+          List<String> slotsToMoveToStatus = [];
+          for (var slot in slotsToRemove) {
+            // Find matching slot in turf booking
+            int index = turfBookingSlots.indexWhere((s) => s.toString().trim() == slot.trim());
+            if (index != -1) {
+              slotsToMoveToStatus.add(turfBookingSlots[index].toString());
+              turfBookingSlots.removeAt(index);
             }
+          }
+
+          // Update the sub-collection document
+          if (slotsToMoveToStatus.isNotEmpty) {
+            await bookingsSubCollectionRef.doc(subDoc.id).update({
+              'bookingSlots': turfBookingSlots,
+              'bookingStatus': FieldValue.arrayUnion(slotsToMoveToStatus)
+            });
+            print('Updated turf bookingSlots and bookingStatus.');
           }
           break;
         }
       }
 
       if (!mounted) return;
-      // Show success message for non-paid booking
+      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Slot cancelled successfully!'),
+          content: Text('All slots cancelled successfully!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -218,10 +216,10 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
       setState(() {});
     } catch (e) {
       if (!mounted) return;
-      print('Error removing booking slot: $e');
+      print('Error removing booking slots: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error cancelling slot: $e'),
+          content: Text('Error cancelling slots: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -404,7 +402,46 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
         final List<String> bookingStatus = List<String>.from(bookingData['bookingStatus'] ?? []);
         final currentDateTime = DateTime.now();
         final bookingDate = DateFormat('yyyy-MM-dd').parse(widget.bookingData['bookingDate']);
-        bool isCancelling = false;
+
+        // Check if any slot can be cancelled (at least 8 hours before first slot)
+        bool canCancelAll = false;
+        if (bookingSlots.isNotEmpty) {
+          for (var slot in bookingSlots) {
+            final normalizedSlot = slot
+                .replaceAll('-', ' - ')
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .trim();
+            final timeParts = normalizedSlot.split(' - ');
+            
+            if (timeParts.length == 2) {
+              try {
+                DateTime? bookedStartTime;
+                try {
+                  bookedStartTime = DateFormat('h:mm a').parseLoose(timeParts[0].trim());
+                } catch (_) {
+                  try {
+                    bookedStartTime = DateFormat('h a').parseLoose(timeParts[0].trim());
+                  } catch (_) {}
+                }
+
+                if (bookedStartTime != null) {
+                  final bookingDateTime = DateTime(
+                    bookingDate.year,
+                    bookingDate.month,
+                    bookingDate.day,
+                    bookedStartTime.hour,
+                    bookedStartTime.minute,
+                  );
+                  if (bookingDateTime.isAfter(currentDateTime) &&
+                      bookingDateTime.difference(currentDateTime).inHours >= 8) {
+                    canCancelAll = true;
+                    break;
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        }
 
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -419,117 +456,171 @@ class _BookingDetailsPage1State extends State<BookingDetailsPage1> {
                   color: Colors.teal,
                 ),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: 12),
               Wrap(
                 spacing: 8.0,
-                runSpacing: 4.0,
+                runSpacing: 8.0,
                 children: [
-                  // Dynamic booking slots
+                  // Dynamic booking slots (active slots)
                   ...bookingSlots.map((slot) {
-                    // Normalize slot string to handle various formats
-                    final normalizedSlot = slot
-                        .replaceAll('-', ' - ')
-                        .replaceAll(RegExp(r'\s+'), ' ')
-                        .trim();
-
-                    final timeParts = normalizedSlot.split(' - ');
-                    DateTime? bookedStartTime;
-                    DateTime? bookedEndTime;
-                    bool canCancel = false;
-                    bool validFormat = false;
-
-                    if (timeParts.length == 2) {
-                      try {
-                        // Try parsing with and without minutes
-                        bookedStartTime = DateFormat('h:mm a').parseLoose(timeParts[0].trim());
-                      } catch (_) {
-                        try {
-                          bookedStartTime = DateFormat('h a').parseLoose(timeParts[0].trim());
-                        } catch (_) {}
-                      }
-                      try {
-                        bookedEndTime = DateFormat('h:mm a').parseLoose(timeParts[1].trim());
-                      } catch (_) {
-                        try {
-                          bookedEndTime = DateFormat('h a').parseLoose(timeParts[1].trim());
-                        } catch (_) {}
-                      }
-
-                      if (bookedStartTime != null && bookedEndTime != null) {
-                        final bookingDateTime = DateTime(
-                          bookingDate.year,
-                          bookingDate.month,
-                          bookingDate.day,
-                          bookedStartTime.hour,
-                          bookedStartTime.minute,
-                        );
-                        canCancel = bookingDateTime.isAfter(currentDateTime) &&
-                            bookingDateTime.difference(currentDateTime).inHours >= 8;
-                        validFormat = true;
-                      }
-                    }
-
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Chip(
-                            label: Text(
-                              slot,
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            backgroundColor: Colors.teal,
-                          ),
+                    return Chip(
+                      label: Text(
+                        slot,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
                         ),
-                        SizedBox(width: 16),
-                        if (validFormat)
-                          ElevatedButton(
-                            onPressed: canCancel && !isCancelling
-                                ? () async {
-                                    setState(() {
-                                      isCancelling = true;
-                                    });
-
-                                    await _cancelBooking(
-                                      documentID,
-                                      bookedStartTime!,
-                                      bookedEndTime!,
-                                    );
-
-                                    setState(() {
-                                      isCancelling = false;
-                                    });
-                                  }
-                                : null,
-                            style: ElevatedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              backgroundColor: canCancel ? Colors.red : Colors.grey,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: Text(
-                              'Cancel Booking',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                          ),
-                      ],
+                      ),
+                      backgroundColor: Colors.teal,
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     );
                   }),
 
-                  // Dynamic booking status
+                  // Dynamic booking status (cancelled slots)
                   ...bookingStatus.map((status) {
                     return Chip(
                       label: Text(
                         status,
-                        style: TextStyle(color: Colors.white),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                      backgroundColor: Colors.red,
+                      backgroundColor: Colors.red.shade400,
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     );
                   }),
                 ],
               ),
+              
+              // Single Cancel Booking button at the bottom
+              if (bookingSlots.isNotEmpty && canCancelAll) ...[
+                SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _isCancelling
+                        ? null
+                        : () async {
+                            // Show confirmation dialog
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  title: Row(
+                                    children: [
+                                      Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                                      SizedBox(width: 8),
+                                      Text('Cancel Booking?'),
+                                    ],
+                                  ),
+                                  content: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Are you sure you want to cancel all ${bookingSlots.length} slot(s)?',
+                                        style: TextStyle(fontSize: 16),
+                                      ),
+                                      SizedBox(height: 12),
+                                      if (bookingData['paymentMethod'] == 'Online')
+                                        Container(
+                                          padding: EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.shade50,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.blue.shade200),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                                              SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  'A refund request will be submitted. Amount will be refunded within 3-5 business days.',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: Colors.blue.shade900,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(false),
+                                      child: Text('No', style: TextStyle(color: Colors.grey)),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.of(context).pop(true),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: Text('Yes, Cancel All'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+
+                            if (confirmed == true) {
+                              setState(() {
+                                _isCancelling = true;
+                              });
+
+                              await _cancelAllSlots(documentID);
+
+                              if (mounted) {
+                                setState(() {
+                                  _isCancelling = false;
+                                });
+                              }
+                            }
+                          },
+                    icon: _isCancelling
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Icon(Icons.cancel_outlined, color: Colors.white),
+                    label: Text(
+                      _isCancelling ? 'Cancelling...' : 'Cancel All Bookings',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade600,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         );

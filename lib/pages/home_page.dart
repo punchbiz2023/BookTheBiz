@@ -15,6 +15,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'my_events_page.dart';
 import 'spot_events_page.dart';
+import 'subscriptions_page.dart';
 import 'dart:ui';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1081,16 +1082,23 @@ class _HomePage1State extends State<HomePage1>
       },
       child: Scaffold(
         backgroundColor: Colors.grey[100],
+        drawer: _buildDrawer(),
         appBar: PreferredSize(
           preferredSize: Size.fromHeight(64),
           child: AppBar(
             elevation: 0.5,
             backgroundColor: Colors.white,
             automaticallyImplyLeading: false,
+            leading: Builder(
+              builder: (context) => IconButton(
+                icon: Icon(Icons.menu, color: Colors.teal.shade800),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
             titleSpacing: 0,
             title: Row(
               children: [
-                SizedBox(width: 16),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Turf Booking',
@@ -1265,6 +1273,293 @@ class _HomePage1State extends State<HomePage1>
     );
   }
 
+
+Widget _buildDrawer() {
+  return AnimatedContainer(
+    duration: Duration(milliseconds: 450),
+    curve: Curves.easeOutCubic,
+    child: Drawer(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: ClipRRect(
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(22),
+          bottomRight: Radius.circular(22),
+        ),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withOpacity(0.65),
+                  Colors.white.withOpacity(0.40),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              border: Border(
+                right: BorderSide(
+                  color: Colors.white.withOpacity(0.35),
+                  width: 1.1,
+                ),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 25,
+                  offset: Offset(3, 6),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  // ----------------------------- HEADER -----------------------------
+                  AnimatedContainer(
+                    duration: Duration(milliseconds: 550),
+                    padding: EdgeInsets.all(26),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.white.withOpacity(0.80),
+                          Colors.white.withOpacity(0.55),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Colors.white.withOpacity(0.35),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.sports_soccer,
+                                color: Colors.teal.shade700, size: 32),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Turf Booking',
+                                style: TextStyle(
+                                  color: Colors.teal.shade800,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        if (widget.user != null) ...[
+                          SizedBox(height: 18),
+                          StreamBuilder<
+                              DocumentSnapshot<Map<String, dynamic>>>(
+                            stream: FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(widget.user!.uid)
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              String userName = 'User';
+                              String userEmail = widget.user?.email ?? '';
+                              String? imageUrl;
+
+                              if (snapshot.hasData && snapshot.data!.exists) {
+                                final data = snapshot.data!.data();
+                                userName =
+                                    data?['name'] ?? data?['fullName'] ?? 'User';
+                                userEmail = data?['email'] ?? userEmail;
+
+                                final dynamic url = data?['imageUrl'] ??
+                                    data?['profileImageUrl'] ??
+                                    data?['photoUrl'];
+                                if (url is String && url.trim().isNotEmpty) {
+                                  imageUrl = url;
+                                }
+                              }
+
+                              return Row(
+                                children: [
+                                  Container(
+                                    padding: EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white.withOpacity(0.6),
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.8),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: CircleAvatar(
+                                      radius: 26,
+                                      backgroundColor:
+                                          Colors.white.withOpacity(0.4),
+                                      backgroundImage: imageUrl != null
+                                          ? NetworkImage(imageUrl)
+                                          : null,
+                                      child: imageUrl == null
+                                          ? Icon(Icons.person,
+                                              color: Colors.teal.shade700,
+                                              size: 28)
+                                          : null,
+                                    ),
+                                  ),
+                                  SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          userName,
+                                          style: TextStyle(
+                                            color: Colors.teal.shade900,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (userEmail.isNotEmpty)
+                                          Text(
+                                            userEmail,
+                                            style: TextStyle(
+                                              color: Colors.teal.shade600,
+                                              fontSize: 12,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  // ----------------------------- MENU ITEMS -----------------------------
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.zero,
+                      children: [
+                        _drawerTile(
+                          icon: Icons.event,
+                          text: 'Spot Events',
+                          sub: null,
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    SpotEventsPage(user: widget.user),
+                              ),
+                            );
+                          },
+                        ),
+                        _divider(),
+
+                        _drawerTile(
+                          icon: Icons.event_available,
+                          text: 'My Events',
+                          sub: null,
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    MyEventsPage(user: widget.user),
+                              ),
+                            );
+                          },
+                        ),
+                        _divider(),
+
+                        _drawerTile(
+                          icon: Icons.card_membership,
+                          text: 'Subscriptions',
+                          sub: 'Monthly Subscription',
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    SubscriptionsPage(user: widget.user),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// ----- REUSABLE GLASS TILE -----
+Widget _drawerTile({
+  required IconData icon,
+  required String text,
+  String? sub,
+  required VoidCallback onTap,
+}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 6),
+    child: ListTile(
+      leading: Icon(icon, color: Colors.teal.shade700, size: 26),
+      title: Text(
+        text,
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+          color: Colors.teal.shade900,
+          letterSpacing: 0.2,
+        ),
+      ),
+      subtitle: sub != null
+          ? Text(
+              sub,
+              style: TextStyle(fontSize: 12, color: Colors.teal.shade600),
+            )
+          : null,
+      onTap: onTap,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      tileColor: Colors.white.withOpacity(0.15),
+      hoverColor: Colors.teal.withOpacity(0.08),
+    ),
+  );
+}
+
+Widget _divider() {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: Divider(
+      thickness: 0.6,
+      color: Colors.teal.withOpacity(0.25),
+    ),
+  );
+}
+
+
   Widget _buildDashboardTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -1288,10 +1583,6 @@ class _HomePage1State extends State<HomePage1>
           ),
           SizedBox(height: 15),
           _buildNearbyTurfs(),
-          SizedBox(height: 20),
-          _buildSpotEventsSection(),
-          SizedBox(height: 20),
-          _buildMyEventsSection(),
           SizedBox(height: 20),
           
         ],

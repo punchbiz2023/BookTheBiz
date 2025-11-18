@@ -254,6 +254,99 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
     );
   }
 
+  Widget _buildMonthlySubscriptionPriceCard(String groundName, double price, {Color? accentColor}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: (accentColor ?? Colors.purple).withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: (accentColor ?? Colors.purple).withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Ground Icon
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: (accentColor ?? Colors.purple).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.sports_soccer,
+              color: accentColor ?? Colors.purple,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          
+          // Ground Name and Price
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  groundName,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Monthly Subscription',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Price Display
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  accentColor ?? Colors.purple,
+                  (accentColor ?? Colors.purple).withOpacity(0.8),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: (accentColor ?? Colors.purple).withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Text(
+              '₹${price.toStringAsFixed(2)}',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTurfDetails(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('turfs').doc(widget.turfId).snapshots(),
@@ -504,7 +597,7 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                                           size: 14,
                                           color: Colors.white,
                                         ),
-                                        const SizedBox(width: 4),
+                                        const SizedBox(width:4),
                                         Text(
                                           turfData['turf_status'] ?? 'Not Verified',
                                           style: const TextStyle(
@@ -536,7 +629,7 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                                             size: 14,
                                             color: Colors.white,
                                           ),
-                                          const SizedBox(width: 4),
+                                          const SizedBox(width:4),
                                           Text(
                                             turfData['status'] ?? 'Unknown',
                                             style: const TextStyle(
@@ -671,6 +764,227 @@ class _TurfDetailsState extends State<TurfDetails> with SingleTickerProviderStat
                           ),
                         ),
                       ),
+                      const SizedBox(height: 24),
+
+                      // Monthly Subscription Section - Updated for per-ground pricing
+                      if (turfData['supportsMonthlySubscription'] == true && turfData['monthlySubscription'] != null)
+                        _buildPremiumCard(
+                          accentColor: Colors.purple,
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader('Monthly Subscription', icon: Icons.subscriptions, accentColor: Colors.purple),
+                                const SizedBox(height: 20),
+                                
+                                // Check if we have per-ground pricing or single pricing
+                                if (turfData['monthlySubscription'].containsKey('monthlyPrices')) ...[
+                                  // Display per-ground pricing
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.withOpacity(0.05),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: Colors.purple.withOpacity(0.1)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: Colors.purple.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Icon(Icons.monetization_on, color: Colors.purple[700], size: 20),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              'Per-Ground Monthly Pricing',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.purple[700],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        
+                                        // Display each ground with its monthly price
+                                        ...(turfData['monthlySubscription']['monthlyPrices'] as Map<String, dynamic>)
+                                            .entries.map<Widget>((entry) {
+                                          return _buildMonthlySubscriptionPriceCard(
+                                            entry.key,
+                                            (entry.value as num).toDouble(),
+                                          );
+                                        }).toList(),
+                                      ],
+                                    ),
+                                  ),
+                                ] else ...[
+                                  // Display single pricing (backward compatibility)
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.withOpacity(0.05),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: Colors.purple.withOpacity(0.1)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Icon(Icons.currency_rupee, color: Colors.purple[700], size: 24),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Monthly Price',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.grey[600],
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '₹${turfData['monthlySubscription']['monthlyPrice']?.toStringAsFixed(2) ?? '0.00'}',
+                                              style: TextStyle(
+                                                fontSize: 22,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.purple[700],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                
+                                const SizedBox(height: 16),
+                                
+                                // Working Days
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.purple.withOpacity(0.1)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.purple.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Icon(Icons.schedule, color: Colors.purple[700], size: 20),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            'Working Days',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.purple[700],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: (turfData['monthlySubscription']['workingDays'] as List<dynamic>?)
+                                            ?.map((day) => _buildFeatureChip(
+                                              day ?? 'No Day',
+                                              icon: Icons.calendar_today,
+                                              bgColor: Colors.purple.withOpacity(0.1),
+                                              textColor: Colors.purple[800],
+                                            ))
+                                            .toList() ??
+                                            [],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                
+                                const SizedBox(height: 16),
+                                
+                                // Refund Policy
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.purple.withOpacity(0.1)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.purple.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Icon(Icons.policy, color: Colors.purple[700], size: 20),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            'Refund Policy',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.purple[700],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: Colors.purple.withOpacity(0.2)),
+                                        ),
+                                        child: Text(
+                                          turfData['monthlySubscription']['customRefundPolicy']?.isNotEmpty == true
+                                              ? turfData['monthlySubscription']['customRefundPolicy']
+                                              : turfData['monthlySubscription']['refundPolicy'] ?? 'No refund policy specified',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey[700],
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 24),
 
                       // Facilities
